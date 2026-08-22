@@ -23,12 +23,33 @@ rewritten into your words has lost the thing that made it worth keeping.
 
 Read the item first, then decide what it *is* — that determines everything else:
 
-**A project or an idea for one** → `10_Projects`, named as he'd say it out loud
-(`Dev server`, `keepbreath.ing`), because that filename is what `[[links]]` resolve
-against. Use the `project-note` skill; it has nine sections and specific rules.
+**A project or an idea for one** → `10_Projects/<domain>/`, named as he'd say it out
+loud (`Dev server`, `keepbreath.ing`), because that filename is what `[[links]]`
+resolve against. Pick the subfolder by domain: `11_Infrastructure`, `12_Web`,
+`13_Mail`, `14_Security`, `15_Code`, `16_Tooling`. Use the `project-note` skill; it
+has nine sections and specific rules.
 
-**A durable how-to** → `40_Reference`, named as what you'd search for
-(`nginx-security-headers.md`). Needs `updated:` in frontmatter.
+**A procedure you run when something happens** → `60_Operational_Manual/`, in the
+category matching what *triggers* it: `61_Deploying`, `62_Machines`,
+`63_DNS_and_Certificates`, `64_Security` (which splits into `64.1_Credentials` and
+`64.2_Auditing`), `65_Data_and_Recovery`, `66_Mail`, `67_Monitoring`,
+`68_Dev_Workflow`, `69_Homelab`. Use `_Templates/operational-procedure.md`.
+
+**A durable how-to you look up** → `40_Reference`, named as what you'd search for
+(`kitty-configuration.md`). Needs `updated:` in frontmatter.
+
+*The distinction between those two is the trigger, not the subject.* A reference note
+answers "how does this work" and you read it when curious. A manual procedure answers
+"something happened, what do I do" and you follow it when something is already broken.
+`nginx-security-headers` is reference; `pre-deploy-checks` is a procedure.
+
+**Research** → `70_Research/<topic>/`, with raw sources in `<topic>/sources/` and the
+write-up beside them. Use `_Templates/research-topic.md`. Never put third-party
+content — transcripts, article copies — in the vault; it is a git repository and that
+is someone else's work.
+
+**A daily entry** → `50_Personal/51_Journal/<year>/YYYY-MM-DD.md`. Use the `journal`
+skill, which runs it as an interview rather than handing over a blank template.
 
 **Something personal** → `50_Personal`. No naming convention; imposing one here
 only makes the folder get avoided.
@@ -43,7 +64,7 @@ the filename is the identity), link it to whatever project it belongs to with
 so any wikilink pointing at the note follows it:
 
 ```bash
-obsidian move   path="00_Inbox/thing.md" to="40_Reference/nginx-headers.md"
+obsidian move   path="00_Inbox/thing.md" to="60_Operational_Manual/66_Mail/mail-x.md"
 obsidian rename path="00_Inbox/thing.md" name="nginx-headers"
 ```
 

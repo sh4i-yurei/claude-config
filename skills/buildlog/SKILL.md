@@ -45,7 +45,8 @@ before the work starts, not after:
 The slug is lowercase words joined by hyphens, no dates: `droplet-rebuild`,
 `contact-form`, `vlan-segmentation`. The project name must match a note in
 `10_Projects` exactly, since it becomes a `[[link]]` — check what's there rather
-than guessing at the name.
+than guessing at the name. Projects sit in domain subfolders now, so search
+recursively: `find ~/Documents/Second_Brain/10_Projects -name '*.md'`.
 
 Then fill in the outline: what you're about to do, why now, the approach
 including any rollback path, and what "done" looks like stated so it can be
@@ -149,7 +150,7 @@ When the work ends, write a final entry: what shipped, what's still broken, what
 you'd do differently. That entry is usually most of the eventual post's closing
 section, and it's the cheapest one to write because it's all still in your head.
 
-Then check whether the project note in `10_Projects` needs updating — its
+Then check whether the project note in `10_Projects/<domain>/` needs updating — its
 "Where it stands" section should be rewritten to match reality, and its "Next"
 list probably changed. The project note describes the present; the buildlog holds
 the history. Keeping that boundary is what stops project notes from growing into

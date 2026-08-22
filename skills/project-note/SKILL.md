@@ -1,6 +1,6 @@
 ---
 name: project-note
-description: Creates and updates project notes in ~/Documents/Second_Brain/10_Projects, the front door to every project Mark has. Use this when he starts a new project or has an idea for one, when a decision gets made that should be recorded, when work finishes or changes what is next, when he asks where something stands or what he decided, and after any substantial work session so the note reflects reality. Also use it when a project note has grown wrong — accumulating history, backlogs or how-to content that belongs in other folders. Trigger it even when he does not mention notes, projects folders, or the vault.
+description: Creates and updates project notes in ~/Documents/Second_Brain/10_Projects, grouped into domain subfolders (11_Infrastructure, 12_Web, 13_Mail, 14_Security, 15_Code, 16_Tooling) with finished work in 19_Archive, the front door to every project Mark has. Use this when he starts a new project or has an idea for one, when a decision gets made that should be recorded, when work finishes or changes what is next, when he asks where something stands or what he decided, and after any substantial work session so the note reflects reality. Also use it when a project note has grown wrong — accumulating history, backlogs or how-to content that belongs in other folders. Trigger it even when he does not mention notes, projects folders, or the vault.
 ---
 
 # Project notes
@@ -13,6 +13,37 @@ Everything about its shape serves one goal — stopping it from becoming the 28,
 character `ROADMAP.md` it replaced. That file failed not because it was long but
 because it was six documents at once: status, backlog, a security plan, a phased
 rollout, and a blog outline.
+
+## Where it goes
+
+Projects live in a domain subfolder, not at the top of `10_Projects`:
+
+| No. | Folder | Holds |
+|---|---|---|
+| 11 | Infrastructure | Servers, home lab, the things that run other things |
+| 12 | Web | The public site and what ships on it |
+| 13 | Mail | Sending and receiving as `@keepbreath.ing` |
+| 14 | Security | Hardening, and security work that is its own project |
+| 15 | Code | Learning to program by building things worth finishing |
+| 16 | Tooling | Things built to make the other work faster |
+| 19 | Archive | Finished. Moved here, never deleted. |
+
+## The five states
+
+`status` has five values, because "not being worked on" has more than one cause:
+
+- **`idea`** — a notion. Might never happen.
+- **`active`** — he would genuinely pick this up today.
+- **`simmering`** — real and intended, but not now.
+- **`paused`** — started, then stopped. Different from simmering, which never began.
+- **`done`** — finished, and moved to `19_Archive`.
+
+**Status leads; the folder follows.** A note reaches `19_Archive` because its status
+is `done`, never the reverse. Encoding state as location is what makes archives rot.
+
+Before archiving, check for unfinished tasks in the note. Archiving is not deleting,
+but a live task inside an archived note is functionally deleted, because nothing
+looks there again — move it to `00_Inbox` first.
 
 ## Creating one
 

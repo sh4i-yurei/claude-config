@@ -33,6 +33,19 @@ VALID_STATUS = {"idea", "active", "simmering", "paused", "done",
 VALID_POST = {"none", "candidate", "drafted", "published"}
 VALID_GENRE = {"technical", "personal"}
 
+# Properties each type must carry. Validating that a *value* is allowed is not the
+# same as validating that the property *exists*: a project note with no `status` at
+# all passed every check until 2026-08-22, because every rule only looked at values
+# that were present. A missing property is invisible to a query, which makes the
+# note invisible to every dashboard and every drift rule.
+REQUIRED_PROPS = {
+    "project": {"type", "status", "created"},
+    "buildlog": {"type", "status", "created", "project"},
+    "post": {"type", "status", "created"},
+    "reference": {"type", "created"},
+    "journal": {"type", "created"},
+}
+
 STALE_REFERENCE_DAYS = 180
 STALE_INBOX_DAYS = 21
 
@@ -252,6 +265,16 @@ def check(vault: Path) -> Report:
             r.add("warning", rel(p), "frontmatter has no type:")
         elif t not in VALID_TYPE:
             r.add("warning", rel(p), f"unknown type: '{t}'")
+        if t in REQUIRED_PROPS:
+            missing = sorted(REQUIRED_PROPS[t] - set(fm))
+            if missing:
+                r.add(
+                    "warning",
+                    rel(p),
+                    f"type={t} is missing required "
+                    f"{'property' if len(missing) == 1 else 'properties'}: "
+                    + ", ".join(missing),
+                )
 
         for key, valid in (
             ("status", VALID_STATUS),

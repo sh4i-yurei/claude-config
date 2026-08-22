@@ -30,7 +30,11 @@ def notes() -> list[Path]:
     return [
         p
         for p in VAULT.rglob("*.md")
-        if ".obsidian" not in p.parts
+        # Skip every dot-directory, not just .obsidian. Since the skills and
+        # hooks moved into the vault at .claude/, a check for one folder name
+        # let SKILL.md files show up in "recent notes" as though they were notes.
+        # They are tooling that lives beside the notes.
+        if not any(part.startswith(".") for part in p.relative_to(VAULT).parts)
         and "_Templates" not in p.parts
         and p.name not in SKIP
     ]
