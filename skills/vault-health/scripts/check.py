@@ -457,6 +457,39 @@ def check_drift(vault: Path, report: Report) -> None:
                            f"[[{project}]] is done but this buildlog is still active")
 
 
+
+def check_index_coverage(vault: Path, report: Report) -> None:
+    """The operational manual's contents page lists every procedure in it.
+
+    Added 2026-08-22 after an audit found the manual held 34 procedures while its
+    index listed 33: `github-issue-and-pr-workflow` was moved in and the contents
+    page was never updated. Nothing complained, because an index that is merely
+    incomplete still renders perfectly.
+
+    This is drift between a folder and the note that claims to describe it, which
+    is a different shape from the note-to-note rules above and needs its own check.
+    An index nobody can trust to be complete is worse than no index, because you
+    stop checking whether the thing you need is missing or simply not there.
+    """
+    manual = vault / "60_Operational_Manual"
+    index = manual / "operational-checklists-index.md"
+    if not index.is_file():
+        return
+
+    linked = set(re.findall(r"\[\[([^\]|#^]+)", index.read_text(encoding="utf-8")))
+    linked = {x.strip() for x in linked}
+
+    for p in sorted(manual.rglob("*.md")):
+        if p.name in ("README.md", index.name):
+            continue
+        if p.stem not in linked:
+            report.add(
+                "warning",
+                str(p.relative_to(vault)),
+                "procedure is not listed in operational-checklists-index",
+            )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -472,6 +505,7 @@ def main() -> int:
     rep = check(vault)
     check_links(vault, rep)
     check_drift(vault, rep)
+    check_index_coverage(vault, rep)
 
     if args.json:
         print(
