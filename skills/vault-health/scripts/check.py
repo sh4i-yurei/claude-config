@@ -593,6 +593,52 @@ def check_own_docs(vault: Path, report: Report) -> None:
             report.add("warning", str(skill.relative_to(vault)),
                        f"does not document the rule implemented by {fn}()")
 
+
+def check_archive_leaks(vault: Path, report: Report) -> None:
+    """Dashboard queries that read a folder do not silently include its archive.
+
+    Added 2026-08-22 after this bit three times in one day. Creating an archive
+    subfolder does not break a query that reads the parent — Dataview's
+    `FROM "folder"` recurses, so the query keeps running and keeps looking healthy
+    while quietly widening to include finished work.
+
+    Instances: the manual moving out of 40_Reference narrowed a staleness query
+    from 42 notes to 4; creating 00_Inbox/09_Archive made the inbox list show
+    archived items; and "What's next" pulled open tasks out of two archived
+    projects for hours before anyone noticed.
+
+    A query is considered safe if it either excludes the archive path explicitly
+    or filters on `status`, since archived notes carry `status: done`.
+    """
+    dash = vault / "Dashboard.md"
+    if not dash.is_file():
+        return
+
+    archived_parents = {
+        d.parent.relative_to(vault).as_posix(): d.relative_to(vault).as_posix()
+        for d in vault.rglob("*_Archive")
+        if d.is_dir() and not any(x.startswith(".") for x in d.parts)
+    }
+    if not archived_parents:
+        return
+
+    text = dash.read_text(encoding="utf-8")
+    for heading, query in re.findall(
+        r"##\s*(.+?)\n.*?```dataview\n(.*?)```", text, re.S
+    ):
+        flat = " ".join(query.split())
+        for parent, archive in archived_parents.items():
+            if f'"{parent}"' not in flat:
+                continue
+            if f'!"{archive}"' in flat or "status" in flat:
+                continue
+            report.add(
+                "warning",
+                "Dashboard.md",
+                f"query '{heading.strip()}' reads {parent} without excluding "
+                f"{archive} or filtering on status",
+            )
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -611,6 +657,7 @@ def main() -> int:
     check_index_coverage(vault, rep)
     check_skills_map(vault, rep)
     check_folder_readmes(vault, rep)
+    check_archive_leaks(vault, rep)
     check_own_docs(vault, rep)
 
     if args.json:

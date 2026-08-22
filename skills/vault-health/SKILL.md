@@ -43,11 +43,18 @@ Each rule below is one function in the script, named so you can grep for it.
 | `check_index_coverage` | A procedure in the manual that its index does not list |
 | `check_skills_map` | A skill missing from `INDEX.md`'s table, or a table entry with no skill behind it |
 | `check_folder_readmes` | A note missing from the `Holds:` or `Currently:` list in its folder's README |
+| `check_archive_leaks` | A dashboard query reading a folder without excluding its archive |
 | `check_own_docs` | A rule in this script that this file does not describe |
 
 Each was written against a real failure found on 2026-08-22 and verified by running
 it against the commit before those failures were fixed by hand, or by injecting the
 fault deliberately.
+
+`check_archive_leaks` exists because this bit three times in one day. Dataview's
+`FROM "folder"` recurses, so creating an archive subfolder silently widens every query
+reading the parent — nothing errors, the query keeps returning rows, and finished work
+starts appearing as live. A query is safe if it excludes the archive path or filters on
+`status`, since archived notes carry `status: done`.
 
 `check_own_docs` is self-referential on purpose. Every other rule compares notes to
 notes, or a note to a folder — nothing compared code to the prose describing it, so

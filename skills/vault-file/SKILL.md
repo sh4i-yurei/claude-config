@@ -90,6 +90,19 @@ Read the destination folder's `README.md` — it states what belongs, what doesn
 the naming convention, and the exact frontmatter. Those files are the authority;
 this skill is the procedure.
 
+## When an item is already finished
+
+Not every inbox item gets filed. Some describe work that has since been done
+elsewhere, and there is no folder they belong in.
+
+Those go to `00_Inbox/09_Archive`. Add `status: done`, then add a short
+**Where this went** section naming what actually got built, then move it. Without
+that section the archived note is a description of a problem with no ending, which
+is worse than not keeping it.
+
+Deleting is still the right answer for an item that was only ever a to-do. The test
+is whether the *reasoning* is worth reading now the work is over.
+
 ## The inbox is emptied weekly, not continuously
 
 Filing is a separate task from capturing, and the `weekly-review` skill is when it

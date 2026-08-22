@@ -52,6 +52,9 @@ For each finding, land on one of three answers and say which:
 
 - **Fix now**, if it is a one-line correction. A status that should have changed, a
   buildlog that should have closed.
+- **Archive it**, if it is an inbox item whose work is finished. Set `status: done`,
+  write where the work went, move it to `00_Inbox/09_Archive`. The inbox should trend
+  toward empty, and finished items sitting in it are what stops that happening.
 - **Capture it**, if it is real work. Into `00_Inbox`, so it survives.
 - **It is fine**, if the check is wrong about this case. Say why, out loud — a rule
   that produces a finding nobody acts on should be changed or removed, because

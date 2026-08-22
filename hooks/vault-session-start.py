@@ -81,7 +81,16 @@ def main() -> int:
         if fm.get("post") == "candidate":
             candidates.append(outline.parent.name)
 
-    inbox = [p.stem for p in notes("00_Inbox")]
+    # Exclude 09_Archive. Both conditions on purpose: the status catches an item
+    # marked done but not yet moved, the path catches one moved but not marked.
+    # Half-finished archiving is the likely mistake, and either half alone would
+    # let a finished item keep showing up as unfiled.
+    inbox = [
+        p.stem
+        for p in notes("00_Inbox")
+        if "09_Archive" not in p.parts
+        and frontmatter(p).get("status") != "done"
+    ]
 
     # telos.md is the one file in the vault that is about Mark rather than about
     # work. Its whole purpose is being read at the start of a session, so the brief
