@@ -1,6 +1,6 @@
 ---
 name: vault-health
-description: Checks Mark's Obsidian vault at ~/Documents/Second_Brain for broken links, orphan attachments, duplicate basenames, missing or invalid frontmatter, stale reference notes, forgotten inbox items, and secrets accidentally pasted into notes. Use this when he asks whether the vault is healthy, tidy, consistent or drifting, after any batch of note edits or a migration, after renaming or moving notes, before adding a new convention, or whenever something in the vault seems off. Also use it periodically during long vault work — the cost of running it is seconds and the cost of silent drift is a knowledge base nobody trusts.
+description: Checks Mark's Obsidian vault at ~/Documents/Second_Brain for broken links, duplicate basenames, missing or invalid frontmatter, forgotten inbox items, secrets accidentally pasted into notes, and drift between a project note and what actually happened. Use this when he asks whether the vault is healthy, tidy, consistent or drifting, after any batch of note edits or a migration, after renaming or moving notes, before adding a new convention, or whenever something in the vault seems off. Also use it periodically during long vault work — the cost of running it is seconds and the cost of silent drift is a knowledge base nobody trusts.
 ---
 
 # Vault health
@@ -9,32 +9,48 @@ A second brain fails quietly. Nothing errors when a link breaks, a note loses it
 frontmatter, or a reference doc goes stale — it just gradually stops being worth
 consulting. This checks for that before it compounds.
 
-## Run both checkers
-
-They cover different ground and neither replaces the other.
-
-**Conventions specific to this vault:**
+## Run it
 
 ```bash
 python3 ~/.claude/skills/vault-health/scripts/check.py
 ```
 
-Catches duplicate basenames (which make `[[wikilinks]]` ambiguous), buildlogs using
-bare `log.md` instead of `<slug>-log.md`, notes with no frontmatter or an unknown
-`type`, `status`/`post`/`genre` values outside the allowed set, a `title:` field
-that shouldn't exist, reference notes not updated in six months, inbox items older
-than three weeks, and anything that looks like a key, token, or certificate pasted
-into a note.
+One script, standard library only. The same file runs from the pre-commit hook and
+from CI on the vault repo, so a clean result here means a clean result there.
 
-**Generic vault problems:**
+It covers three things.
+
+**Conventions.** Duplicate basenames (which make `[[wikilinks]]` ambiguous), buildlogs
+using bare `log.md` instead of `<slug>-log.md`, notes with no frontmatter or an unknown
+`type`, `status`/`post`/`genre` values outside the allowed set, a `title:` field that
+should not exist, reference notes not updated in six months, inbox items older than
+three weeks, and anything resembling a key or token pasted into a note.
+
+**Links.** Every `[[wikilink]]` and `![[embed]]` resolves to a real file. Comments,
+fenced code and inline code are stripped first, because documentation *about* links is
+not a link — and a check that cries wolf gets ignored within a week.
+
+**Drift.** Where the documentation disagrees with what happened. Not staleness: a
+correct note nobody edited for six months is fine. Drift is a gap between two things,
+so it needs no "N days" threshold.
+
+- Every task ticked but the status still is not `done`.
+- A post exists in `30_Posts` while its buildlog is still `active`.
+- A buildlog exists while its project claims `status: idea` — you do not keep a
+  buildlog for something you have not started.
+- A project is `done` while its buildlog is still `active`.
+
+Each rule was written against a real failure found on 2026-08-22 and verified by
+running it against the commit before those failures were fixed by hand.
+
+**Deeper, optional scan.** For orphan attachments, duplicate files by hash and
+oversized files, which the script above does not cover:
 
 ```bash
 cd ~/Documents/Second_Brain && npx --yes vault-inspector . --format json
 ```
 
-Catches broken links and embeds, orphan attachments, empty notes, duplicate files
-by hash, frontmatter type inconsistencies, and oversized files. First run downloads
-the package; after that it's fast.
+That needs npm and a network, which is why it is not what CI runs.
 
 ## Reading the results
 
