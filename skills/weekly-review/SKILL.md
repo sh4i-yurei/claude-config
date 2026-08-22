@@ -62,7 +62,10 @@ what happens after it runs.
 
 ## 3. Look for drift the checks cannot see
 
-The rules compare notes to notes. They cannot see:
+The rules now cover four kinds of coverage drift automatically — the manual's index
+against its procedures, `INDEX.md`'s skills table against `.claude/skills`, and any
+folder README that lists its contents against that folder. What they still cannot
+see:
 
 - **A project note whose prose has gone stale** while its properties are correct.
   "Where it stands" describing a state that ended a month ago.

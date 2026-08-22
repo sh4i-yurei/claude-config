@@ -522,6 +522,37 @@ def check_skills_map(vault: Path, report: Report) -> None:
         report.add("warning", "INDEX.md",
                    f"skills table lists '{name}' but no such skill exists")
 
+
+def check_folder_readmes(vault: Path, report: Report) -> None:
+    """A folder README that lists its contents actually lists all of them.
+
+    Applies to any README containing a "Holds:" or "Currently:" line. Those lists
+    are the fastest thing in the vault to go stale — `69_Homelab/README.md` was
+    wrong within twenty minutes of a procedure landing in it, on 2026-08-22.
+
+    This rule only became possible once those lists used wikilinks. As prose
+    ("node provisioning") it would have needed fuzzy matching against a filename
+    (`homelab-node-provisioning.md`), and fuzzy matching is how a check starts
+    producing findings nobody acts on. Aliased links — `[[target|display text]]` —
+    read exactly like the prose did and match exactly, so the check is reliable
+    without the README getting uglier.
+    """
+    for readme in sorted(vault.rglob("README.md")):
+        rel = readme.relative_to(vault)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        text = readme.read_text(encoding="utf-8", errors="replace")
+        if not re.search(r"^(Holds|Currently):", text, re.M):
+            continue
+        linked = {x.split("|")[0].strip()
+                  for x in re.findall(r"\[\[([^\]]+)\]\]", text)}
+        for note in sorted(readme.parent.glob("*.md")):
+            if note.name == "README.md":
+                continue
+            if note.stem not in linked:
+                report.add("warning", str(note.relative_to(vault)),
+                           f"not listed in {rel.parent}/README.md")
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -539,6 +570,7 @@ def main() -> int:
     check_drift(vault, rep)
     check_index_coverage(vault, rep)
     check_skills_map(vault, rep)
+    check_folder_readmes(vault, rep)
 
     if args.json:
         print(
