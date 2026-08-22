@@ -41,9 +41,9 @@ today="$(TZ=America/Chicago date '+%Y-%m-%d')"
 
 mkdir -p "$dir/images"
 
-# The templates carry {{date:YYYY-MM-DD}} for Obsidian's Templates plugin, which
-# only expands when a note is inserted through the plugin. We're writing files
-# directly, so substitute here.
+# The templates carry {{date:YYYY-MM-DD}} for Obsidian's core Templates plugin,
+# which only expands when a note is inserted through the plugin. This script
+# writes them directly, so substitute here.
 sed -e "s/{{date:YYYY-MM-DD}}/$today/g" \
     -e "s|^project: \"\[\[\]\]\"|project: \"[[${project}]]\"|" \
     "$TPL/buildlog-outline.md" > "$dir/$slug-outline.md"

@@ -35,9 +35,9 @@ fi
 
 mkdir -p "$dir"
 
-# The template carries {{date:YYYY-MM-DD}} for Obsidian's Templates plugin, which
-# only expands when inserted through the plugin. We write the file directly, so
-# substitute here.
+# The template carries {{date:YYYY-MM-DD}} for Obsidian's core Templates plugin,
+# which only expands when a note is inserted through the plugin. This script
+# writes the file directly, so substitute here.
 sed "s/{{date:YYYY-MM-DD}}/$date_arg/g" "$TPL" > "$out"
 
 echo "created: $out"
