@@ -12,7 +12,9 @@ actual work, so it reports counts and names, never content.
 import os
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 VAULT = Path(os.environ.get("SECOND_BRAIN", Path.home() / "Documents/Second_Brain"))
 MAX_LISTED = 8  # Beyond this, a list stops being orienting and starts being noise.
@@ -61,13 +63,15 @@ def main() -> int:
 
     lines: list[str] = []
 
-    active, paused = [], []
+    active, paused, simmering = [], [], []
     for p in notes("10_Projects"):
         status = frontmatter(p).get("status", "")
         if status == "active":
             active.append(p.stem)
         elif status == "paused":
             paused.append(p.stem)
+        elif status == "simmering":
+            simmering.append(p.stem)
 
     open_logs, candidates = [], []
     for outline in sorted((VAULT / "20_Buildlogs").glob("*/*-outline.md")):
@@ -79,6 +83,17 @@ def main() -> int:
 
     inbox = [p.stem for p in notes("00_Inbox")]
 
+    today = datetime.now(ZoneInfo("America/Chicago")).date()
+    entry = (
+        VAULT / "50_Personal" / "51_Journal" / str(today.year) / f"{today}.md"
+    )
+    journal_note = None
+    if not entry.exists():
+        journal_note = (
+            f"- No journal entry for {today} yet. Offer /journal at the end of "
+            "the session while the day is still accurate. Offer once."
+        )
+
     def fmt(label: str, items: list[str]) -> None:
         if not items:
             return
@@ -88,9 +103,12 @@ def main() -> int:
 
     fmt("Active projects", active)
     fmt("Paused", paused)
+    fmt("Simmering", simmering)
     fmt("Open buildlogs", open_logs)
     fmt("Marked post: candidate", candidates)
     fmt("Inbox (unfiled)", inbox)
+    if journal_note:
+        lines.append(journal_note)
 
     if not lines:
         return 0
