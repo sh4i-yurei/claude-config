@@ -490,6 +490,38 @@ def check_index_coverage(vault: Path, report: Report) -> None:
             )
 
 
+
+def check_skills_map(vault: Path, report: Report) -> None:
+    """INDEX.md's skills table matches the skills that actually exist.
+
+    Same shape as the manual's index-coverage check: a note that claims to
+    describe a folder, drifting from the folder. Added 2026-08-22 after a wiring
+    pass found two skills — `write-post` and `teaching` — described nowhere
+    outside their own files, and no single place listing all of them.
+
+    Both directions matter. A skill missing from the table is undiscoverable, and
+    a table entry with no skill behind it sends a reader looking for something
+    that is not there — which is worse, because they will assume they are wrong
+    rather than the index.
+    """
+    index = vault / "INDEX.md"
+    skills_dir = vault / ".claude" / "skills"
+    if not index.is_file() or not skills_dir.is_dir():
+        return
+
+    listed = set(re.findall(r"^\| `([a-z][a-z-]*)` \|", index.read_text(encoding="utf-8"), re.M))
+    if not listed:
+        return  # no skills table in this vault; nothing to check against
+
+    actual = {d.name for d in skills_dir.iterdir() if (d / "SKILL.md").is_file()}
+
+    for name in sorted(actual - listed):
+        report.add("warning", ".claude/skills/" + name,
+                   "skill exists but is not in INDEX.md's skills table")
+    for name in sorted(listed - actual):
+        report.add("warning", "INDEX.md",
+                   f"skills table lists '{name}' but no such skill exists")
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -506,6 +538,7 @@ def main() -> int:
     check_links(vault, rep)
     check_drift(vault, rep)
     check_index_coverage(vault, rep)
+    check_skills_map(vault, rep)
 
     if args.json:
         print(
