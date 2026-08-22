@@ -509,7 +509,13 @@ def check_skills_map(vault: Path, report: Report) -> None:
     if not index.is_file() or not skills_dir.is_dir():
         return
 
-    listed = set(re.findall(r"^\| `([a-z][a-z-]*)` \|", index.read_text(encoding="utf-8"), re.M))
+    # Match the full range of legal directory names, not just the ones that happen
+    # to exist today. The narrower [a-z][a-z-]* would silently skip any skill with
+    # a digit or underscore in its name — the same bug fault injection found in
+    # check_own_docs, which is why both were widened together.
+    listed = set(
+        re.findall(r"^\| `([a-z][a-z0-9_-]*)` \|", index.read_text(encoding="utf-8"), re.M)
+    )
     if not listed:
         return  # no skills table in this vault; nothing to check against
 
@@ -575,7 +581,12 @@ def check_own_docs(vault: Path, report: Report) -> None:
     if not skill.is_file():
         return
 
-    implemented = set(re.findall(r"^def (check_[a-z_]+)\(", src.read_text(encoding="utf-8"), re.M))
+    # [a-z0-9_] rather than [a-z_]: the first version silently skipped any
+    # function name containing a digit, which fault injection caught only
+    # because the dummy rule happened to be called check_z6.
+    implemented = set(
+        re.findall(r"^def (check_[a-z0-9_]+)\(", src.read_text(encoding="utf-8"), re.M)
+    )
     documented = skill.read_text(encoding="utf-8")
     for fn in sorted(implemented - {"check_own_docs"}):
         if fn not in documented:
