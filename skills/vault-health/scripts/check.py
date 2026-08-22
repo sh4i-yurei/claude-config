@@ -553,6 +553,35 @@ def check_folder_readmes(vault: Path, report: Report) -> None:
                 report.add("warning", str(note.relative_to(vault)),
                            f"not listed in {rel.parent}/README.md")
 
+
+def check_own_docs(vault: Path, report: Report) -> None:
+    """This script's own SKILL.md lists every rule this script implements.
+
+    Added 2026-08-22 after doing the same thing three times in one day: changing
+    the tool and leaving its documentation behind. The first instance was writing
+    a drift detector and, an hour later, having its SKILL.md still describe a
+    two-checker workflow that no longer existed.
+
+    None of the other rules could see it. They all compare notes to notes, or a
+    note to a folder. Nothing compared code to the prose describing the code, so
+    the tooling was the one part of the vault with no drift detection at all —
+    which is a poor place for a blind spot, since everything else depends on it.
+
+    Self-referential on purpose: the checker is the only thing positioned to
+    notice that the checker has drifted.
+    """
+    src = Path(__file__).resolve()
+    skill = src.parent.parent / "SKILL.md"
+    if not skill.is_file():
+        return
+
+    implemented = set(re.findall(r"^def (check_[a-z_]+)\(", src.read_text(encoding="utf-8"), re.M))
+    documented = skill.read_text(encoding="utf-8")
+    for fn in sorted(implemented - {"check_own_docs"}):
+        if fn not in documented:
+            report.add("warning", str(skill.relative_to(vault)),
+                       f"does not document the rule implemented by {fn}()")
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument(
@@ -571,6 +600,7 @@ def main() -> int:
     check_index_coverage(vault, rep)
     check_skills_map(vault, rep)
     check_folder_readmes(vault, rep)
+    check_own_docs(vault, rep)
 
     if args.json:
         print(

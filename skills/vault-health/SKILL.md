@@ -34,14 +34,32 @@ not a link — and a check that cries wolf gets ignored within a week.
 correct note nobody edited for six months is fine. Drift is a gap between two things,
 so it needs no "N days" threshold.
 
-- Every task ticked but the status still is not `done`.
-- A post exists in `30_Posts` while its buildlog is still `active`.
-- A buildlog exists while its project claims `status: idea` — you do not keep a
-  buildlog for something you have not started.
-- A project is `done` while its buildlog is still `active`.
+Each rule below is one function in the script, named so you can grep for it.
 
-Each rule was written against a real failure found on 2026-08-22 and verified by
-running it against the commit before those failures were fixed by hand.
+| Function | Catches |
+|---|---|
+| `check_links` | A `[[wikilink]]` or `![[embed]]` pointing at nothing |
+| `check_drift` | Every task ticked but the status unchanged; a post that exists while its buildlog is still open; a buildlog for a project claiming `idea`; a project `done` with its buildlog still open |
+| `check_index_coverage` | A procedure in the manual that its index does not list |
+| `check_skills_map` | A skill missing from `INDEX.md`'s table, or a table entry with no skill behind it |
+| `check_folder_readmes` | A note missing from the `Holds:` or `Currently:` list in its folder's README |
+| `check_own_docs` | A rule in this script that this file does not describe |
+
+Each was written against a real failure found on 2026-08-22 and verified by running
+it against the commit before those failures were fixed by hand, or by injecting the
+fault deliberately.
+
+`check_own_docs` is self-referential on purpose. Every other rule compares notes to
+notes, or a note to a folder — nothing compared code to the prose describing it, so
+the tooling was the one part of the vault with no drift detection at all. That is a
+poor place for a blind spot, since everything else depends on it. The checker is the
+only thing positioned to notice that the checker has drifted.
+
+The three coverage rules all have the same shape: a note that claims to describe a
+set, drifting from the set. They only work because the lists use exact links —
+aliased wikilinks like `[[homelab-node-provisioning|node provisioning]]` read as
+prose and match exactly. Keep it that way; prose lists would need fuzzy matching,
+and a check that cries wolf gets ignored within a week.
 
 **Deeper, optional scan.** For orphan attachments, duplicate files by hash and
 oversized files, which the script above does not cover:
