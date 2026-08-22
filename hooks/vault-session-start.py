@@ -12,7 +12,7 @@ actual work, so it reports counts and names, never content.
 import os
 import re
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -104,15 +104,19 @@ def main() -> int:
                 "own account of what he is doing and why."
             )
 
+    # Mark journals in the MORNING about the DAY BEFORE, so the question is never
+    # "is today written" — today is not finished. Asking about today would nag him
+    # every single day about a day that cannot be written yet.
     today = datetime.now(ZoneInfo("America/Chicago")).date()
+    yesterday = today - timedelta(days=1)
     entry = (
-        VAULT / "50_Personal" / "51_Journal" / str(today.year) / f"{today}.md"
+        VAULT / "50_Personal" / "51_Journal" / str(yesterday.year) / f"{yesterday}.md"
     )
     journal_note = None
     if not entry.exists():
         journal_note = (
-            f"- No journal entry for {today} yet. Offer /journal at the end of "
-            "the session while the day is still accurate. Offer once."
+            f"- No journal entry for {yesterday} yet. Offer /journal — he writes in "
+            "the morning about the day before. Offer once."
         )
 
     def fmt(label: str, items: list[str]) -> None:
