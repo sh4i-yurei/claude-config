@@ -83,6 +83,27 @@ def main() -> int:
 
     inbox = [p.stem for p in notes("00_Inbox")]
 
+    # telos.md is the one file in the vault that is about Mark rather than about
+    # work. Its whole purpose is being read at the start of a session, so the brief
+    # has to say it is there — an unread context file is the same as no context file.
+    # While it is still the scaffold, say so plainly rather than pointing at prompts
+    # as though they were answers.
+    telos = VAULT / "50_Personal" / "telos.md"
+    telos_note = None
+    if telos.is_file():
+        body = telos.read_text(encoding="utf-8", errors="replace")
+        if "**Not written yet.**" in body:
+            telos_note = (
+                "- 50_Personal/telos.md is scaffolded but unwritten. It is the only "
+                "note about Mark rather than about work. Offer to fill it in as an "
+                "interview, the way /journal works."
+            )
+        else:
+            telos_note = (
+                "- Read 50_Personal/telos.md before proposing direction. It is Mark's "
+                "own account of what he is doing and why."
+            )
+
     today = datetime.now(ZoneInfo("America/Chicago")).date()
     entry = (
         VAULT / "50_Personal" / "51_Journal" / str(today.year) / f"{today}.md"
@@ -107,6 +128,8 @@ def main() -> int:
     fmt("Open buildlogs", open_logs)
     fmt("Marked post: candidate", candidates)
     fmt("Inbox (unfiled)", inbox)
+    if telos_note:
+        lines.append(telos_note)
     if journal_note:
         lines.append(journal_note)
 

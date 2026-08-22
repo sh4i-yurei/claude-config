@@ -89,3 +89,13 @@ Say so and offer to drop it rather than filing it somewhere it will never be rea
 Read the destination folder's `README.md` — it states what belongs, what doesn't,
 the naming convention, and the exact frontmatter. Those files are the authority;
 this skill is the procedure.
+
+## The inbox is emptied weekly, not continuously
+
+Filing is a separate task from capturing, and the `weekly-review` skill is when it
+happens. That review reads the inbox and gives every item a disposition — filed,
+turned into a project, or dropped.
+
+An item that has sat for three weeks and still connects to nothing is telling you
+something. Say so and offer to drop it, rather than filing it somewhere it will
+never be read.
