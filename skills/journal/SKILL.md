@@ -97,6 +97,67 @@ sentences of a text message. Those are speech, not narration about speech.
 **Keep his chronology.** If a moment would land better somewhere else, that is your
 aesthetic preference and it does not belong in his record.
 
+## Find the thread, then arrange for it
+
+A day is not a list of events. There is usually one thing running underneath all of
+them, and the entry is only a story once that thread is visible.
+
+The entry for 2026-08-22 was fatherhood, and specifically what it means to pass
+knowledge to the next generation. A young man at the loading dock about to have a
+daughter. Mark's own failures and victories as a father. Wanting to hand that young man
+everything he knows and accepting he cannot. A stepson who finds reasons he can't move
+out. A kid who isn't his at the keyboard being taught what a pipe does. And underneath
+all of it, his own father, who gave him none of it.
+
+Every one of those was already in the raw material. They were written as separate
+events, and the entry read as a list until they were arranged so the thread carried.
+
+**Two rules for that arrangement.**
+
+Do not state the thread. Writing "the day was really about fatherhood" is telling, and
+it insults the reader. Let the placement do it. When Mark says he believes everyone
+comes to truth in their own time, and four paragraphs later declines to push his stepson
+and agrees about the car instead, the reader feels the connection without being shown a
+sign.
+
+Get anything off-thread out of the way. Three paragraphs about vibe coding sat between
+the young father and coming home to Turner, and they broke the spine of the entry. Moved
+back with the rest of the work talk, the thread ran clean. **Chronology still rules, but
+within a day there is usually room to group.**
+
+## Ask what he saw and did, never how it felt
+
+Mark is autistic and has said plainly that he has trouble expressing himself. "How did
+that land?" is the hardest possible question and he should not have to answer it.
+
+Ask observational questions instead. Where were you standing. What was he doing. What
+did you do next. Who brought it up. What did they say.
+
+That gets you the concrete material the writing needs, and **the emotion arrives through
+it rather than being named.** The proof: asking those questions turned a flat paragraph
+into the best scene in the entry. He was walking past, didn't catch it, stopped. The guy
+was loading a customer's order while he told him. Mark grinned. He was in a hurry but
+wanted the kid to feel him celebrating. Then he walked to his car, and *that* is where
+it hit him.
+
+None of that was invented and none of it was available until the right question was
+asked. The first version had the emotion happening at the dock, in one collapsed moment,
+because nobody asked what happened next.
+
+## Show, do not tell
+
+Telling names an emotion. Showing puts down the concrete thing and trusts it.
+
+- Telling: "Turner is afraid and doesn't believe in himself."
+- Showing: "Every time this comes up he finds reasons why he can't, and this time was no
+  different."
+
+**Do not do both.** Putting down the detail and then labelling it is the most common way
+an emotional passage dies. The detail already did the work.
+
+A scene needs three things: **dialogue, concrete detail, and action.** If a passage has
+none of them it is summary, and summary is where an entry goes flat.
+
 ## Read the writing directive before writing
 
 `.claude/rules/writing-style.md` is loaded every session, and
