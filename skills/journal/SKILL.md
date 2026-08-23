@@ -97,6 +97,38 @@ sentences of a text message. Those are speech, not narration about speech.
 **Keep his chronology.** If a moment would land better somewhere else, that is your
 aesthetic preference and it does not belong in his record.
 
+## Read the writing directive before writing
+
+`.claude/rules/writing-style.md` is loaded every session, and
+`40_Reference/writing-and-teaching-directive.md` is the full version. Apply them to the
+entry, not just to chat. The test is theirs:
+
+> **Would a person who is not me understand this on the first read, without already
+> knowing what I was trying to say?**
+
+The second entry needed a whole extra pass because it failed that test in thirteen
+places, and every one was the same failure: **inflating his plain phrasing into
+writing.**
+
+He said *"there is nothing like being a father"* and it came out as *"there's nothing
+on this earth like being a father."* He said *"he's young, obviously"* and it became a
+sentence about what it is like to be young when the news is the biggest thing that has
+ever happened to you, which is a whole interior life invented for a man he exchanged
+four sentences with. He said the vault *"needs refinement"* and it became a paragraph
+about watching something happen enough times to name it out loud.
+
+Worst of the lot: **"None of which means being soft about it."** Soft about *what*? It
+is a bridge between two paragraphs that refers to nothing. That sentence is the shape
+to watch for — connective tissue that sounds like prose and carries no meaning.
+
+The rule that catches all of it: **if a phrase is better than what he said, it is
+wrong.** Editing is placement, structure and cutting. It is not upgrading his words.
+
+Watch particularly for fragments used for effect. He speaks in flowing sentences. When
+his *"all my failures as a father but also all of my victories, the times I failed to
+protect my kids and the harm I inadvertently caused them"* gets chopped into three
+punchy fragments, that is a writer's rhythm imposed on a man who does not talk that way.
+
 **No em dashes.** Mark's writing rules forbid them, in the vault as much as on the site.
 They are an AI tell and he spots them instantly. Use a full stop, a comma, or restructure
 the sentence. The first entry had none; the second had six, and he caught every one.
