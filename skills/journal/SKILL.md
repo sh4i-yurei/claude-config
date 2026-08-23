@@ -97,33 +97,30 @@ sentences of a text message. Those are speech, not narration about speech.
 **Keep his chronology.** If a moment would land better somewhere else, that is your
 aesthetic preference and it does not belong in his record.
 
-## Find the thread, then arrange for it
+## Find the thread, and write about it
 
-A day is not a list of events. There is usually one thing running underneath all of
-them, and the entry is only a story once that thread is visible.
+A day is not a list of events. There is usually one thing running underneath all of them,
+and the entry is only a story once that thread is on the page.
 
-The entry for 2026-08-22 was fatherhood, and specifically what it means to pass
-knowledge to the next generation. A young man at the loading dock about to have a
-daughter. Mark's own failures and victories as a father. Wanting to hand that young man
-everything he knows and accepting he cannot. A stepson who finds reasons he can't move
-out. A kid who isn't his at the keyboard being taught what a pipe does. And underneath
-all of it, his own father, who gave him none of it.
+**Say it out loud.** This is his journal, he is the reader, and reflection is the entire
+point of writing it. "Show, don't tell" is advice for writing to strangers who have to be
+trusted to work it out. It does not apply here, and applying it once produced an entry
+that had the thread everywhere and named it nowhere, which is not subtlety, it is a
+missing paragraph.
 
-Every one of those was already in the raw material. They were written as separate
-events, and the entry read as a list until they were arranged so the thread carried.
+So when the thread is clear, write a passage that draws it together. Name the day's
+subject, list the moments that turn out to be the same moment, and say what it meant.
+Usually near the end, once the material has all been laid down.
 
-**Two rules for that arrangement.**
+For 2026-08-22 the thread was fatherhood and what it takes to pass what you know to the
+next generation. A young man at the loading dock about to have a daughter. Wanting to
+hand him everything and not being able to. Turner needing a step nobody can take for him.
+Isaac at the keyboard learning what a pipe does. And Mark's own father, who gave him none
+of it.
 
-Do not state the thread. Writing "the day was really about fatherhood" is telling, and
-it insults the reader. Let the placement do it. When Mark says he believes everyone
-comes to truth in their own time, and four paragraphs later declines to push his stepson
-and agrees about the car instead, the reader feels the connection without being shown a
-sign.
-
-Get anything off-thread out of the way. Three paragraphs about vibe coding sat between
-the young father and coming home to Turner, and they broke the spine of the entry. Moved
-back with the rest of the work talk, the thread ran clean. **Chronology still rules, but
-within a day there is usually room to group.**
+**Arrange for it too, but do not reorganise the day to chase it.** Chronology still rules.
+Moving one off-thread block is fine; rebuilding the entry around a theme is not, and it
+makes things worse. He will tell you when it reads badly.
 
 ## Ask what he saw and did, never how it felt
 
