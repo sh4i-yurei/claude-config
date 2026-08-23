@@ -118,6 +118,17 @@ hand him everything and not being able to. Turner needing a step nobody can take
 Isaac at the keyboard learning what a pipe does. And Mark's own father, who gave him none
 of it.
 
+**Naming the theme is not reflecting on it.** When Mark says the thread is fatherhood,
+that is an instruction about what to write, not a sentence to put in his mouth. Writing
+"that's what the day was about, fatherhood and passing knowledge on" hands his own
+editorial note back to him as though he had thought it, and it is hollow, because a label
+ends the thinking where a thought continues it.
+
+The real version reaches the thing underneath: most of what he wants to give away cannot
+be handed over, the young father will have to find it himself, Turner already knows what
+he thinks and it has not moved him, and Isaac only got anywhere because he asked. He
+keeps offering anyway. That is a conclusion. "The day was about fatherhood" is a caption.
+
 **Arrange for it too, but do not reorganise the day to chase it.** Chronology still rules.
 Moving one off-thread block is fine; rebuilding the entry around a theme is not, and it
 makes things worse. He will tell you when it reads badly.
