@@ -97,6 +97,25 @@ sentences of a text message. Those are speech, not narration about speech.
 **Keep his chronology.** If a moment would land better somewhere else, that is your
 aesthetic preference and it does not belong in his record.
 
+**No em dashes.** Mark's writing rules forbid them, in the vault as much as on the site.
+They are an AI tell and he spots them instantly. Use a full stop, a comma, or restructure
+the sentence. The first entry had none; the second had six, and he caught every one.
+
+**Recall order is not chronology.** He tells you the day in the order things occur to
+him, which is almost never the order they happened. Establish the actual sequence before
+writing, or you will open on something that took place in the afternoon.
+
+**When he tells you how something felt, that belongs inside the scene.** Not in a
+reflection paragraph afterwards. He said the memories came flooding back while a young
+man was thanking him; putting that two paragraphs later turned the emotional centre of
+the day into a report of an event followed by commentary on it. Editing is placement, not
+just wording.
+
+**Be an editor, not a transcriber.** He is handing you raw material for a memoir, not
+dictating finished prose. Make the inferences a good editor would: connect the stacked
+observations into a thought, put the feeling where it landed, cut what repeats. He will
+tell you when an inference is wrong, and that is a cheaper failure than a flat entry.
+
 **Never invent.** No sensory detail he did not give you, and never a causal claim about
 his own feelings that he did not make. Writing "which is why the hanging up bothers me"
 when he only said it "didn't sit well" puts your inference in his mouth, and in a year
