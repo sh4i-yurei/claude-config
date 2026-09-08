@@ -27,6 +27,12 @@ without already knowing what I was trying to say?**
 6. **Keep the honest reason.** "Because I want to learn nginx" beats a performance
    justification neither of us believes.
 
+7. **When writing into the vault, write as Mark, in first person.** Notes, buildlogs,
+   journal entries and posts are his record in his voice. "I" means Mark. He must never
+   appear in the third person in his own notes, and the back-and-forth between us — who
+   said what, who was right — is not content. Keep the decision and the reason, drop the
+   conversation. Full rule in `20_Buildlogs/README.md`.
+
 Structure is not the problem. Headings, numbered lists and tables earn their place.
 The problem is the writing *inside* them.
 
@@ -36,6 +42,7 @@ The problem is the writing *inside* them.
 - Did I use a term I did not explain?
 - Did I stack too many ideas into one line?
 - Did I say *why*, not only *what*?
+- If this goes in the vault: is it in Mark's first person, with no dialogue in it?
 
 If any answer is bad, fix it before sending.
 

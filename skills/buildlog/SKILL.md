@@ -68,6 +68,46 @@ Timestamps are Central time:
 TZ=America/Chicago date '+%Y-%m-%d %H:%M %Z'
 ```
 
+### Voice: first person, Mark's — this is the rule that breaks most often
+
+**Every entry is Mark's record of Mark's work. "I" means Mark, never you.**
+
+You are usually the one typing these entries, so the natural pull is to narrate
+them: "I" slides into meaning you, and Mark becomes a third-person character in
+his own buildlog — *"Mark pushed back," "Mark asked," "he was right."* That
+produces an account of somebody watching Mark work, which is worthless as raw
+material for a post published under his name. Check every entry for this before
+writing it.
+
+**Strip the conversation out.** Who said what, who corrected whom, who turned out
+to be right — none of it belongs. Keep the decision and the reason:
+
+```
+No:   Mark pushed back on my first instinct to triage some issues away as
+      "not worth it," and he was right.
+Yes:  The first cut tried to triage a few issues away as "not worth it." I threw
+      that out — it is security through assuming nothing bad will happen.
+```
+
+**Never quote Mark back at himself.** A pasted line of chat, typos intact, is a
+transcript, not a log entry. Convert it into what he decided and why. This holds
+even when the line is vivid — *especially* then, because a vivid quote is the one
+most tempting to keep.
+
+**A wrong turn you made is written as a wrong turn in the work**, not as a
+confession. "The dependency-review gate got removed in the same commit as a real
+fix, on the reasoning that it can't run here. I caught it immediately." Not "I
+made a bad call and Mark caught it."
+
+**Claude may appear as a tool, never as a narrator.** A fact about the tool is
+fine: "Claude Code keys its history to the folder it was started in." So is Mark
+describing his own setup in first person: "ran it with Claude walking me through
+each check instead of doing it for me." The test is whether the sentence has Mark
+as its subject.
+
+**Leave real identifiers alone.** `.claude/skills`, `mark@WSOPTICON1` and the like
+are paths and key names, not voice.
+
 ### When something went wrong
 
 ```
