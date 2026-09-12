@@ -99,6 +99,22 @@ confession. "The dependency-review gate got removed in the same commit as a real
 fix, on the reasoning that it can't run here. I caught it immediately." Not "I
 made a bad call and Mark caught it."
 
+**A proposal you made that Mark rejected is not a wrong turn. It never happened.**
+If you suggested `NOPASSWD` and he said no before anything was written to a box, the
+log records the decision and the reason ("Ansible does not get passwordless sudo,
+because Red Hat's hardening guidance says never to") and nothing about the
+suggestion. Writing "first instinct was passwordless sudo" puts your idea in his
+head, and it comes out of the log and into a blog post under his name. Only what he
+did or decided goes in.
+
+**Never put words in his mouth.** A [life] entry holds what he said and did, in his
+words or a plain paraphrase of them. On 2026-09-11 a [life] entry gained the line
+"last night I said it wanted an evening with no clock on it." He never said it; the
+previous night's entry said "next session." It went into a blog post as a quote from
+him. If you want to record why something happened at a different time than
+expected, and he did not say why, write nothing. A quotation you composed is a
+fabrication, even when it sounds like him.
+
 **Claude may appear as a tool, never as a narrator.** A fact about the tool is
 fine: "Claude Code keys its history to the folder it was started in." So is Mark
 describing his own setup in first person: "ran it with Claude walking me through
