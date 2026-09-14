@@ -3,7 +3,7 @@
 #
 #   new-buildlog.sh <slug> [project-note-name]
 #
-# Creates 20_Buildlogs/<slug>/ containing <slug>-outline.md, <slug>-log.md and
+# Creates 20_Buildlogs/<slug>/ containing <slug>-log.md and
 # images/, with the date and project link already filled in. Refuses to touch an
 # existing buildlog so a re-run can never clobber a log that's mid-flight.
 
@@ -27,7 +27,7 @@ if ! printf '%s' "$slug" | grep -qE '^[a-z0-9]+(-[a-z0-9]+)*$'; then
   exit 2
 fi
 
-for f in "$TPL/buildlog-outline.md" "$TPL/buildlog-log.md"; do
+for f in "$TPL/buildlog-log.md"; do
   [ -f "$f" ] || { echo "error: missing template $f" >&2; exit 1; }
 done
 
@@ -46,15 +46,10 @@ mkdir -p "$dir/images"
 # bypassing that, so substitute here instead. Both paths must stay in step.
 sed -e "s|<% tp.date.now(\"YYYY-MM-DD\") %>|$today|g" \
     -e "s|^project: \"\[\[\]\]\"|project: \"[[${project}]]\"|" \
-    "$TPL/buildlog-outline.md" > "$dir/$slug-outline.md"
-
-sed -e "s|<% tp.date.now(\"YYYY-MM-DD\") %>|$today|g" \
-    -e "s|^project: \"\[\[\]\]\"|project: \"[[${project}]]\"|" \
     "$TPL/buildlog-log.md" > "$dir/$slug-log.md"
 
 echo "created:"
-echo "  $dir/$slug-outline.md"
 echo "  $dir/$slug-log.md"
 echo "  $dir/images/"
 [ -n "$project" ] && echo "linked to project: [[$project]]" || \
-  echo "note: no project given — set 'project:' in the outline frontmatter"
+  echo "note: no project given — set 'project:' in the log frontmatter"

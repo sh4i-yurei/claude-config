@@ -19,12 +19,13 @@ That's the whole reason this exists. Everything below serves it.
 
 ```
 ~/Documents/Second_Brain/20_Buildlogs/<slug>/
-    <slug>-outline.md   the plan, written before the work
     <slug>-log.md       the record, written during the work
     images/             screenshot staging
 ```
 
-Files carry the slug in their name rather than being bare `log.md`. Obsidian
+One file. There is no outline: the plan is the project note's Next list, and
+the log records what happened, including where it diverged from the plan.
+The file carries the slug in its name rather than being bare `log.md`. Obsidian
 resolves `[[wikilinks]]` on filename alone, so bare names collide across
 buildlogs and every link then needs a full path.
 
@@ -48,11 +49,11 @@ The slug is lowercase words joined by hyphens, no dates: `droplet-rebuild`,
 than guessing at the name. Projects sit in domain subfolders now, so search
 recursively: `find ~/Documents/Second_Brain/10_Projects -name '*.md'`.
 
-Then fill in the outline: what you're about to do, why now, the approach
-including any rollback path, and what "done" looks like stated so it can be
-checked rather than felt. That last one is worth real thought — "the site works"
-is not checkable, "curl from outside the box returns the new header and the
-origin refuses a direct connection" is.
+Then make sure the project note's Next list says what the work is and what
+"done" looks like, stated so it can be checked rather than felt — "the site
+works" is not checkable, "curl from outside the box returns the new header and
+the origin refuses a direct connection" is. The log does not get a plan
+section; the plan lives in the project note.
 
 **Not every task needs a buildlog.** A one-line config tweak or a quick question
 doesn't. The test is whether you'd want the record in a month, or whether
@@ -173,8 +174,7 @@ Don't invent them and don't fish for them. Write down what he actually said.
 ### Screenshots
 
 When something on screen is worth a picture — a passing test, a dashboard, a
-before/after — say `📸 capture X now` in the conversation and tick it off the
-outline's checklist. He takes the shot; it gets staged in `images/` and redacted
+before/after — say `📸 capture X now` in the conversation. He takes the shot; it gets staged in `images/` and redacted
 before publishing (crop chrome, bar out IPs, emails, and secrets).
 
 ## Never prefill, never backfill
@@ -190,7 +190,7 @@ The line is the session boundary, not the moment.
 
 ## Promoting to a post
 
-The outline's frontmatter carries `post: none | candidate | drafted | published`.
+The log's frontmatter carries `post: none | candidate | drafted | published`.
 It starts at `none`. Change it to `candidate` when the work turns out to have a
 story in it — a failure with a named cause, a wrong assumption corrected, a trap
 someone else would fall into.

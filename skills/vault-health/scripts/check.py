@@ -198,12 +198,18 @@ def check(vault: Path) -> Report:
     if logs_dir.is_dir():
         for folder in sorted(p for p in logs_dir.iterdir() if p.is_dir()):
             slug = folder.name
-            if (folder / "log.md").exists() or (folder / "outline.md").exists():
+            if (folder / "log.md").exists():
                 r.add(
                     "error",
                     rel(folder),
-                    "buildlog uses bare log.md/outline.md — rename to "
-                    f"{slug}-log.md / {slug}-outline.md so links stay unambiguous",
+                    f"buildlog uses bare log.md — rename to {slug}-log.md so links stay unambiguous",
+                )
+            for stray in folder.glob("*outline*.md"):
+                r.add(
+                    "error",
+                    rel(stray),
+                    "buildlog outlines were retired on 2026-08-26 — fold anything worth "
+                    "keeping into the log and delete this file",
                 )
             if not (folder / f"{slug}-log.md").exists():
                 r.add(

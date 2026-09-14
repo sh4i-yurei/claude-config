@@ -20,9 +20,11 @@ Those are the posts. Everything else is scaffolding around them.
 python3 ~/.claude/skills/vault-query/scripts/query.py buildlogs --post candidate
 ```
 
-Then read both files in that buildlog folder. The **outline** gives structure — the
-angle, who it's for, the intended section arc. The **log** gives substance — what
-actually happened, in order, with the real commands and real output.
+Then read the log in that buildlog folder. It gives the substance — what actually
+happened, in order, with the real commands and real output — and the project note
+gives the why. There is no outline file; the angle, who the post is for, and the
+section arc get worked out with Mark at drafting time, from what the log turned out
+to contain.
 
 If the log is thin, say so before starting. A post written from a thin log gets
 written from memory, and that is where the specific detail quietly turns into

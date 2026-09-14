@@ -76,15 +76,15 @@ def logged_today() -> bool:
 
 
 def open_buildlogs() -> list[str]:
-    """Buildlogs whose outline still says status: active."""
+    """Buildlogs whose log still says status: active."""
     out = []
     if not BUILDLOGS.is_dir():
         return out
-    for outline in sorted(BUILDLOGS.glob("*/*-outline.md")):
+    for log in sorted(BUILDLOGS.glob("*/*-log.md")):
         try:
-            head = outline.read_text(encoding="utf-8")[:400]
+            head = log.read_text(encoding="utf-8")[:400]
             if "status: active" in head:
-                out.append(outline.parent.name)
+                out.append(log.parent.name)
         except OSError:
             continue
     return out

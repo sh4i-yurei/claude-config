@@ -74,12 +74,12 @@ def main() -> int:
             simmering.append(p.stem)
 
     open_logs, candidates = [], []
-    for outline in sorted((VAULT / "20_Buildlogs").glob("*/*-outline.md")):
-        fm = frontmatter(outline)
+    for log in sorted((VAULT / "20_Buildlogs").glob("*/*-log.md")):
+        fm = frontmatter(log)
         if fm.get("status") == "active":
-            open_logs.append(outline.parent.name)
+            open_logs.append(log.parent.name)
         if fm.get("post") == "candidate":
-            candidates.append(outline.parent.name)
+            candidates.append(log.parent.name)
 
     # Exclude 09_Archive. Both conditions on purpose: the status catches an item
     # marked done but not yet moved, the path catches one moved but not marked.
