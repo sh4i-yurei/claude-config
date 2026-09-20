@@ -1,18 +1,39 @@
 ---
 name: project-note
-description: Creates and updates project notes in ~/Documents/Second_Brain/10_Projects, grouped into domain subfolders (11_Infrastructure, 12_Web, 13_Mail, 14_Security, 15_Code, 16_Tooling) with finished work in 19_Archive, the front door to every project Mark has. Use this when he starts a new project or has an idea for one, when a decision gets made that should be recorded, when work finishes or changes what is next, when he asks where something stands or what he decided, and after any substantial work session so the note reflects reality. Also use it when a project note has grown wrong — accumulating history, backlogs or how-to content that belongs in other folders. Trigger it even when he does not mention notes, projects folders, or the vault.
+description: Creates and updates project notes in ~/Documents/Second_Brain/10_Projects, grouped into domain subfolders (11_Infrastructure, 12_Web, 13_Mail, 14_Security, 15_Code, 16_Tooling) with finished work in 19_Archive. A project note is the specification for the project and the front door to it: it must be fully decided and research-backed before a buildlog opens. Use this when he starts a new project or has an idea for one, when a decision gets made that should be recorded, when work finishes or changes what is next, when he asks where something stands or what he decided, and after any substantial work session so the note reflects reality. Also use it when a project note has grown wrong — accumulating history, backlogs or how-to content that belongs in other folders. Trigger it even when he does not mention notes, projects folders, or the vault.
 ---
 
 # Project notes
 
-A project note answers "what is this, and where does it stand" for two readers:
-Mark in six months who has forgotten the details, and you at the start of a session
-who needs to come up to speed without reading a repo.
+**The project note is where the project is going. The buildlog is where it has been.**
+
+It is the specification, not a status page. It answers "what is this, what are we
+building, what has been decided and why" for two readers: Mark in six months who has
+forgotten the details, and you at the start of a session who needs to come up to speed
+without reading a repo.
 
 Everything about its shape serves one goal — stopping it from becoming the 28,000
 character `ROADMAP.md` it replaced. That file failed not because it was long but
 because it was six documents at once: status, backlog, a security plan, a phased
-rollout, and a blog outline.
+rollout, and a blog outline. Length is not the problem; a real project's note is long.
+
+## Fully decided before the buildlog opens
+
+Before any building starts, the note carries the research, every design question the
+build depends on, answered, and a scope bounded concretely enough to build from. A
+buildlog should not open on a project whose note still has open design questions.
+
+**Why this rule is stricter than the usual advice.** Fowler on evolutionary design, DORA
+on change approval and the academic work on infrastructure-as-code defects all say a
+heavyweight up-front spec is not what prevents defects. That research is about human
+teams. A human holding a half-formed design keeps it in their head, notices when a new
+decision contradicts an old one, and asks when something is ambiguous. You do not. With a
+vague scope you will assume, forget the assumption, and later contradict it with equal
+confidence — which is exactly what happened to the Ansible baseline role between 15 and 19
+September 2026, five reversals mid-build.
+
+So: research first, decisions recorded, then build. If a question surfaces mid-build that
+was missed, stop and settle it in the note rather than deciding it in passing.
 
 ## Where it goes
 
@@ -57,9 +78,19 @@ Nine sections: **What it is**, **Why** (including what done looks like), **Scope
 first three; delete the rest rather than leaving empty headings. A live project
 fills all nine and that's fine — there is no length cap.
 
-The **Out** half of Scope is the one people skip and the one that earns its place.
-It's where you record the thing he keeps being tempted by, so next time it comes up
-the note shows he already decided.
+The **In** half of Scope has to be concrete enough to build from. "The baseline every
+box shares" is not; a list of what the baseline actually does is. If you cannot write a
+task list from the In section, it is not finished.
+
+The **Out** half is the one people skip and the one that earns its place. It's where you
+record the thing he keeps being tempted by, so next time it comes up the note shows he
+already decided. Each item says where it belongs instead.
+
+**How it's built** carries the shape of the thing, not only the stack: how the pieces fit,
+what order things happen in, and anything about the environment the build depends on. When
+a fact was read off a real machine rather than assumed, say so and date it. Estates drift
+and notes go stale quietly — the Ansible project believed its droplets were AlmaLinux 10
+for four days because nobody had looked.
 
 ## Decisions are numbered, and superseded rather than deleted
 
@@ -78,15 +109,32 @@ superseded and add a new one.
 Record the honest reason, not the defensible one. "Because I want to know nginx"
 is more useful to future-Mark than a performance justification he doesn't believe.
 
+**Record what was rejected, and why.** A decision with no alternatives listed gets
+relitigated the first time somebody thinks of one. The rejected option and its cost are
+half the value of writing it down.
+
+**Back decisions with research or with the machine.** Where a decision came out of a
+research pass, the write-up goes in `70_Research/<topic>/` and the decision links to it.
+Where it came out of checking a real machine, paste the line the machine printed. A
+decision whose stated reason turns out to be false gets marked `[withdrawn]` with the
+correction, not quietly edited — that happened on 2026-09-18 when "Ansible cannot produce
+a yescrypt hash" turned out to be untested and wrong.
+
 ## Updating after work
 
 **Where it stands** gets *rewritten*, never appended to. The moment it becomes a
 running history it is a buildlog wearing the wrong hat, and that is exactly how the
 old roadmap grew. What happened belongs in `20_Buildlogs`.
 
-**Next** holds what he'd genuinely pick up if he sat down now. A list of thirty
-items is a list of zero. Anything further out is either an open question or a
-different project.
+**Next** is the build order, not a wish list: the sequence he would actually work
+through, grouped when it is long, with each item pointing at the decision it implements.
+Everything in it must be buildable from what is already decided above. If an item needs a
+decision nobody has made, it is not Next yet — it is an open question.
+
+**Open questions** should hold only what genuinely cannot be answered yet, each with what
+would answer it, and it should say plainly that nothing there blocks the build. If
+something there does block the build, the build should not have started. Keep answered
+ones struck through, pointing at the decision that settled them.
 
 ## What does not belong, and where it goes instead
 
