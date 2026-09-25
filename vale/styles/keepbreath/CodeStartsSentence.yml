@@ -1,0 +1,6 @@
+extends: existence
+message: "A sentence opens with a code identifier here. Put a word in front of it, such as 'Running', 'The ... file', or 'A'. (Ignore this inside a fenced code block.)"
+level: error
+scope: raw
+raw:
+  - '(?:\n\n|\A|[.!?]\s+)`[^`\n]+`'

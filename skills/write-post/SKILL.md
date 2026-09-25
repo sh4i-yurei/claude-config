@@ -140,10 +140,10 @@ run.
    review checklists. Ignore its SEO, byline, post-type and "we" sections; the note
    at the top of that skill says which is which.
 3. **Vale**, which runs on its own from the PostToolUse hook every time the post is
-   written or edited, and by hand with `vale 30_Posts/<slug>.md` from the vault
-   root. It is a program, not a judgement, and it only knows vocabulary and sentence
+   written or edited, and by hand from the vault root with
+   `vale --config ~/Documents/claude-config/vale/vale.ini 30_Posts/<slug>.md`. It is a program, not a judgement, and it only knows vocabulary and sentence
    shapes. Its findings are suggestions: fix the real ones, and if a rule keeps
-   firing on ordinary English for this genre, switch it off in `.vale.ini` with the
+   firing on ordinary English for this genre, switch it off in `vale/vale.ini` in claude-config with the
    reason written next to it rather than working around it in the prose.
 
 None of the three tools catch **false surprise**, so check for it by hand: a default,

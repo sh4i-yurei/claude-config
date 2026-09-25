@@ -10,6 +10,11 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
 - `hooks/`: the hook scripts. `~/.claude/settings.json` wires them to events by their
   `~/.claude/hooks/...` paths.
 - `rules/`: instructions loaded into every session, such as the writing style.
+- `vale/`: configuration for Vale, the prose linter. `vale.ini` covers posts and is run by
+  the `vale-post-lint.py` hook; `vale-sweep.ini` covers every prose note and is run by the
+  vault sweep. `styles/` holds the rules: `keepbreath`, my own, and `ai-tells`, a downloaded
+  pack. Both are tracked, so every machine gets the same rules. Vale itself is installed
+  separately.
 
 ## Setting up a machine
 

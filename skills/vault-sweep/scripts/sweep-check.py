@@ -47,7 +47,9 @@ VAULT = Path(os.environ.get("SECOND_BRAIN", Path.home() / "Documents/Second_Brai
 HEALTH = VAULT / ".github/scripts/check.py"
 GATE = Path.home() / ".claude/hooks/writing-style-gate.py"
 LEDGER = VAULT / ".sweep-ledger.json"
-VALE_INI = VAULT / ".vale-sweep.ini"
+# The Vale config lives in this repository: scripts/ -> vault-sweep/ -> skills/ -> the
+# repository root -> vale/. resolve() follows the ~/.claude/skills link to find it.
+VALE_INI = Path(__file__).resolve().parents[3] / "vale" / "vale-sweep.ini"
 
 # Prose notes the sweep owns. Everything else is either structure (READMEs, the
 # index, the dashboard), the templates themselves, Mark's own journal, archived

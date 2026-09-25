@@ -38,7 +38,7 @@ Use the existing skills rather than improvising:
 |---|---|
 | status, "Where it stands", archiving a project | `project-note`; moves go through `obsidian move` so links follow |
 | inbox triage | `vault-file` — file it, archive it to `09_Archive` with a "where this went" line, or delete it |
-| prose | `humanizer`, then `40_Reference/writing-and-teaching-directive.md`, then `vale --config ~/Documents/Second_Brain/.vale-sweep.ini <note>` |
+| prose | `humanizer`, then `40_Reference/writing-and-teaching-directive.md`, then `vale --config ~/Documents/claude-config/vale/vale-sweep.ini <note>` from the vault's root |
 | the record of the sweep itself | `buildlog`, into `20_Buildlogs/vault-system/vault-system-log.md` |
 
 **Manual commands that run as the wrong user.** `ssh web` and `ssh mail` land as

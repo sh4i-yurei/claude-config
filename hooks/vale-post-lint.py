@@ -23,6 +23,9 @@ VAULT = Path(
     os.environ.get("SECOND_BRAIN", Path.home() / "Documents/Second_Brain")
 ).resolve()
 POSTS = VAULT / "30_Posts"
+# The config lives in this repository, two levels up from this file: hooks/ -> the
+# repository root -> vale/. resolve() follows the ~/.claude/hooks link to find it.
+VALE_INI = Path(__file__).resolve().parent.parent / "vale" / "vale.ini"
 MAX_LINES = 40
 
 
@@ -47,7 +50,8 @@ def main() -> int:
     # Vale matches its [30_Posts/*.md] section against the path as given, so it has
     # to be relative to the vault or no rules apply and it reports nothing.
     result = subprocess.run(
-        [vale, "--output=line", "--no-exit", str(path.relative_to(VAULT))],
+        [vale, "--config", str(VALE_INI), "--output=line", "--no-exit",
+         str(path.relative_to(VAULT))],
         cwd=VAULT,
         capture_output=True,
         text=True,
@@ -69,7 +73,8 @@ def main() -> int:
         print("  " + rel)
     if len(lines) > MAX_LINES:
         print(
-            f"  ... and {len(lines) - MAX_LINES} more. Run `vale {path.relative_to(VAULT)}` for all of them."
+            f"  ... and {len(lines) - MAX_LINES} more. From the vault's root, run "
+            f"`vale --config {VALE_INI} {path.relative_to(VAULT)}` for all of them."
         )
     return 0
 

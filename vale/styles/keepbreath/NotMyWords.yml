@@ -1,0 +1,6 @@
+extends: existence
+message: "'%s' is a word Claude introduced in the notes, not one Mark uses. Say the concrete thing: the three boxes, the private network, the control plane."
+level: error
+ignorecase: true
+tokens:
+  - estate
