@@ -265,6 +265,17 @@ the question in one request.
 Every number is exact and matches the hook's constants. Prose and code MUST agree, so neither
 is changed without the other.
 
+**Every API request MUST be made through `scripts/gw.py`**, as
+`python3 ~/.claude/skills/research/scripts/gw.py OUTFILE -- <curl arguments>`. An API SHALL NOT be
+called with `curl` directly. The gateway is where the limits live as code rather than as prose.
+It waits out each provider's documented minimum and the per-site gap. It retries a 429 with
+exponential backoff and never immediately, which Semantic Scholar requires. An error response can never shorten the next gap, only a 2xx can, following Scrapy
+AutoThrottle's rule that errors return faster than real responses. It refuses a host
+after five consecutive errors, caps each host at 300 requests a day, and logs every attempt with
+keys redacted. When a provider's documented limit is learned, it MUST be added both to the
+gateway's `PROVIDERS` table, with its source, and to `known-apis.md` in the same change. The
+"requests made" figure the gateway prints counts against Budget, retries included.
+
 **The hook is a backstop, not the rule.** It inspects only `WebFetch` and Firecrawl's scrape
 tool. For those it enforces the per-site gap, one fetch in flight and the error cooldown. It also
 stops a site at 300 fetches, but through a defect it never resets that count by date, so a site
@@ -274,7 +285,9 @@ registered domain, which at present means `github.com`, `arxiv.org` and `dblp.or
 host is compared wrongly and never matches. It does not see searches, `curl` or any
 other shell command, other MCP tools, or pages already read, and whether its check for subagents
 works is unverified: it looks for payload keys no main-session call carries, and no subagent
-fetch has been recorded to show what a subagent's call carries. Every rule in this file MUST therefore be followed whether or not the hook
+fetch has been recorded to show what a subagent's call carries. It also sets the next gap from
+the last response's duration even when that response was a fast error, so it speeds up against
+a failing server. Every rule in this file MUST therefore be followed whether or not the hook
 would catch a breach of it. Where the hook allows something this file forbids, this file
 governs, and a call SHALL NOT be treated as permitted because the hook let it through.
 
@@ -343,6 +356,7 @@ the reason it is true has been resolved.**
 - About to record zero results or a 404 for an item not held as a failure
 - About to use a scraping service to search rather than to read one named page
 - About to assert exhaustion without quoting the evidence
+- About to call an API with `curl` directly rather than through `scripts/gw.py`
 - About to work around a denial instead of stepping down a rung
 
 ## Before answering

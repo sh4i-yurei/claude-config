@@ -113,6 +113,7 @@ precise question in one request instead of returning pages to read.
 | Metadata for anything with a DOI | `api.crossref.org` | No key, around 180 million works |
 | A free legal copy of a paywalled paper | `api.unpaywall.org/v2/<doi>?email=<you>` | No key, just an email in the query. Returns the best open-access location if one exists |
 | How many times a paper has been cited, openly | `opencitations.net/index/api/v1/citation-count/<doi>` | No key. An open citation graph, independent of the commercial ones |
+| Internet standards and drafts: status, abstract, working group | `datatracker.ietf.org/api/v1/doc/document/?format=json&<field>__<lookup>=` | No key. Read-only tastypie API; one document is `/api/v1/doc/document/<draft-name>/`. Documentation is `ietf/templates/api/index.html` in `ietf-tools/datatracker`, read through GitHub. No rate limit documented, so the skill's default pacing applies. Added 2026-09-25 |
 | Datasets and software, not just papers | `api.datacite.org/dois?query=` | No key. Where a dataset or a code release with a DOI lives |
 | **What a paper actually says**, not what its abstract claims | `api.core.ac.uk/v3/search/works/` | Key held: `bw get password 'CORE API key'`, `Authorization: Bearer`. Full body text in the `fullText` field. See the notes below |
 | Which author is which | `pub.orcid.org/v3.0/expanded-search/?q=` | No key, send `Accept: application/json`. Disambiguates people with the same name |
@@ -136,7 +137,15 @@ buy a fresh allowance** — a metadata lookup and a citations lookup draw on the
 second. So the shape of the request matters more than the rate:
 
 - **Batch instead of looping.** `POST /graph/v1/paper/batch` takes a list of identifiers and
-  returns them all in one response, mixing `arXiv:1611.01236` and `DOI:10.1145/...` freely.
+  returns them all in one response, mixing `arXiv:1611.01236` and `DOI:10.1145/...` freely. It also
+  accepts `citations`, `references` and `authors` as fields, so one batch request can chain from
+  many papers at once.
+- **Exponential backoff is required, not optional.** Their API release notes (`allenai/s2-folks`,
+  `API_RELEASE_NOTES.md`, from March 2024 onwards): "we now require the use of exponential backoff
+  strategies for API requests. When a request fails, particularly due to rate limiting, ...
+  systematically increasing the delay before retrying." A fixed retry delay does not comply. New
+  keys get 1 RPS on all endpoints. Abstracts of Springer papers are withheld by agreement, and
+  holding multiple keys is discouraged. Read 2026-09-25.
 - **Bulk instead of relevance search.** `/paper/search/bulk` returns far more per response
   than `/paper/search`.
 - **Ask for fewer fields.** More fields means a slower response.
@@ -152,6 +161,10 @@ both `POST /graph/v1/paper/batch` with 20 ids and more than a minute apart, retu
 present (44 characters, vault unlocked). Under the skill that is exhaustion. What caused it is
 unknown: the batch endpoint's documented limits need reading, and the key's state testing
 with a single `GET`, before anyone concludes either.
+
+**Key tested 2026-09-25, later the same day:** a single `GET /graph/v1/paper/{id}` with the same key
+returned `200` in 0.34s. The key works. Whatever produced the 429s was specific to the batch
+endpoint or to that moment, and the batch endpoint's own limits are still unread.
 
 **How to tell the three failures apart, measured 2026-09-24.** An invalid key returns `403`.
 No key at all returns `429`, because unauthenticated traffic shares one key with everybody and
