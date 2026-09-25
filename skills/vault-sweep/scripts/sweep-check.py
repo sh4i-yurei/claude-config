@@ -16,7 +16,7 @@ Six sections, highest priority first:
   ledger       notes that have not had their full writing-directive review, or
                changed since they had it
 
-The ledger lives in the vault at .claude/sweep-ledger.json and maps a note's path
+The ledger lives in the vault at .sweep-ledger.json and maps a note's path
 to the sha256 of its content when it was reviewed. `--mark PATH...` records a
 review; a note changed afterwards drops out of the ledger on its own because the
 hash no longer matches.
@@ -44,9 +44,9 @@ from collections import defaultdict
 from pathlib import Path
 
 VAULT = Path(os.environ.get("SECOND_BRAIN", Path.home() / "Documents/Second_Brain")).resolve()
-HEALTH = Path.home() / ".claude/skills/vault-health/scripts/check.py"
+HEALTH = VAULT / ".github/scripts/check.py"
 GATE = Path.home() / ".claude/hooks/writing-style-gate.py"
-LEDGER = VAULT / ".claude/sweep-ledger.json"
+LEDGER = VAULT / ".sweep-ledger.json"
 VALE_INI = VAULT / ".vale-sweep.ini"
 
 # Prose notes the sweep owns. Everything else is either structure (READMEs, the

@@ -41,7 +41,7 @@ scolding is a review he stops running.
 ## 2. Run the checks and resolve what they find
 
 ```bash
-python3 ~/.claude/skills/vault-health/scripts/check.py
+python3 ~/Documents/Second_Brain/.github/scripts/check.py
 ```
 
 Errors are broken conventions and get fixed. Warnings are usually drift, and drift

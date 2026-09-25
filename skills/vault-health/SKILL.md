@@ -12,7 +12,7 @@ consulting. This checks for that before it compounds.
 ## Run it
 
 ```bash
-python3 ~/.claude/skills/vault-health/scripts/check.py
+python3 ~/Documents/Second_Brain/.github/scripts/check.py
 ```
 
 One script, standard library only. The same file runs from the pre-commit hook and
