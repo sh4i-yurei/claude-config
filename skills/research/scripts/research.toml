@@ -1,0 +1,199 @@
+# B1 starting values. Phase 3 measures and tunes the survey and deep presets.
+[gateway]
+margin = 0.10
+default_gap_multiplier = 10
+default_gap_floor_s = 1
+default_gap_ceiling_s = 120
+daily_host_cap = 300
+error_streak = 5
+error_cooldown_s = 14400
+max_attempts = 3
+max_body_bytes = 5242880
+user_agent = "keepbreath.ing-research/1.0 (+https://keepbreath.ing)"
+
+[agent]
+command = "claude"
+working_directory = "vault"
+contact_email = "" # Optional S2: set when Unpaywall or crates.io is needed.
+disallowed_tools = ["WebFetch", "WebSearch", "Task"]
+gather_tools = ["Read", "Grep", "Glob", "Edit", "Write", "lookup.py"]
+check_tools = ["Read", "Grep", "Glob"]
+write_tools = ["Read", "Edit", "Write"]
+
+[presets.survey]
+rounds = 1
+calls = 15
+cost_usd = 4
+required_claims = 5
+sources_per_claim = 1
+source_floor = 3
+
+[presets.deep]
+rounds = 3
+calls = 45
+cost_usd = 15
+required_claims = 12
+sources_per_claim = 2
+source_floor = 12
+
+# Every direct API host in known-apis.md has an entry. "none documented"
+# means that the gateway uses its default pacing.
+[providers."crt.sh"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."api.osv.dev"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."services.nvd.nist.gov"]
+minimum_gap_s = 0.6
+gap_source = "known-apis.md: 50 requests per 30 seconds with key"
+key_item = "NVD API key"
+key_header = "apiKey"
+window_count = 50
+window_seconds = 30
+window_source = "known-apis.md: NVD keyed window"
+
+[providers."api.first.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."api.greynoise.io"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: 50 requests per day without key"
+window_count = 50
+window_seconds = 86400
+window_source = "known-apis.md: GreyNoise community limit"
+
+[providers."api.abuseipdb.com"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: 1,000 requests per day"
+key_item = "AbuseIPDB API key"
+key_header = "Key"
+window_count = 1000
+window_seconds = 86400
+window_source = "known-apis.md: AbuseIPDB free key"
+
+[providers."internetdb.shodan.io"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."rdap.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."api.github.com"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: 5,000 requests per hour with research token"
+key_item = "GitHub read-only token"
+key_header = "Authorization"
+key_format = "Bearer {key}"
+window_count = 5000
+window_seconds = 3600
+window_source = "known-apis.md: authenticated GitHub API"
+
+[providers."export.arxiv.org"]
+minimum_gap_s = 3
+gap_source = "known-apis.md: one request every three seconds"
+
+[providers."api.semanticscholar.org"]
+minimum_gap_s = 1.1
+gap_source = "gw.py: 1.1 seconds, exceeding known-apis.md's one request per second"
+key_item = "Semantic Scholar API key"
+key_header = "x-api-key"
+
+[providers."api.openalex.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no request gap documented; spend reported in headers"
+key_item = "OpenAlex API key"
+key_query = "api_key"
+
+[providers."api.crossref.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."api.unpaywall.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+contact_query = "email"
+
+[providers."opencitations.net"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."datatracker.ietf.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no rate limit documented"
+
+[providers."api.datacite.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."api.core.ac.uk"]
+minimum_gap_s = 6
+gap_source = "known-apis.md: CORE academic tier, 10 requests per minute"
+key_item = "CORE API key"
+key_header = "Authorization"
+key_format = "Bearer {key}"
+
+[providers."pub.orcid.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."huggingface.co"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."openrouter.ai"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."ollama.com"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."pypi.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."registry.npmjs.org"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."crates.io"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented; User-Agent requires contact email"
+contact_user_agent = true
+
+[providers."api.stackexchange.com"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."endoflife.date"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."data.jsdelivr.com"]
+minimum_gap_s = 0
+gap_source = "known-apis.md: no limit documented"
+
+[providers."api.firecrawl.dev"]
+minimum_gap_s = 0
+gap_source = "Research tooling note: no request gap documented"
+key_item = "Firecrawl API key"
+key_header = "Authorization"
+key_format = "Bearer {key}"
+window_calendar = "month"
+window_count = 0 # S1 sets the plan's credit figure before B7.
+window_source = "Research tooling note: monthly credit figure set at S1 before B7"
+
+[providers."api.brightdata.com"]
+minimum_gap_s = 0
+gap_source = "Research tooling note: no request gap documented"
+key_item = "Bright Data API key"
+key_header = "Authorization"
+key_format = "Bearer {key}"
+window_count = 5000
+window_calendar = "month"
+window_source = "Research tooling note: 5,000 per calendar month"
