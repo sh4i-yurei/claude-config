@@ -6,6 +6,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import socket
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -85,6 +86,20 @@ def redact_url(url: str) -> str:
         ]
     )
     return urlunsplit((parts.scheme, authority, parts.path, query, ""))
+
+
+def redact_header_value(value: str) -> str:
+    """Remove credentials from URLs and key-value fields in response headers."""
+    urls_redacted = re.sub(
+        r"https?://[^\s<>\"']+",
+        lambda match: redact_url(match.group(0)),
+        value,
+    )
+    return re.sub(
+        r"(?i)\b(api_key|apikey|key|token|access_token|client_secret|password|secret)=([^&;,\s]+)",
+        r"\1=REDACTED",
+        urls_redacted,
+    )
 
 
 def repository_name(cwd: Path | None = None) -> str:
@@ -192,7 +207,11 @@ def write_envelope(
 ) -> dict:
     """Save one JSON envelope; keep textual response bytes when valid UTF-8."""
     safe_headers = {
-        name: ("REDACTED" if name.lower() in SENSITIVE_HEADERS else value)
+        name: (
+            "REDACTED"
+            if name.lower() in SENSITIVE_HEADERS
+            else redact_header_value(value)
+        )
         for name, value in headers.items()
     }
     result = {

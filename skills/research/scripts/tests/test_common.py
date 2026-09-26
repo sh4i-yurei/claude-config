@@ -154,6 +154,32 @@ class CommonTests(unittest.TestCase):
         self.assertNotIn("hidden", path.read_text())
         self.assertNotIn("token=more", path.read_text())
 
+    def test_envelope_redacts_credentials_in_response_header_urls(self):
+        path = self.root / "response.json"
+        result = write_envelope(
+            path,
+            url="https://example.org",
+            method="GET",
+            requested_at="2026-09-26T00:00:00Z",
+            status=302,
+            duration_s=0.2,
+            attempts=1,
+            headers={
+                "Content-Type": "text/plain",
+                "Location": "https://user:pass@example.org/next?access_token=SECRET",
+                "Link": '<https://example.org/more?api_key=HIDDEN>; rel="next"',
+            },
+            body=b"",
+        )
+        self.assertEqual(
+            result["headers"]["Location"],
+            "https://example.org/next?access_token=REDACTED",
+        )
+        self.assertIn("api_key=REDACTED", result["headers"]["Link"])
+        self.assertNotIn("SECRET", path.read_text())
+        self.assertNotIn("HIDDEN", path.read_text())
+        self.assertNotIn("user:pass", path.read_text())
+
 
 if __name__ == "__main__":
     unittest.main()
