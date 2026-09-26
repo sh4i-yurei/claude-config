@@ -112,6 +112,7 @@ key_query = "api_key"
 [providers."api.crossref.org"]
 minimum_gap_s = 0
 gap_source = "known-apis.md: no limit documented"
+contact_user_agent = true
 
 [providers."api.unpaywall.org"]
 minimum_gap_s = 0

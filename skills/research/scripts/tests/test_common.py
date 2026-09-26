@@ -53,6 +53,7 @@ class CommonTests(unittest.TestCase):
         self.assertEqual(
             config["providers"]["services.nvd.nist.gov"]["window_count"], 50
         )
+        self.assertTrue(config["providers"]["api.crossref.org"]["contact_user_agent"])
 
     def test_chain_continues_across_month_and_detects_tamper(self):
         logs = self.root / "70_Research" / "_log"
@@ -107,7 +108,7 @@ class CommonTests(unittest.TestCase):
         self.assertEqual(result["body"], "café\n")
         self.assertEqual(json.loads(path.read_text()), result)
         self.assertNotIn("private@example.org", path.read_text())
-        self.assertNotIn("secret", path.read_text())
+        self.assertNotIn('"Set-Cookie": "secret"', path.read_text())
         binary = write_envelope(
             path,
             url="https://example.org",
@@ -133,6 +134,25 @@ class CommonTests(unittest.TestCase):
             body=b"a" * (5 * 1024 * 1024 + 1),
         )
         self.assertEqual(large["body_omitted"], "over 5 MB")
+
+    def test_envelope_redacts_url_credentials_and_keeps_declared_charset(self):
+        path = self.root / "response.json"
+        result = write_envelope(
+            path,
+            url="https://user:secret@example.org/?client_secret=hidden#token=more",
+            method="GET",
+            requested_at="2026-09-26T00:00:00Z",
+            status=200,
+            duration_s=0.2,
+            attempts=1,
+            headers={"Content-Type": "text/plain; charset=iso-8859-1"},
+            body=b"caf\xe9",
+        )
+        self.assertEqual(result["body"], "café")
+        self.assertEqual(result["url"], "https://example.org/?client_secret=REDACTED")
+        self.assertNotIn("user:secret", path.read_text())
+        self.assertNotIn("hidden", path.read_text())
+        self.assertNotIn("token=more", path.read_text())
 
 
 if __name__ == "__main__":

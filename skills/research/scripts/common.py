@@ -37,6 +37,9 @@ SENSITIVE_QUERY = {
     "access_token",
     "email",
     "mailto",
+    "password",
+    "client_secret",
+    "secret",
 }
 SENSITIVE_HEADERS = {
     "authorization",
@@ -74,13 +77,14 @@ def gateway_lock(path: Path = LOCK_PATH):
 
 def redact_url(url: str) -> str:
     parts = urlsplit(url)
+    authority = parts.netloc.rsplit("@", 1)[-1]
     query = urlencode(
         [
             (key, "REDACTED" if key.lower() in SENSITIVE_QUERY else value)
             for key, value in parse_qsl(parts.query, keep_blank_values=True)
         ]
     )
-    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+    return urlunsplit((parts.scheme, authority, parts.path, query, ""))
 
 
 def repository_name(cwd: Path | None = None) -> str:
@@ -201,19 +205,11 @@ def write_envelope(
         "headers": safe_headers,
         "sha256": hashlib.sha256(body).hexdigest(),
     }
-    media_type = (
-        next(
-            (
-                value
-                for name, value in headers.items()
-                if name.lower() == "content-type"
-            ),
-            "",
-        )
-        .split(";", 1)[0]
-        .lower()
-        .strip()
+    content_type = next(
+        (value for name, value in headers.items() if name.lower() == "content-type"),
+        "",
     )
+    media_type = content_type.split(";", 1)[0].lower().strip()
     is_text = (
         media_type.startswith("text/")
         or media_type
@@ -231,9 +227,20 @@ def write_envelope(
         result.update(body_omitted="non-text Content-Type", body_size=len(body))
     else:
         try:
-            result["body"] = body.decode("utf-8")
-        except UnicodeDecodeError:
-            result.update(body_omitted="body is not UTF-8 text", body_size=len(body))
+            charset = next(
+                (
+                    part.split("=", 1)[1].strip().strip('"')
+                    for part in content_type.split(";")[1:]
+                    if part.strip().lower().startswith("charset=")
+                ),
+                "utf-8",
+            )
+            result["body"] = body.decode(charset)
+        except (UnicodeDecodeError, LookupError):
+            result.update(
+                body_omitted="body cannot be decoded as declared text",
+                body_size=len(body),
+            )
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
