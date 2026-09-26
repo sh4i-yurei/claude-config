@@ -24,15 +24,20 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 sys.path.insert(0, str(Path(__file__).parent))
-from research_log_shared import registered_domain  # noqa: E402
+from research_log_shared import registered_domain
+
+sys.path.insert(
+    0, str(Path(__file__).resolve().parents[1] / "skills" / "research" / "scripts")
+)
+from common import append_log, repository_name
 
 STATE = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
 STATE_FILE = STATE / "research-state.json"
-LOG_FILE = STATE / "research-fetches.log"
 
 # Tools that fetch a named URL. Searches are recorded too, but they hit one search
 # provider rather than the sites in the results, so per-site pacing does not apply
@@ -41,6 +46,7 @@ FETCH_TOOLS = {"WebFetch"}
 FETCH_TOOL_SUFFIXES = ("firecrawl_scrape",)
 SEARCH_TOOL_SUFFIXES = ("firecrawl_search", "firecrawl_developer_search")
 SEARCH_TOOLS = {"WebSearch"}
+
 
 def classify(tool_name: str) -> str:
     if tool_name in FETCH_TOOLS or tool_name.endswith(FETCH_TOOL_SUFFIXES):
@@ -147,21 +153,28 @@ def main() -> int:
 
     save_state(state)
 
-    record = {
-        "ts": round(now, 3),
-        "kind": kind,
-        "tool": tool_name,
-        "domain": domain,
-        "url": url[:300],
-        "duration_ms": duration_ms,
-        "session": sid,
-        # Kept for one pass so the payload shape can be checked rather than assumed.
-        "payload_keys": sorted(payload.keys()),
-    }
     try:
-        with LOG_FILE.open("a") as fh:
-            fh.write(json.dumps(record) + "\n")
-    except OSError:
+        append_log(
+            {
+                "ts": datetime.fromtimestamp(now, timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z"),
+                "via": (
+                    "firecrawl-connector"
+                    if "firecrawl" in tool_name.lower()
+                    else "webfetch"
+                ),
+                "host": (urlparse(url).hostname or domain).lower(),
+                "url": url[:300],
+                "status": None,
+                "duration_s": duration_ms / 1000 if duration_ms is not None else None,
+                "attempt": 1,
+                "run": os.environ.get("RESEARCH_RUN"),
+                "repo": repository_name(),
+                "archive": None,
+            }
+        )
+    except (OSError, ValueError):
         pass
 
     return 0
