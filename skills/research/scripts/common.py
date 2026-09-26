@@ -17,7 +17,6 @@ import tomllib
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 LOCK_PATH = Path.home() / ".claude" / "research-gw.lock"
-MAX_BODY_BYTES = 5 * 1024 * 1024
 LOG_FIELDS = (
     "ts",
     "via",
@@ -82,7 +81,9 @@ def redact_url(url: str) -> str:
     query = urlencode(
         [
             (key, "REDACTED" if sensitive_parameter(key) else value)
-            for key, value in parse_qsl(parts.query, keep_blank_values=True)
+            for key, value in parse_qsl(
+                parts.query.replace(";", "&"), keep_blank_values=True
+            )
         ]
     )
     return urlunsplit((parts.scheme, authority, parts.path, query, ""))
@@ -229,6 +230,7 @@ def write_envelope(
     attempts: int,
     headers: dict[str, str],
     body: bytes,
+    max_body_bytes: int | None = None,
 ) -> dict:
     """Save one JSON envelope; keep textual response bytes when valid UTF-8."""
     safe_headers = {
@@ -265,8 +267,13 @@ def write_envelope(
         }
         or media_type.endswith(("+json", "+xml"))
     )
-    if len(body) > MAX_BODY_BYTES:
-        result.update(body_omitted="over 5 MB", body_size=len(body))
+    limit = (
+        max_body_bytes
+        if max_body_bytes is not None
+        else load_config()["gateway"]["max_body_bytes"]
+    )
+    if len(body) > limit:
+        result.update(body_omitted=f"over {limit} bytes", body_size=len(body))
     elif not is_text:
         result.update(body_omitted="non-text Content-Type", body_size=len(body))
     else:

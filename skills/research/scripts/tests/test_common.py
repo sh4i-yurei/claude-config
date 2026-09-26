@@ -133,7 +133,34 @@ class CommonTests(unittest.TestCase):
             headers={"Content-Type": "text/plain"},
             body=b"a" * (5 * 1024 * 1024 + 1),
         )
-        self.assertEqual(large["body_omitted"], "over 5 MB")
+        self.assertEqual(large["body_omitted"], "over 5242880 bytes")
+
+    def test_envelope_uses_configured_body_limit(self):
+        path = self.root / "response.json"
+        result = write_envelope(
+            path,
+            url="https://example.org",
+            method="GET",
+            requested_at="2026-09-26T00:00:00Z",
+            status=200,
+            duration_s=0.1,
+            attempts=1,
+            headers={"Content-Type": "text/plain"},
+            body=b"four",
+            max_body_bytes=3,
+        )
+        self.assertEqual(result["body_size"], 4)
+        self.assertEqual(result["body_omitted"], "over 3 bytes")
+
+    def test_semicolon_separated_key_is_redacted(self):
+        log = self.root / "testhost-2026-09.jsonl"
+        entry = append_log(
+            self.entry("https://example.org/?q=ok;api_key=SECRET"),
+            path=log,
+            lock_path=self.lock,
+        )
+        self.assertIn("q=ok&api_key=REDACTED", entry["url"])
+        self.assertNotIn("SECRET", log.read_text())
 
     def test_envelope_redacts_url_credentials_and_keeps_declared_charset(self):
         path = self.root / "response.json"
