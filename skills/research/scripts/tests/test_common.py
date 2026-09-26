@@ -50,8 +50,13 @@ class CommonTests(unittest.TestCase):
         config = load_config()
         self.assertEqual(config["gateway"]["margin"], 0.1)
         self.assertEqual(config["gateway"]["default_backoff_base_s"], 2)
+        self.assertIn("gw.py", config["gateway"]["default_backoff_source"])
         self.assertEqual(config["providers"]["export.arxiv.org"]["backoff_base_s"], 3)
+        self.assertIn(
+            "gw.py", config["providers"]["export.arxiv.org"]["backoff_source"]
+        )
         self.assertEqual(config["providers"]["api.core.ac.uk"]["backoff_base_s"], 6)
+        self.assertIn("gw.py", config["providers"]["api.core.ac.uk"]["backoff_source"])
         self.assertIn("contact_email", config["gateway"])
         self.assertNotIn("contact_email", config["agent"])
         self.assertEqual(config["presets"]["deep"]["rounds"], 3)
@@ -178,6 +183,18 @@ class CommonTests(unittest.TestCase):
             "https://example.org/?keywords=ansible%20roles&q=a;b&flag&api_key=REDACTED",
         )
         self.assertNotIn("SECRET", log.read_text())
+
+    def test_semicolon_query_after_secret_keeps_search_term(self):
+        log = self.root / "testhost-2026-09.jsonl"
+        entry = append_log(
+            self.entry("https://example.org/?api_key=PRIVATE;q=ansible"),
+            path=log,
+            lock_path=self.lock,
+        )
+        self.assertEqual(
+            entry["url"], "https://example.org/?api_key=REDACTED;q=ansible"
+        )
+        self.assertNotIn("PRIVATE", log.read_text())
 
     def test_quoted_header_credential_is_fully_redacted(self):
         path = self.root / "response.json"

@@ -79,17 +79,11 @@ def redact_url(url: str) -> str:
     parts = urlsplit(url)
     authority = parts.netloc.rsplit("@", 1)[-1]
     segments = re.split(r"([&;])", parts.query)
-    redact_tail = False
     for index in range(0, len(segments), 2):
         segment = segments[index]
         name, equals, _value = segment.partition("=")
-        if redact_tail:
-            segments[index] = "REDACTED" if segment else ""
-        elif equals and sensitive_parameter(unquote_plus(name)):
+        if equals and sensitive_parameter(unquote_plus(name)):
             segments[index] = f"{name}=REDACTED"
-            redact_tail = True
-        if index + 1 < len(segments) and segments[index + 1] == "&":
-            redact_tail = False
     query = "".join(segments)
     return urlunsplit((parts.scheme, authority, parts.path, query, ""))
 

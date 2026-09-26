@@ -10,6 +10,7 @@ error_cooldown_s = 14400
 max_attempts = 3
 max_body_bytes = 5242880
 default_backoff_base_s = 2
+default_backoff_source = "gw.py: default PROVIDERS fallback and provider values"
 user_agent = "keepbreath.ing-research/1.0 (+https://keepbreath.ing)"
 contact_email = "" # Optional S2: set when Unpaywall or crates.io is needed.
 
@@ -98,6 +99,7 @@ window_source = "known-apis.md: authenticated GitHub API"
 minimum_gap_s = 3
 gap_source = "known-apis.md: one request every three seconds"
 backoff_base_s = 3
+backoff_source = "gw.py: arXiv PROVIDERS entry"
 
 [providers."api.semanticscholar.org"]
 minimum_gap_s = 1.1
@@ -137,6 +139,7 @@ gap_source = "known-apis.md: no limit documented"
 minimum_gap_s = 6
 gap_source = "known-apis.md: CORE academic tier, 10 requests per minute"
 backoff_base_s = 6
+backoff_source = "gw.py: CORE PROVIDERS entry"
 key_item = "CORE API key"
 key_header = "Authorization"
 key_format = "Bearer {key}"
