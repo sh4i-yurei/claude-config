@@ -196,6 +196,34 @@ class CommonTests(unittest.TestCase):
         )
         self.assertNotIn("PRIVATE", log.read_text())
 
+    def test_semantic_scholar_paging_token_is_redacted_from_request_records(self):
+        url = (
+            "https://api.semanticscholar.org/graph/v1/paper/search/bulk"
+            "?query=research&token=PAGE_CURSOR"
+        )
+        expected_url = url.replace("PAGE_CURSOR", "REDACTED")
+        log = self.root / "testhost-2026-09.jsonl"
+        entry = append_log(self.entry(url), path=log, lock_path=self.lock)
+        self.assertEqual(entry["url"], expected_url)
+        self.assertNotIn("PAGE_CURSOR", log.read_text())
+
+        envelope = self.root / "response.json"
+        body = b'{"token":"NEXT_PAGE_CURSOR","data":[]}'
+        saved = write_envelope(
+            envelope,
+            url=url,
+            method="GET",
+            requested_at="2026-09-26T00:00:00Z",
+            status=200,
+            duration_s=0.1,
+            attempts=1,
+            headers={"Content-Type": "application/json"},
+            body=body,
+        )
+        self.assertEqual(saved["url"], expected_url)
+        self.assertEqual(saved["body"], body.decode())
+        self.assertEqual(json.loads(envelope.read_text())["url"], expected_url)
+
     def test_quoted_header_credential_is_fully_redacted(self):
         path = self.root / "response.json"
         result = write_envelope(
