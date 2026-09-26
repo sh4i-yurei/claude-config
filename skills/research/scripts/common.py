@@ -81,11 +81,28 @@ def redact_url(url: str) -> str:
     authority = parts.netloc.rsplit("@", 1)[-1]
     query = urlencode(
         [
-            (key, "REDACTED" if key.lower() in SENSITIVE_QUERY else value)
+            (key, "REDACTED" if sensitive_parameter(key) else value)
             for key, value in parse_qsl(parts.query, keep_blank_values=True)
         ]
     )
     return urlunsplit((parts.scheme, authority, parts.path, query, ""))
+
+
+def sensitive_parameter(name: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", name.lower())
+    return name.lower() in SENSITIVE_QUERY or any(
+        part in normalized
+        for part in (
+            "key",
+            "token",
+            "secret",
+            "password",
+            "signature",
+            "credential",
+            "authorization",
+            "session",
+        )
+    )
 
 
 def redact_header_value(value: str) -> str:
@@ -96,8 +113,12 @@ def redact_header_value(value: str) -> str:
         value,
     )
     return re.sub(
-        r"(?i)\b(api_key|apikey|key|token|access_token|client_secret|password|secret)=([^&;,\s]+)",
-        r"\1=REDACTED",
+        r"(?i)\b([a-z][a-z0-9_-]*)=([^&;,\s]+)",
+        lambda match: (
+            f"{match.group(1)}=REDACTED"
+            if sensitive_parameter(match.group(1))
+            else match.group(0)
+        ),
         urls_redacted,
     )
 
