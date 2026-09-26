@@ -90,17 +90,21 @@ def redact_url(url: str) -> str:
 
 def sensitive_parameter(name: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]", "", name.lower())
-    return name.lower() in SENSITIVE_QUERY or any(
-        part in normalized
-        for part in (
-            "key",
-            "token",
-            "secret",
-            "password",
-            "signature",
-            "credential",
-            "authorization",
-            "session",
+    return (
+        name.lower() in SENSITIVE_QUERY
+        or normalized == "sig"
+        or any(
+            part in normalized
+            for part in (
+                "key",
+                "token",
+                "secret",
+                "password",
+                "signature",
+                "credential",
+                "authorization",
+                "session",
+            )
         )
     )
 
@@ -230,7 +234,7 @@ def write_envelope(
     safe_headers = {
         name: (
             "REDACTED"
-            if name.lower() in SENSITIVE_HEADERS
+            if name.lower() in SENSITIVE_HEADERS or sensitive_parameter(name)
             else redact_header_value(value)
         )
         for name, value in headers.items()

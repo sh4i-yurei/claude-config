@@ -181,7 +181,7 @@ class CommonTests(unittest.TestCase):
         self.assertNotIn("user:pass", path.read_text())
 
     def test_signed_request_url_credentials_are_removed_from_log_and_envelope(self):
-        url = "https://example.org/object?part=7&X-Amz-Credential=PRIVATE&X-Amz-Signature=SIGNED"
+        url = "https://example.org/object?part=7&X-Amz-Credential=PRIVATE&X-Amz-Signature=SIGNED&sig=AZURE"
         log = self.root / "testhost-2026-09.jsonl"
         appended = append_log(self.entry(url), path=log, lock_path=self.lock)
         envelope = self.root / "response.json"
@@ -199,9 +199,33 @@ class CommonTests(unittest.TestCase):
         self.assertIn("part=7", saved["url"])
         self.assertIn("X-Amz-Credential=REDACTED", appended["url"])
         self.assertIn("X-Amz-Signature=REDACTED", saved["url"])
+        self.assertIn("sig=REDACTED", saved["url"])
         for path in (log, envelope):
             self.assertNotIn("PRIVATE", path.read_text())
             self.assertNotIn("SIGNED", path.read_text())
+            self.assertNotIn("AZURE", path.read_text())
+
+    def test_token_bearing_response_header_is_redacted(self):
+        path = self.root / "response.json"
+        result = write_envelope(
+            path,
+            url="https://example.org",
+            method="GET",
+            requested_at="2026-09-26T00:00:00Z",
+            status=200,
+            duration_s=0.1,
+            attempts=1,
+            headers={
+                "Content-Type": "text/plain",
+                "X-Auth-Token": "PRIVATE",
+                "X-Access-Token": "SECRET",
+            },
+            body=b"ok",
+        )
+        self.assertEqual(result["headers"]["X-Auth-Token"], "REDACTED")
+        self.assertEqual(result["headers"]["X-Access-Token"], "REDACTED")
+        self.assertNotIn("PRIVATE", path.read_text())
+        self.assertNotIn("SECRET", path.read_text())
 
 
 if __name__ == "__main__":
