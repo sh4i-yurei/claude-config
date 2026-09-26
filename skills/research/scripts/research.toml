@@ -110,6 +110,8 @@ key_header = "x-api-key"
 [providers."api.openalex.org"]
 minimum_gap_s = 0
 gap_source = "known-apis.md: no request gap documented; spend reported in headers"
+daily_budget_usd = 1.0
+budget_source = "known-apis.md: 1,000 searches at $0.001 within the free daily dollar"
 key_item = "OpenAlex API key"
 key_query = "api_key"
 

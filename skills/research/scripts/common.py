@@ -236,6 +236,8 @@ def write_envelope(
     headers: dict[str, str],
     body: bytes,
     max_body_bytes: int | None = None,
+    body_omitted: str | None = None,
+    body_size: int | None = None,
 ) -> dict:
     """Save one JSON envelope; keep textual response bytes when valid UTF-8."""
     safe_headers = {
@@ -277,7 +279,12 @@ def write_envelope(
         if max_body_bytes is not None
         else load_config()["gateway"]["max_body_bytes"]
     )
-    if len(body) > limit:
+    if body_omitted is not None:
+        result.update(
+            body_omitted=body_omitted,
+            body_size=len(body) if body_size is None else body_size,
+        )
+    elif len(body) > limit:
         result.update(body_omitted=f"over {limit} bytes", body_size=len(body))
     elif not is_text:
         result.update(body_omitted="non-text Content-Type", body_size=len(body))

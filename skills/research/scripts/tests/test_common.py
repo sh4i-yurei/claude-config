@@ -57,6 +57,12 @@ class CommonTests(unittest.TestCase):
         )
         self.assertEqual(config["providers"]["api.core.ac.uk"]["backoff_base_s"], 6)
         self.assertIn("gw.py", config["providers"]["api.core.ac.uk"]["backoff_source"])
+        self.assertEqual(
+            config["providers"]["api.openalex.org"]["daily_budget_usd"], 1.0
+        )
+        self.assertIn(
+            "known-apis.md", config["providers"]["api.openalex.org"]["budget_source"]
+        )
         self.assertIn("contact_email", config["gateway"])
         self.assertNotIn("contact_email", config["agent"])
         self.assertEqual(config["presets"]["deep"]["rounds"], 3)
