@@ -11,7 +11,7 @@ import socket
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import unquote_plus, urlsplit, urlunsplit
 
 import tomllib
 
@@ -78,14 +78,19 @@ def gateway_lock(path: Path = LOCK_PATH):
 def redact_url(url: str) -> str:
     parts = urlsplit(url)
     authority = parts.netloc.rsplit("@", 1)[-1]
-    query = urlencode(
-        [
-            (key, "REDACTED" if sensitive_parameter(key) else value)
-            for key, value in parse_qsl(
-                parts.query.replace(";", "&"), keep_blank_values=True
-            )
-        ]
-    )
+    segments = re.split(r"([&;])", parts.query)
+    redact_tail = False
+    for index in range(0, len(segments), 2):
+        segment = segments[index]
+        name, equals, _value = segment.partition("=")
+        if redact_tail:
+            segments[index] = "REDACTED" if segment else ""
+        elif equals and sensitive_parameter(unquote_plus(name)):
+            segments[index] = f"{name}=REDACTED"
+            redact_tail = True
+        if index + 1 < len(segments) and segments[index + 1] == "&":
+            redact_tail = False
+    query = "".join(segments)
     return urlunsplit((parts.scheme, authority, parts.path, query, ""))
 
 
@@ -93,18 +98,24 @@ def sensitive_parameter(name: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]", "", name.lower())
     return (
         name.lower() in SENSITIVE_QUERY
-        or normalized == "sig"
-        or any(
-            part in normalized
-            for part in (
-                "key",
+        or normalized
+        in {
+            "sig",
+            "signature",
+            "credential",
+            "authorization",
+            "awsaccesskeyid",
+            "session",
+        }
+        or normalized.endswith(
+            (
+                "signature",
+                "credential",
                 "token",
                 "secret",
                 "password",
-                "signature",
-                "credential",
-                "authorization",
-                "session",
+                "apikey",
+                "accesskeyid",
             )
         )
     )
@@ -118,7 +129,7 @@ def redact_header_value(value: str) -> str:
         value,
     )
     return re.sub(
-        r"(?i)\b([a-z][a-z0-9_-]*)=([^&;,\s]+)",
+        r"(?i)\b([a-z][a-z0-9_-]*)=(?:\"[^\"]*\"|'[^']*'|[^&;,\s]+)",
         lambda match: (
             f"{match.group(1)}=REDACTED"
             if sensitive_parameter(match.group(1))

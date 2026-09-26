@@ -9,12 +9,13 @@ error_streak = 5
 error_cooldown_s = 14400
 max_attempts = 3
 max_body_bytes = 5242880
+default_backoff_base_s = 2
 user_agent = "keepbreath.ing-research/1.0 (+https://keepbreath.ing)"
+contact_email = "" # Optional S2: set when Unpaywall or crates.io is needed.
 
 [agent]
 command = "claude"
 working_directory = "vault"
-contact_email = "" # Optional S2: set when Unpaywall or crates.io is needed.
 disallowed_tools = ["WebFetch", "WebSearch", "Task"]
 gather_tools = ["Read", "Grep", "Glob", "Edit", "Write", "lookup.py"]
 check_tools = ["Read", "Grep", "Glob"]
@@ -96,6 +97,7 @@ window_source = "known-apis.md: authenticated GitHub API"
 [providers."export.arxiv.org"]
 minimum_gap_s = 3
 gap_source = "known-apis.md: one request every three seconds"
+backoff_base_s = 3
 
 [providers."api.semanticscholar.org"]
 minimum_gap_s = 1.1
@@ -134,6 +136,7 @@ gap_source = "known-apis.md: no limit documented"
 [providers."api.core.ac.uk"]
 minimum_gap_s = 6
 gap_source = "known-apis.md: CORE academic tier, 10 requests per minute"
+backoff_base_s = 6
 key_item = "CORE API key"
 key_header = "Authorization"
 key_format = "Bearer {key}"

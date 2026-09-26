@@ -49,6 +49,11 @@ class CommonTests(unittest.TestCase):
     def test_config_has_presets_and_documented_provider_settings(self):
         config = load_config()
         self.assertEqual(config["gateway"]["margin"], 0.1)
+        self.assertEqual(config["gateway"]["default_backoff_base_s"], 2)
+        self.assertEqual(config["providers"]["export.arxiv.org"]["backoff_base_s"], 3)
+        self.assertEqual(config["providers"]["api.core.ac.uk"]["backoff_base_s"], 6)
+        self.assertIn("contact_email", config["gateway"])
+        self.assertNotIn("contact_email", config["agent"])
         self.assertEqual(config["presets"]["deep"]["rounds"], 3)
         self.assertEqual(
             config["providers"]["services.nvd.nist.gov"]["window_count"], 50
@@ -84,9 +89,11 @@ class CommonTests(unittest.TestCase):
             self.assertTrue(started.wait(2))
             time.sleep(0.1)
             self.assertTrue(queue.empty())
+            release_started = time.monotonic()
         child.join(timeout=2)
         self.assertEqual(child.exitcode, 0)
         self.assertFalse(queue.empty())
+        self.assertGreaterEqual(queue.get(), release_started)
 
     def test_envelope_preserves_text_and_omits_binary_and_oversize(self):
         path = self.root / "response.json"
@@ -159,8 +166,37 @@ class CommonTests(unittest.TestCase):
             path=log,
             lock_path=self.lock,
         )
-        self.assertIn("q=ok&api_key=REDACTED", entry["url"])
+        self.assertIn("q=ok;api_key=REDACTED", entry["url"])
         self.assertNotIn("SECRET", log.read_text())
+
+    def test_url_redaction_keeps_nonsecret_query_bytes(self):
+        log = self.root / "testhost-2026-09.jsonl"
+        url = "https://example.org/?keywords=ansible%20roles&q=a;b&flag&api_key=SECRET"
+        entry = append_log(self.entry(url), path=log, lock_path=self.lock)
+        self.assertEqual(
+            entry["url"],
+            "https://example.org/?keywords=ansible%20roles&q=a;b&flag&api_key=REDACTED",
+        )
+        self.assertNotIn("SECRET", log.read_text())
+
+    def test_quoted_header_credential_is_fully_redacted(self):
+        path = self.root / "response.json"
+        result = write_envelope(
+            path,
+            url="https://example.org",
+            method="GET",
+            requested_at="2026-09-26T00:00:00Z",
+            status=200,
+            duration_s=0.1,
+            attempts=1,
+            headers={
+                "Content-Type": "text/plain",
+                "Link": 'token="abc def"; rel="next"',
+            },
+            body=b"ok",
+        )
+        self.assertEqual(result["headers"]["Link"], 'token=REDACTED; rel="next"')
+        self.assertNotIn("abc def", path.read_text())
 
     def test_envelope_redacts_url_credentials_and_keeps_declared_charset(self):
         path = self.root / "response.json"
