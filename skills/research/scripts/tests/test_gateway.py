@@ -6,6 +6,7 @@ import io
 import json
 import os
 import socket
+import subprocess
 import sys
 import tempfile
 import time
@@ -48,7 +49,84 @@ class GatewayTests(unittest.TestCase):
         self.remaining = 4000
         self.rate_headers = True
         self.usd_remaining = None
+        self.retry_after = None
         self.expect_key = True
+
+    def test_credential_resolves_exact_item_name_before_password(self):
+        self.patches[3].stop()
+        self.addCleanup(self.patches[3].start)
+        listed = subprocess.CompletedProcess(
+            [],
+            0,
+            stdout=json.dumps(
+                [
+                    {"id": "exact-id", "name": "Firecrawl API key"},
+                    {"id": "notes-match", "name": "Bright Data API key"},
+                ]
+            ),
+            stderr="",
+        )
+        password = subprocess.CompletedProcess(
+            [], 0, stdout="TEST_ONLY_FIRECRAWL_SECRET\n", stderr=""
+        )
+        with (
+            patch.object(gw, "session_token", return_value="session"),
+            patch.object(gw.subprocess, "run", side_effect=[listed, password]) as run,
+        ):
+            value = gw.credential("Firecrawl API key")
+        self.assertEqual(value, "TEST_ONLY_FIRECRAWL_SECRET")
+        self.assertEqual(
+            run.call_args_list[0].args[0],
+            ["bw", "list", "items", "--search", "Firecrawl API key"],
+        )
+        self.assertEqual(
+            run.call_args_list[1].args[0], ["bw", "get", "password", "exact-id"]
+        )
+
+    def test_context7_uses_exact_key_name_and_bearer_header(self):
+        self.expect_key = False
+        with patch.object(
+            gw,
+            "credential",
+            side_effect=lambda item: (
+                self.assertEqual(item, "Context7 API key")
+                or "TEST_ONLY_CONTEXT7_SECRET"
+            ),
+        ):
+            self.assertEqual(
+                self.run_gateway("https://context7.com/api/v3/search?query=test"), 0
+            )
+        _command, curl_input = self.calls[0]
+        self.assertIn("Authorization: Bearer TEST_ONLY_CONTEXT7_SECRET", curl_input)
+        self.assertNotIn("TEST_ONLY_CONTEXT7_SECRET", self.out.read_text())
+
+    def test_firecrawl_uses_reported_credit_cost(self):
+        self.assertEqual(gw.request_cost("api.firecrawl.dev", b'{"creditsUsed":2}'), 2)
+        self.assertEqual(
+            gw.request_cost(
+                "api.firecrawl.dev", b'{"data":{"metadata":{"creditsUsed":3}}}'
+            ),
+            3,
+        )
+        self.assertEqual(gw.request_cost("api.firecrawl.dev", b"not json"), 1)
+        self.assertEqual(gw.request_cost("api.github.com", b'{"creditsUsed":9}'), 1)
+
+    def test_firecrawl_cycle_and_authoritative_seed_match_account(self):
+        at = datetime(2026, 9, 26, 12, tzinfo=timezone.utc).timestamp()
+        provider = gw.load_config()["providers"]["api.firecrawl.dev"]
+        entry = {"window_used": 70, "window_end": at + 100}
+        gw.seed_window(entry, provider, at)
+        self.assertEqual(entry["window_used"], 211)
+        self.assertEqual(
+            datetime.fromtimestamp(entry["window_end"], timezone.utc),
+            datetime(2026, 10, 19, tzinfo=timezone.utc),
+        )
+        gw.seed_window(entry, provider, at)
+        self.assertEqual(entry["window_used"], 211)
+        self.assertEqual(
+            datetime.fromtimestamp(gw.window_end(at, provider), timezone.utc),
+            datetime(2026, 10, 19, tzinfo=timezone.utc),
+        )
 
     def fake_curl(self, command, *, input, capture_output, text, check):
         self.assertTrue(capture_output)
@@ -71,6 +149,8 @@ class GatewayTests(unittest.TestCase):
             )
         if self.usd_remaining is not None:
             headers += f"X-RateLimit-Remaining-USD: {self.usd_remaining}\r\n"
+        if self.retry_after is not None:
+            headers += f"Retry-After: {self.retry_after}\r\n"
         Path(command[command.index("--dump-header") + 1]).write_bytes(
             (headers + "\r\n").encode()
         )
@@ -99,7 +179,10 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(len(self.calls), 1)
         command, curl_input = self.calls[0]
+        self.assertEqual(command[0], "/usr/bin/curl")
         self.assertEqual(command[1], "-q")
+        self.assertEqual(command[command.index("--connect-timeout") + 1], "10")
+        self.assertEqual(command[command.index("--max-time") + 1], "120")
         self.assertIn("--globoff", command)
         self.assertIn("Authorization: Bearer TEST_ONLY_SECRET", curl_input)
         self.assertIn("keepbreath.ing-research/1.0", curl_input)
@@ -127,6 +210,24 @@ class GatewayTests(unittest.TestCase):
             [record["status"] for record in self.log_records()], [429, 200]
         )
         self.assertEqual(json.loads(self.out.read_text())["attempts"], 2)
+
+    def test_retry_after_extends_exponential_backoff(self):
+        self.statuses = [429, 200]
+        self.retry_after = "9"
+        with patch.object(gw.time, "sleep") as sleep:
+            self.assertEqual(
+                self.run_gateway("https://context7.com/api/v3/search?query=test"), 0
+            )
+        sleep.assert_called_once_with(9.0)
+
+    def test_retry_after_over_ceiling_refuses_without_sleep(self):
+        self.statuses = [429]
+        self.retry_after = "86400"
+        with patch.object(gw.time, "sleep") as sleep:
+            self.assertEqual(
+                self.run_gateway("https://context7.com/api/v3/search?query=test"), 4
+            )
+        sleep.assert_not_called()
 
     def test_retry_stops_when_reported_margin_is_reached(self):
         self.statuses = [429, 200]
@@ -305,15 +406,68 @@ class GatewayTests(unittest.TestCase):
         self.assertNotIn("#fragment", curl_input)
 
     def test_usage_includes_configured_provider_with_zero_calls(self):
+        class FixedDateTime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 9, 26, 18, 0, tzinfo=timezone.utc)
+
+            def astimezone(self, tz=None):
+                return super().astimezone(timezone.utc)
+
+        log = self.vault / "70_Research" / "_log" / "test.jsonl"
+        log.parent.mkdir(parents=True)
+        log.write_text(
+            "\n".join(
+                json.dumps(
+                    {
+                        "via": "gw",
+                        "host": "api.github.com",
+                        "ts": stamp,
+                    }
+                )
+                for stamp in (
+                    "2026-09-26T12:00:00Z",
+                    "2026-09-03T12:00:00Z",
+                    "2026-08-31T12:00:00Z",
+                )
+            )
+            + "\n"
+        )
+        self.state.write_text(
+            json.dumps(
+                {
+                    "api.github.com": {"remaining": 4000.0},
+                    "api.firecrawl.dev": {
+                        "window_used": 37,
+                        "window_end": 4_000_000_000,
+                    },
+                }
+            )
+        )
+        before_state = self.state.read_bytes()
+        before_log = log.read_bytes()
         output = io.StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(gw.usage(), 0)
-        self.assertIn("api.github.com: today=0 month=0", output.getvalue())
-        self.assertEqual(self.run_gateway("https://api.github.com/rate_limit"), 0)
-        output = io.StringIO()
-        with redirect_stdout(output):
-            self.assertEqual(gw.usage(), 0)
-        self.assertIn("api.github.com: today=1 month=1", output.getvalue())
+        with (
+            patch.object(gw, "datetime", FixedDateTime),
+            patch.object(gw, "request", side_effect=AssertionError("request made")),
+            patch.object(
+                gw.subprocess, "run", side_effect=AssertionError("subprocess started")
+            ),
+            patch.object(gw, "save_state", side_effect=AssertionError("state written")),
+            patch.object(gw, "append_log", side_effect=AssertionError("log written")),
+            redirect_stdout(output),
+        ):
+            self.assertEqual(gw.main(["--usage"]), 0)
+        self.assertIn("api.github.com: today=1 month=2", output.getvalue())
+        self.assertIn("remaining=4000.0 margin=10%", output.getvalue())
+        self.assertIn(
+            "api.firecrawl.dev: today=0 month=0 remaining=unknown margin=10% "
+            "local_used=211/1000 local_remaining=789 local_margin=100",
+            output.getvalue(),
+        )
+        self.assertIn("crt.sh: today=0 month=0", output.getvalue())
+        self.assertEqual(self.state.read_bytes(), before_state)
+        self.assertEqual(log.read_bytes(), before_log)
 
     def test_reported_and_local_margins_refuse_before_request(self):
         self.state.write_text(
@@ -355,6 +509,7 @@ class GatewayTests(unittest.TestCase):
             )
         )
         self.assertEqual(self.run_gateway("https://api.brightdata.com/request"), 0)
+        self.out = self.out.with_name("reply-2.json")
         self.assertEqual(self.run_gateway("https://api.brightdata.com/request"), 4)
         self.assertEqual(len(self.calls), 1)
 
@@ -378,6 +533,7 @@ class GatewayTests(unittest.TestCase):
         self.rate_headers = False
         self.usd_remaining = 0.05
         self.assertEqual(self.run_gateway("https://api.openalex.org/works"), 0)
+        self.out = self.out.with_name("reply-2.json")
         self.assertEqual(self.run_gateway("https://api.openalex.org/works"), 4)
         self.assertEqual(len(self.calls), 1)
         entry = json.loads(self.state.read_text())["api.openalex.org"]
@@ -500,8 +656,12 @@ class GatewayTests(unittest.TestCase):
         for address in (
             "127.0.0.1",
             "10.0.0.1",
+            "172.16.0.1",
+            "192.168.0.1",
             "100.100.100.100",
             "169.254.1.1",
+            "::1",
+            "fe80::1",
             "fd7a:115c:a1e0::1",
         ):
             with (
@@ -514,6 +674,65 @@ class GatewayTests(unittest.TestCase):
                 self.assertRaisesRegex(ValueError, "private or non-public"),
             ):
                 PUBLIC_ADDRESS("example.org")
+
+    def test_public_address_prefers_ipv4_when_both_families_are_public(self):
+        with patch.object(
+            gw.socket,
+            "getaddrinfo",
+            return_value=[
+                (0, 0, 0, "", ("2606:4700:4700::1111", 443)),
+                (0, 0, 0, "", ("91.199.212.73", 443)),
+            ],
+        ):
+            self.assertEqual(PUBLIC_ADDRESS("crt.sh"), "91.199.212.73")
+
+    def test_public_address_rejects_multicast_even_with_public_unicast(self):
+        with (
+            patch.object(
+                gw.socket,
+                "getaddrinfo",
+                return_value=[
+                    (0, 0, 0, "", ("224.0.0.1", 443)),
+                    (0, 0, 0, "", ("2606:4700:4700::1111", 443)),
+                ],
+            ),
+            self.assertRaisesRegex(ValueError, "private or non-public"),
+        ):
+            PUBLIC_ADDRESS("example.org")
+
+    def test_gateway_refuses_to_overwrite_a_note_or_existing_envelope(self):
+        note = self.vault / "10_Projects" / "note.md"
+        note.parent.mkdir(parents=True)
+        note.write_text("keep me")
+        self.assertEqual(
+            gw.main([str(note), "--", "https://api.github.com/rate_limit"]), 2
+        )
+        self.assertEqual(note.read_text(), "keep me")
+
+        existing = self.vault / "70_Research" / "_lookups" / "existing.json"
+        existing.parent.mkdir(parents=True)
+        existing.write_text("keep this too")
+        self.assertEqual(
+            gw.main([str(existing), "--", "https://api.github.com/rate_limit"]), 2
+        )
+        self.assertEqual(existing.read_text(), "keep this too")
+        self.assertFalse(self.calls)
+
+    def test_research_curl_environment_cannot_replace_curl(self):
+        with patch.dict(os.environ, {"RESEARCH_CURL": "/tmp/capture-keys"}):
+            self.assertEqual(self.run_gateway("https://api.github.com/rate_limit"), 0)
+        self.assertEqual(self.calls[0][0][0], "/usr/bin/curl")
+
+    def test_caller_cannot_override_gateway_timeouts(self):
+        for option in ("--max-time", "--connect-timeout"):
+            with self.subTest(option=option):
+                self.assertEqual(
+                    self.run_gateway(
+                        option, "999", "https://api.github.com/rate_limit"
+                    ),
+                    2,
+                )
+        self.assertFalse(self.calls)
 
     def test_dns_failure_is_request_error(self):
         with patch.object(

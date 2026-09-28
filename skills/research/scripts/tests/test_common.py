@@ -66,6 +66,7 @@ class CommonTests(unittest.TestCase):
         self.assertIn("contact_email", config["gateway"])
         self.assertNotIn("contact_email", config["agent"])
         self.assertEqual(config["presets"]["deep"]["rounds"], 3)
+        self.assertEqual(config["lookup"]["max_output_chars"], 8000)
         self.assertEqual(
             config["providers"]["services.nvd.nist.gov"]["window_count"], 50
         )

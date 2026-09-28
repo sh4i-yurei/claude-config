@@ -34,7 +34,10 @@ from research_log_shared import registered_domain
 sys.path.insert(
     0, str(Path(__file__).resolve().parents[1] / "skills" / "research" / "scripts")
 )
-from common import append_log, repository_name
+from common import append_log, gateway_lock, load_config, repository_name
+from gw import LOCK as GATEWAY_LOCK
+from gw import STATE as GATEWAY_STATE
+from gw import seed_window, window_end
 
 STATE = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude"))
 STATE_FILE = STATE / "research-state.json"
@@ -96,6 +99,56 @@ def looks_like_error(response) -> bool:
     return False
 
 
+def response_credits(response) -> int:
+    """Read a connector-reported credit cost, conservatively defaulting to one."""
+
+    def find(value):
+        if isinstance(value, dict):
+            credits = value.get("creditsUsed")
+            if isinstance(credits, int) and credits > 0:
+                return credits
+            for child in value.values():
+                found = find(child)
+                if found is not None:
+                    return found
+        elif isinstance(value, list):
+            for child in value:
+                found = find(child)
+                if found is not None:
+                    return found
+        elif isinstance(value, str):
+            try:
+                return find(json.loads(value))
+            except (json.JSONDecodeError, RecursionError):
+                return None
+        return None
+
+    return find(response) or 1
+
+
+def record_firecrawl_credit(response, now: float) -> None:
+    """Add connector use to the gateway's shared Firecrawl quota counter."""
+    config = load_config()
+    provider = config["providers"]["api.firecrawl.dev"]
+    with gateway_lock(GATEWAY_LOCK):
+        try:
+            state = json.loads(GATEWAY_STATE.read_text())
+        except (OSError, ValueError):
+            state = {}
+        entry = state.setdefault("api.firecrawl.dev", {})
+        seed_window(entry, provider, now)
+        if entry.get("window_end", 0) <= now:
+            entry["window_end"] = window_end(now, provider)
+            entry["window_used"] = 0
+        entry["window_used"] = int(entry.get("window_used", 0)) + response_credits(
+            response
+        )
+        GATEWAY_STATE.parent.mkdir(parents=True, exist_ok=True)
+        temporary = GATEWAY_STATE.with_suffix(".tmp")
+        temporary.write_text(json.dumps(state, separators=(",", ":")))
+        temporary.replace(GATEWAY_STATE)
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -152,6 +205,12 @@ def main() -> int:
     session["fetches" if kind == "fetch" else "searches"] += 1
 
     save_state(state)
+
+    if "firecrawl" in tool_name.lower():
+        try:
+            record_firecrawl_credit(payload.get("tool_response"), now)
+        except (OSError, ValueError, KeyError):
+            pass
 
     try:
         append_log(

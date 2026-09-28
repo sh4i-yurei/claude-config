@@ -1,4 +1,4 @@
-# B1 starting values. Phase 3 measures and tunes the survey and deep presets.
+# Presets tuned in B18 on 2026-09-28 from the test-drive runs recorded in research-tooling-log.md.
 [gateway]
 margin = 0.10
 default_gap_multiplier = 10
@@ -9,6 +9,9 @@ error_streak = 5
 error_cooldown_s = 14400
 max_attempts = 3
 max_body_bytes = 5242880
+connect_timeout_s = 10
+max_time_s = 120
+timeout_source = "Research tooling Phase 1 review round 2: bound the machine-wide gateway lock; these are transport safety ceilings, not provider limits"
 default_backoff_base_s = 2
 default_backoff_source = "gw.py: default PROVIDERS fallback and provider values"
 user_agent = "keepbreath.ing-research/1.0 (+https://keepbreath.ing)"
@@ -16,14 +19,16 @@ contact_email = "" # Optional S2: set when Unpaywall or crates.io is needed.
 
 [agent]
 command = "claude"
-working_directory = "vault"
 disallowed_tools = ["WebFetch", "WebSearch", "Task"]
 gather_tools = ["Read", "Grep", "Glob", "Edit", "Write", "lookup.py"]
-check_tools = ["Read", "Grep", "Glob"]
+check_tools = ["Read"]
 write_tools = ["Read", "Edit", "Write"]
 
+[lookup]
+max_output_chars = 8000
+
 [presets.survey]
-rounds = 1
+rounds = 2
 calls = 15
 cost_usd = 4
 required_claims = 5
@@ -33,7 +38,7 @@ source_floor = 3
 [presets.deep]
 rounds = 3
 calls = 45
-cost_usd = 15
+cost_usd = 8
 required_claims = 12
 sources_per_claim = 2
 source_floor = 12
@@ -188,14 +193,16 @@ minimum_gap_s = 0
 gap_source = "known-apis.md: no limit documented"
 
 [providers."api.firecrawl.dev"]
-minimum_gap_s = 0
-gap_source = "Research tooling note: no request gap documented"
+minimum_gap_s = 6
+gap_source = "firecrawl-docs rate-limits.mdx, read 2026-09-26: free plan, 10 requests per minute on /scrape, /map and /search"
 key_item = "Firecrawl API key"
 key_header = "Authorization"
 key_format = "Bearer {key}"
-window_calendar = "month"
-window_count = 0 # S1 sets the plan's credit figure before B7.
-window_source = "Research tooling note: monthly credit figure set at S1 before B7"
+window_cycle_day = 19
+window_count = 1000
+window_initial_used = 211
+window_initial_end = "2026-10-19T00:00:00Z"
+window_source = "firecrawl-docs billing.mdx and GET /v2/team/credit-usage, 2026-09-26: free plan, 1,000 credits a month; cycle starts on the 19th; 141 used at 21:10:04Z plus 70 credits in archived gateway responses through 2026-09-27T03:57:50Z"
 
 [providers."api.brightdata.com"]
 minimum_gap_s = 0
@@ -206,3 +213,12 @@ key_format = "Bearer {key}"
 window_count = 5000
 window_calendar = "month"
 window_source = "Research tooling note: 5,000 per calendar month"
+
+[providers."context7.com"]
+minimum_gap_s = 0
+gap_source = "Context7 API guide: no per-plan request gap is published"
+backoff_base_s = 2
+backoff_source = "Context7 API guide: use exponential backoff for 429 responses; Retry-After and RateLimit headers describe the active limit"
+key_item = "Context7 API key"
+key_header = "Authorization"
+key_format = "Bearer {key}"

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 import os
 import re
 import socket
@@ -16,6 +17,7 @@ import sys
 import tempfile
 import time
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.parse import quote, unquote_plus, urlsplit, urlunsplit
 
@@ -31,6 +33,7 @@ from common import (
 
 STATE = Path.home() / ".claude" / "research-gw-state.json"
 LOCK = Path.home() / ".claude" / "research-gw.lock"
+CURL = "/usr/bin/curl"
 VALUE_OPTIONS = {
     "-H",
     "--header",
@@ -42,8 +45,6 @@ VALUE_OPTIONS = {
     "--data-binary",
     "--data-urlencode",
     "--json",
-    "--max-time",
-    "--connect-timeout",
     "--url",
 }
 FLAG_OPTIONS = {
@@ -249,11 +250,33 @@ def public_address(host: str) -> str:
         for result in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
     }
     if not addresses or any(
-        not ipaddress.ip_address(value).is_global for value in addresses
+        not ipaddress.ip_address(value).is_global
+        or ipaddress.ip_address(value).is_multicast
+        for value in addresses
     ):
         raise ValueError(f"private or non-public address refused for {host}")
-    chosen = min(addresses)
+    chosen = min(
+        addresses, key=lambda value: (ipaddress.ip_address(value).version, value)
+    )
     return f"[{chosen}]" if ":" in chosen else chosen
+
+
+def archive_relative_path(out: Path) -> str:
+    """Validate that an envelope stays in one of the two decided raw-text trees."""
+    resolved = out.expanduser().resolve()
+    relative = resolved.relative_to(vault_root().resolve())
+    parts = relative.parts
+    in_lookups = len(parts) >= 3 and parts[:2] == ("70_Research", "_lookups")
+    in_topic_raw = (
+        len(parts) >= 5
+        and parts[0] == "70_Research"
+        and parts[-3:-1] == ("sources", "raw")
+    )
+    if resolved.suffix != ".json" or not (in_lookups or in_topic_raw):
+        raise ValueError("archive must be a JSON file in _lookups or topic sources/raw")
+    if resolved.exists() and resolved.stat().st_size:
+        raise ValueError("archive path already contains data")
+    return relative.as_posix()
 
 
 def session_token() -> str:
@@ -270,10 +293,40 @@ def session_token() -> str:
     return token
 
 
+def credential_item_id(item: str, env: dict[str, str]) -> str:
+    """Resolve one Vaultwarden item by exact name before reading its password."""
+    result = subprocess.run(
+        ["bw", "list", "items", "--search", item],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    try:
+        items = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        items = None
+    matches = (
+        [
+            entry.get("id")
+            for entry in items
+            if isinstance(entry, dict) and entry.get("name") == item
+        ]
+        if isinstance(items, list)
+        else []
+    )
+    if result.returncode != 0 or len(matches) != 1 or not isinstance(matches[0], str):
+        raise ValueError(
+            f"Vaultwarden item unavailable: {item}; run vu if the session expired"
+        )
+    return matches[0]
+
+
 def credential(item: str) -> str:
     env = {**os.environ, "BW_SESSION": session_token(), "BW_NOINTERACTION": "true"}
+    item_id = credential_item_id(item, env)
     result = subprocess.run(
-        ["bw", "get", "password", item],
+        ["bw", "get", "password", item_id],
         env=env,
         capture_output=True,
         text=True,
@@ -364,7 +417,53 @@ def rate_headers(
     entry["reset"] = reset if reset > 1_000_000_000 else at + reset
 
 
+def retry_after_seconds(headers: dict[str, str], at: float) -> float:
+    value = next(
+        (value for name, value in headers.items() if name.lower() == "retry-after"),
+        "",
+    )
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        try:
+            return max(0.0, parsedate_to_datetime(value).timestamp() - at)
+        except (TypeError, ValueError, OverflowError):
+            return 0.0
+
+
+def request_cost(host: str, body: bytes) -> int:
+    """Return provider-reported credits for one request, defaulting to one."""
+    if host != "api.firecrawl.dev":
+        return 1
+    try:
+        payload = json.loads(body)
+        data = payload.get("data") if isinstance(payload, dict) else None
+        metadata = data.get("metadata") if isinstance(data, dict) else None
+        credits = (
+            payload.get("creditsUsed")
+            if isinstance(payload, dict) and payload.get("creditsUsed") is not None
+            else data.get("creditsUsed")
+            if isinstance(data, dict) and data.get("creditsUsed") is not None
+            else metadata.get("creditsUsed")
+            if isinstance(metadata, dict)
+            else None
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        credits = None
+    return credits if isinstance(credits, int) and credits > 0 else 1
+
+
 def window_end(at: float, provider: dict) -> float:
+    if isinstance(provider.get("window_cycle_day"), int):
+        date = datetime.fromtimestamp(at, timezone.utc)
+        day = provider["window_cycle_day"]
+        if date.day < day:
+            year, month = date.year, date.month
+        else:
+            year, month = (
+                (date.year + 1, 1) if date.month == 12 else (date.year, date.month + 1)
+            )
+        return datetime(year, month, day, tzinfo=timezone.utc).timestamp()
     if provider.get("window_calendar") == "month":
         date = datetime.fromtimestamp(at, timezone.utc)
         year, month = (
@@ -372,6 +471,24 @@ def window_end(at: float, provider: dict) -> float:
         )
         return datetime(year, month, 1, tzinfo=timezone.utc).timestamp()
     return at + provider.get("window_seconds", 0)
+
+
+def seed_window(entry: dict, provider: dict, at: float) -> None:
+    """Apply a dated authoritative usage snapshot once, without double counting."""
+    end_value = provider.get("window_initial_end")
+    initial_used = provider.get("window_initial_used")
+    if not isinstance(end_value, str) or not isinstance(initial_used, int):
+        return
+    try:
+        end = datetime.fromisoformat(end_value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return
+    if at >= end or entry.get("window_seed_end") == end:
+        return
+    current = entry.get("window_used", 0) if entry.get("window_end", 0) > at else 0
+    entry["window_used"] = max(current, initial_used)
+    entry["window_end"] = end
+    entry["window_seed_end"] = end
 
 
 def margin_refusal(entry: dict, provider: dict, margin: float, at: float) -> str | None:
@@ -418,7 +535,7 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
     try:
         url = normalize_url(url)
         host = urlsplit(url).hostname or ""
-        archive = str(out.expanduser().resolve().relative_to(vault_root().resolve()))
+        archive = archive_relative_path(out)
         address = public_address(host)
     except socket.gaierror as error:
         print(f"[gw] ERROR {host}: DNS resolution failed: {error}", file=sys.stderr)
@@ -431,6 +548,7 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
         state = json.loads(STATE.read_text()) if STATE.exists() else {}
         entry = state.get(host, {})
         at = time.time()
+        seed_window(entry, provider, at)
         if (
             entry.get("errors", 0) >= settings["error_streak"]
             and at - entry.get("end", 0) < settings["error_cooldown_s"]
@@ -501,10 +619,14 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
                 body_path.unlink(missing_ok=True)
                 header_path.unlink(missing_ok=True)
                 command = [
-                    os.environ.get("RESEARCH_CURL", "curl"),
+                    CURL,
                     "-q",
                     "--silent",
                     "--show-error",
+                    "--connect-timeout",
+                    str(settings["connect_timeout_s"]),
+                    "--max-time",
+                    str(settings["max_time_s"]),
                     "--proto",
                     "=https",
                     "--globoff",
@@ -565,7 +687,9 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
                 if entry.get("window_end", 0) <= finished:
                     entry["window_end"] = window_end(finished, provider)
                     entry["window_used"] = 0
-                entry["window_used"] = entry.get("window_used", 0) + 1
+                entry["window_used"] = entry.get("window_used", 0) + request_cost(
+                    host, body
+                )
                 entry["count"] += 1
                 append_log(
                     {
@@ -592,11 +716,23 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
                     )
                     retry_refusal = 4
                     break
+                retry_after = retry_after_seconds(final_headers, finished)
+                if (
+                    not math.isfinite(retry_after)
+                    or retry_after > settings["default_gap_ceiling_s"]
+                ):
+                    print(
+                        f"[gw] REFUSED {host}: Retry-After exceeds the bounded wait",
+                        file=sys.stderr,
+                    )
+                    retry_refusal = 4
+                    break
                 backoff = provider.get(
                     "backoff_base_s", settings["default_backoff_base_s"]
                 ) * (2**attempts)
+                backoff = max(backoff, retry_after)
                 print(
-                    f"[gw] 429 from {host}: exponential backoff {backoff:.0f}s",
+                    f"[gw] 429 from {host}: retry backoff {backoff:.0f}s",
                     file=sys.stderr,
                 )
                 time.sleep(backoff)
@@ -668,13 +804,38 @@ def usage() -> int:
         if day == today:
             counters["today"] += 1
     for host in sorted(set(config["providers"]) | set(counts) | set(state)):
-        entry = state.get(host, {})
+        entry = dict(state.get(host, {}))
+        provider = config["providers"].get(host, {})
+        seed_window(entry, provider, time.time())
         margin = config["gateway"]["margin"]
         remaining = entry.get("remaining", entry.get("remaining_usd", "unknown"))
         if "remaining_usd" in entry and "remaining" not in entry:
             remaining = f"${remaining}"
+        quota_details = []
+        if isinstance(entry.get("limit"), (int, float)):
+            quota_details.append(f"reported_margin={entry['limit'] * margin:g}")
+        if isinstance(entry.get("remaining_usd"), (int, float)) and isinstance(
+            provider.get("daily_budget_usd"), (int, float)
+        ):
+            quota_details.append(
+                f"usd_margin=${provider['daily_budget_usd'] * margin:g}"
+            )
+        if isinstance(provider.get("window_count"), int):
+            window_used = (
+                entry.get("window_used", 0)
+                if entry.get("window_end", 0) > time.time()
+                else 0
+            )
+            window_limit = provider["window_count"]
+            quota_details.append(
+                f"local_used={window_used}/{window_limit} "
+                f"local_remaining={max(0, window_limit - window_used)} "
+                f"local_margin={window_limit * margin:g}"
+            )
         print(
-            f"{host}: today={counts.get(host, {}).get('today', 0)} month={counts.get(host, {}).get('month', 0)} remaining={remaining} margin={margin:.0%}"
+            f"{host}: today={counts.get(host, {}).get('today', 0)} "
+            f"month={counts.get(host, {}).get('month', 0)} remaining={remaining} "
+            f"margin={margin:.0%} {' '.join(quota_details)}".rstrip()
         )
     return 0
 

@@ -1,7 +1,11 @@
 # Known APIs and local sources
 
-**MUST, MUST NOT and SHALL NOT in this file are absolute, exactly as they are in `SKILL.md`.**
-Everything else here is rationale or reference, and rationale never weakens a requirement.
+**MUST, MUST NOT and SHALL NOT in this file are absolute requirements.** Everything else here is
+rationale or reference, and rationale never weakens a requirement.
+
+**`lookup.py`'s routing is the authority for lookups.** These tables explain the routes and cover
+research that has no typed lookup; they do not authorize calling a lookup source directly or
+reading its key outside the gateway.
 
 ## Hitting a limit is not a reason to stop
 
@@ -17,11 +21,11 @@ source actually answered, because they differ in coverage.
 | Is this address hostile | Shodan InternetDB (no key) | GreyNoise (50/day) | AbuseIPDB (1,000/day, key) |
 | Papers on a topic | arXiv (no key, 1 per 3s) | Semantic Scholar (key, 1/s) | OpenAlex, then Crossref |
 | Who cites this paper | Semantic Scholar (key) | OpenCitations, then Crossref | **Not OpenAlex for arXiv preprints — see below** |
-| Can I actually read this paper | `openAccessPdf` from Semantic Scholar | Unpaywall (email only) | CORE, which already holds the text, then the arXiv version |
+| Can I actually read this paper | `openAccessPdf` from Semantic Scholar | Unpaywall for a non-arXiv DOI; skip it for an arXiv DOI | CORE, which already holds the text, then the arXiv PDF for an arXiv paper |
 | What is being read now | HF `daily_papers` (no key) | HF models by trending | — |
 | Package facts | The registry itself | OSV for its vulnerabilities | jsDelivr for its contents |
 | Support lifetime | `endoflife.date` (no key) | — | single source, say so |
-| How do I use this thing | `context7`, once fixed | Stack Exchange API (no key) | the project's own docs |
+| How do I use this thing | Context7 through `docs` | The project's repository through `repo` | `ansible` for an Ansible module, or `help` for an installed command |
 | **Arbitrary web content** | **Firecrawl (credits)** | **Bright Data free tier (5,000/month)** | **paced direct fetch** |
 
 **The last row is the fallback of last resort and MUST NOT be matched first.** It is reachable
@@ -32,7 +36,7 @@ which is exactly how ten scraper calls got made on a question about academic pap
 Within that row, the ordering is deliberate and is the one case where the scraping rung is
 preferred to a direct fetch: a direct fetch leaves from the home connection and a scraping
 service does not. It used to be the row that ended a research pass. Its cells are page reads, so they are
-reached through *Reading a page* in `SKILL.md`, never by walking the chain, and the paced
+reached through *Use the evidence ladder* in `SKILL.md`, never by walking the chain, and the paced
 direct fetch in it SHALL NOT be used while a scraping service is available.
 
 **A key is a pathway, not an optimisation.** An unkeyed NVD gives 5 requests per 30 seconds
@@ -49,19 +53,19 @@ Seeded 2026-09-24 from the domains most fetched across past sessions.
 ## Fetch these a different way
 
 **A domain in this table SHALL NOT be fetched directly. The route in "Use instead" MUST be
-taken,** except where the row's Notes name a permitted read through *Reading a page* in
+taken,** except where the row's Notes name a permitted read through *Use the evidence ladder* in
 `SKILL.md`, and then only that read. A permission counts only where it was in the row before
 this session began.
 
 | Domain | Use instead | Notes |
 |---|---|---|
-| `github.com` | The GitHub REST API at `api.github.com`, authenticated, or for several files or repositories at once, GraphQL at `api.github.com/graphql` | 254 fetches in past sessions. `gh` is **not** installed (checked 2026-09-24), so use `curl`. Authenticate with the research token — see below |
+| `github.com` | The GitHub REST API at `api.github.com`, authenticated, or for several files or repositories at once, GraphQL at `api.github.com/graphql` | 254 fetches in past sessions. Use `lookup.py repo`; the gateway authenticates it |
 | `docs.github.com` | The same API, for anything about the API itself | 87 fetches |
 | `raw.githubusercontent.com` | `api.github.com/repos/{owner}/{repo}/contents/{path}`, or for several files at once, GraphQL at `api.github.com/graphql` | 29 fetches. Read it through the contents API rather than fetching the raw file directly |
 | `docs.ansible.com` | `ansible-doc <module>` in the dev container | 81 fetches for documentation already on disk |
 | `docs.digitalocean.com` | DigitalOcean API, token in the lockbox | 80 fetches |
-| `arxiv.org` | arXiv API at `export.arxiv.org/api/query` | No key needed. The API carries no body text. Where full text is needed and every other source is spent, one read of `arxiv.org/pdf/<id>` through *Reading a page* in `SKILL.md` is permitted |
-| `api.semanticscholar.org` | Same endpoint, authenticated | Send the key: `bw get password 'Semantic Scholar API key'`, as an `x-api-key` header |
+| `arxiv.org` | arXiv API at `export.arxiv.org/api/query` | No key needed. The API carries no body text. Where full text is needed and every other source is spent, one read of `arxiv.org/pdf/<id>` under *Use the evidence ladder* in `SKILL.md` is permitted |
+| `api.semanticscholar.org` | Same endpoint, authenticated | Use `paper`, `cites` or `fulltext`; the gateway sends the held key |
 | `developer.hashicorp.com` | `terraform -help`, `packer -help` for installed versions | 40 fetches |
 | `en.wikipedia.org` | Wikipedia API at `/w/api.php` | Returns clean extracts |
 | npm package contents | `data.jsdelivr.com/v1/packages/npm/<pkg>@<version>?structure=flat` | Lists what is actually *inside* a published package. Browsing the repository cannot answer this, because built output is usually not committed. Added 2026-09-24 |
@@ -108,14 +112,14 @@ precise question in one request instead of returning pages to read.
 | What you want | Endpoint | Notes |
 |---|---|---|
 | New preprints in a category | `export.arxiv.org/api/query` over **HTTPS** | No key, one request per three seconds. `http://` returns a 301. `search_query=cat:cs.CR+AND+cat:cs.LG` is the security-and-machine-learning overlap |
-| Citation counts, references, who cites what | `api.semanticscholar.org/graph/v1/...` | **Key held** — `bw get password 'Semantic Scholar API key'`, sent as `x-api-key`. One request a second. The `openAccessPdf` field says whether a paper is readable before a fetch is spent finding out |
-| An open catalogue of works and citations | `api.openalex.org/...?api_key=` | Key held: `bw get password 'OpenAlex API key'`. **A URL parameter, not a header.** $1 a day; lookups by DOI free and unlimited, filters $0.0001, searches $0.001. Spend comes back in `x-ratelimit-remaining-usd` |
+| Citation counts, references, who cites what | `api.semanticscholar.org/graph/v1/...` | **Key held** and added by the gateway. One request a second. The `openAccessPdf` field says whether a paper is readable before a fetch is spent finding out |
+| An open catalogue of works and citations | `api.openalex.org/...?api_key=` | Key held and added by the gateway as a URL parameter. $1 a day; lookups by DOI free and unlimited, filters $0.0001, searches $0.001. Spend comes back in `x-ratelimit-remaining-usd` |
 | Metadata for anything with a DOI | `api.crossref.org` | No key, around 180 million works |
 | A free legal copy of a paywalled paper | `api.unpaywall.org/v2/<doi>?email=<you>` | No key, just an email in the query. Returns the best open-access location if one exists |
 | How many times a paper has been cited, openly | `opencitations.net/index/api/v1/citation-count/<doi>` | No key. An open citation graph, independent of the commercial ones |
-| Internet standards and drafts: status, abstract, working group | `datatracker.ietf.org/api/v1/doc/document/?format=json&<field>__<lookup>=` | No key. Read-only tastypie API; one document is `/api/v1/doc/document/<draft-name>/`. Documentation is `ietf/templates/api/index.html` in `ietf-tools/datatracker`, read through GitHub. No rate limit documented, so the skill's default pacing applies. Added 2026-09-25 |
+| Internet standards and drafts: status, abstract, working group | `datatracker.ietf.org/api/v1/doc/document/?format=json&<field>__<lookup>=` | No key. Read-only tastypie API; one document is `/api/v1/doc/document/<draft-name>/`. Documentation is `ietf/templates/api/index.html` in `ietf-tools/datatracker`, read through GitHub. No rate limit documented, so *Keep a session paced and serial* applies. Added 2026-09-25 |
 | Datasets and software, not just papers | `api.datacite.org/dois?query=` | No key. Where a dataset or a code release with a DOI lives |
-| **What a paper actually says**, not what its abstract claims | `api.core.ac.uk/v3/search/works/` | Key held: `bw get password 'CORE API key'`, `Authorization: Bearer`. Full body text in the `fullText` field. See the notes below |
+| **What a paper actually says**, not what its abstract claims | `api.core.ac.uk/v3/search/works/` | Key held and added by the gateway. Full body text is in the `fullText` field. See the notes below |
 | Which author is which | `pub.orcid.org/v3.0/expanded-search/?q=` | No key, send `Accept: application/json`. Disambiguates people with the same name |
 
 **OpenAlex is priced per operation** and a key is required since February 2026. A free key
@@ -155,16 +159,13 @@ second. So the shape of the request matters more than the rate:
 Source: their API tutorial at <https://www.semanticscholar.org/product/api/tutorial>, section
 "How to make requests faster and more efficiently". Read 2026-09-24.
 
-**Observed 2026-09-25, not explained.** The first two Semantic Scholar requests of a session,
-both `POST /graph/v1/paper/batch` with 20 ids and more than a minute apart, returned `429` with
-`x-amzn-errortype: TooManyRequestsException` and no `Retry-After`, while the key was confirmed
-present (44 characters, vault unlocked). Under the skill that is exhaustion. What caused it is
-unknown: the batch endpoint's documented limits need reading, and the key's state testing
-with a single `GET`, before anyone concludes either.
-
-**Key tested 2026-09-25, later the same day:** a single `GET /graph/v1/paper/{id}` with the same key
-returned `200` in 0.34s. The key works. Whatever produced the 429s was specific to the batch
-endpoint or to that moment, and the batch endpoint's own limits are still unread.
+**Observed 2026-09-25 and now explained.** The first two
+`POST /graph/v1/paper/batch` requests returned `429` with
+`x-amzn-errortype: TooManyRequestsException` and no `Retry-After`, while the key was present.
+Semantic Scholar requires exponential backoff after rate limiting; the batch endpoint accepted
+the request after one such retry. A single `GET /graph/v1/paper/{id}` with the same key also
+returned `200` in 0.34s. The key works, and a 429 enters the gateway's backoff rather than being
+treated as a missing or invalid key.
 
 **How to tell the three failures apart, measured 2026-09-24.** An invalid key returns `403`.
 No key at all returns `429`, because unauthenticated traffic shares one key with everybody and
@@ -172,8 +173,11 @@ that pool is saturated. A working key returns `200`. The three are distinguishab
 test, so **never infer the state of the account from a `429`** — check it. A `429` while
 sending a valid key usually means the calls were too close together, except as observed below.
 
-`openAccessPdf` MUST be checked before fetching a paper — or, where Semantic Scholar is recorded as failed, exhausted or as a coverage gap, Unpaywall's open-access result instead; where both are recorded as failed, exhausted or as a coverage gap, that record discharges the check — so a fetch is never spent discovering that it
-is paywalled.
+`openAccessPdf` MUST be checked before fetching a paper. For a non-arXiv DOI, Unpaywall is the
+next source where Semantic Scholar failed, was exhausted or had a coverage gap. For an arXiv DOI,
+Unpaywall MUST be skipped; the fixed route continues to CORE and then the one arXiv PDF read.
+Where every applicable source is recorded as failed, exhausted or as a coverage gap, that record
+discharges the check, so a fetch is never spent discovering that a paper is paywalled.
 
 **Attribution.** The data is CC BY-NC, so non-commercial, and anything published from it must
 credit Semantic Scholar.
@@ -183,13 +187,9 @@ metadata and a link. That makes it the answer to questions about method rather t
 searching abstracts finds papers *about* a technique, searching full text finds papers that
 *used* one.
 
-```bash
-export BW_SESSION="$(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bw-session")"
-KEY=$(bw get password 'CORE API key')
-curl -sL -H "Authorization: Bearer $KEY" -G \
-  --data-urlencode "q=adversarial examples neural networks" --data-urlencode "limit=3" \
-  "https://api.core.ac.uk/v3/search/works/"
-```
+`lookup.py fulltext <DOI-or-arXiv-id>` owns the normal CORE route. A research request not covered
+by a typed lookup goes through `gw.py`; the session supplies the query fields and the gateway adds
+the CORE key.
 
 Three things learned the hard way on 2026-09-24:
 
@@ -206,18 +206,13 @@ field is non-empty before relying on it. They ask to be cited in published work.
 
 **OpenAlex behaves differently from the other keys in two ways worth remembering.**
 
-It goes in the URL as `?api_key=`, not in a header, so it ends up in shell history and in
-server logs. A command containing it SHALL NOT be pasted anywhere that gets kept.
+The gateway puts it in the URL as `?api_key=`, not in a header, and redacts the persistent URL.
+The session MUST NOT construct or retain a command containing the key.
 
 And it is priced per operation rather than rate limited, so the cheap path matters:
 
-```bash
-# free and unlimited — a single record by identifier
-curl "https://api.openalex.org/works/doi:10.1145/3128572.3140448?api_key=$KEY"
-
-# $0.001 each — a search. 1,000 a day inside the free dollar
-curl "https://api.openalex.org/works?filter=title.search:...&api_key=$KEY"
-```
+`lookup.py paper <DOI>` uses the free single-record path. A search not covered by a typed lookup
+goes through `gw.py`, which adds and redacts the key and enforces the dollar margin.
 
 Reach for the lookup whenever an identifier is already known. Every response carries
 `x-ratelimit-remaining-usd`, so the budget can be read without a separate call.
@@ -244,34 +239,35 @@ is far too large for this estate; the reasoning is in `70_Research/research-apis
 | Everything about a Rust crate | `crates.io/api/v1/crates/<name>` | **Requires a `User-Agent` header** naming you and a contact address. Returns 403 without one |
 | Questions and answers on a technology | `api.stackexchange.com/2.3/` | No key. Works even though the site will not accept a new account from this address |
 | When software stops being supported | `endoflife.date/api/<product>.json` | No key. Answers the question for every product on the estate — AlmaLinux 10 ends 2035-05-31 |
-| Advisories by ecosystem | `api.github.com/advisories` | Works unauthenticated, but send the research token anyway for the higher limit |
+| Advisories by ecosystem | `api.github.com/advisories` | `lookup.py vuln` uses it after OSV; the gateway adds the held token |
 | Odds a CVE gets exploited | `api.first.org/data/v1/epss?cve=<id>` | No key |
-| Who registered a domain | `rdap.org/domain/<domain>` | No key, but returns a 302 — follow redirects |
+| Who registered a domain | `rdap.org/domain/<domain>` | `lookup.py domain` validates and sends each redirect hop through the gateway |
+
+**Firecrawl, the first rung for web content.** Key held: `Firecrawl API key`, sent as
+`Authorization: Bearer`. The account is on the free plan: 1,000 credits a month, on a cycle that
+starts on the 19th. The free plan allows 10 requests a minute on `/scrape`, `/map` and `/search`,
+and 2 on `/crawl`, `/agent` and `/interact`. At zero credits, calls that cost credits return
+HTTP 402 until the reset, because the free plan has no pay-as-you-go. A scrape costs 1 credit a
+page and a search 2 credits per 10 results, and each response reports its cost in `creditsUsed`.
+`GET https://api.firecrawl.dev/v2/team/credit-usage` returns the remaining and plan credits and
+costs nothing. The claude.ai Firecrawl connector spends from the same balance.
+Fuzzy Vaultwarden lookup finds both Firecrawl and Bright Data because the latter's notes mention
+Firecrawl. The gateway resolves the one exact item name before reading it. Read from
+`firecrawl/firecrawl-docs` (`billing.mdx`, `rate-limits.mdx`) and a live credit check on
+2026-09-26.
 
 **Bright Data, the third rung for web content.** When Firecrawl credits are gone or a page
 defeats it, this reads the page from Bright Data's infrastructure rather than this
 connection — verified, the exit was a datacenter ASN.
 
-```bash
-export BW_SESSION="$(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bw-session")"
-TOKEN=$(bw get password 'Bright Data API key')
-curl https://api.brightdata.com/request \
-  -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" \
-  -d '{"zone":"bright_data_agent","url":"<the page>","format":"raw"}'
-```
-
-The zone name `bright_data_agent` is required in every request body. 5,000 requests a month
+`lookup.py page <https-url>` owns this fallback and the gateway adds the key. The zone name
+`bright_data_agent` is required in every request body. 5,000 requests a month
 are free; past that the plan bills at $1.50 per thousand, so the free allowance is worth
 about $7.50. It MUST be treated as the scarce rung: it is for pages the cheaper routes could not get, and
 it SHALL NOT be used as a default.
 
-**Authenticating to GitHub.** Always use the research token:
-
-```bash
-export BW_SESSION="$(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bw-session")"
-TOKEN=$(bw get password 'GitHub read-only token')
-curl -H "Authorization: Bearer $TOKEN" https://api.github.com/repos/OWNER/REPO
-```
+**Authenticating to GitHub.** The gateway always adds the held read-only token; a session never
+reads or sends it. Use `lookup.py repo`, `vuln` or `cve` for the routes they cover.
 
 **GraphQL is GitHub's batch endpoint.** One `POST https://api.github.com/graphql` with the
 research token can fetch several repositories' README text, directory trees and named files by
@@ -295,7 +291,7 @@ These change daily, so cloning once beats fetching repeatedly.
 ## Gated against automation
 
 Recorded so time is not wasted rediscovering it. **A source in this table MUST be skipped
-rather than called, and the skip counts as exhaustion only as the *Failure* section of `SKILL.md` allows.**
+rather than called, and the skip counts as exhaustion only as *Interpret outcomes precisely* in `SKILL.md` allows.**
 
 | Source | Problem | Use instead |
 |---|---|---|

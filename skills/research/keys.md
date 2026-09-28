@@ -6,9 +6,9 @@ and that only works if the alternatives are actually reachable.
 
 ## Where keys live
 
-The same place every other secret does: Vaultwarden, read at run time with `bw get`. Never
-in a file in a repository, never in an environment variable written to disk, never in a note.
-This is the pattern `ansible/group_vars/all.yml` already uses for the sudo password.
+The same place every other secret does: Vaultwarden, read at run time only by `gw.py`. A research
+session never reads, prints or passes a key. A key is never stored in a repository, persistent
+environment file or note.
 
 Item naming, matching the existing convention of one item per thing with the name carrying
 what it is for:
@@ -17,22 +17,20 @@ what it is for:
 NVD API key
 Semantic Scholar API key
 GitHub read-only token
-Bright Data zone password
+CORE API key
+OpenAlex API key
+Firecrawl API key
+Context7 API key
+Bright Data API key
 AbuseIPDB API key
 ```
 
 Matching the existing style in the vault, which is descriptive and unpunctuated —
 `Cloudflare DNS token`, `control plane SSH key passphrase`.
 
-**Load the session token before any `bw` call.** A Bash tool call does not inherit
-`BW_SESSION`, so `bw` reports `locked` even when the vault is open. The token is on disk:
-
-```bash
-export BW_SESSION="$(cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bw-session")"
-bw get password 'NVD API key'
-```
-
-Only conclude the vault is locked if `bw status` still says so with the token loaded.
+The gateway loads the established runtime session, resolves exactly one item whose name matches,
+and reads that item by ID. `lookup.py doctor` reports whether the session and configured keys are
+available without exposing their values.
 
 ## Status
 
@@ -43,13 +41,15 @@ Only conclude the vault is locked if `bw status` still says so with the token lo
 | GitHub | **Held**, in Vaultwarden as `GitHub read-only token` | Fine-grained, public repositories read-only. Verified 2026-09-24: 5,000 an hour, reads public repos, 404 on private ones |
 | CORE | **Held**, in Vaultwarden as `CORE API key` | Full text of open access papers. `Authorization: Bearer`. Academic tier via the Hinds address: 5,000 tokens a day, 10 a minute. Verified 2026-09-24 |
 | OpenAlex | **Held**, in Vaultwarden as `OpenAlex API key` | Sent as `?api_key=` in the URL, not a header. $1 of usage a day, no payment method attached so it cannot overspend. Single lookups by DOI are free and unlimited |
+| Firecrawl | **Held**, in Vaultwarden as `Firecrawl API key` | Sent by the gateway as `Authorization: Bearer`. Verified 2026-09-26 with a saved page read and its reported credit counted |
+| Context7 | **Held**, in Vaultwarden as `Context7 API key` | Sent by the gateway as `Authorization: Bearer`; used only through `lookup.py docs` and `gw.py` |
 | Bright Data | **Held**, in Vaultwarden as `Bright Data API key` | Zone `bright_data_agent`. Verified 2026-09-24: fetched a real page, exit was a datacenter rather than this connection. 5,000 free requests a month, $1.50 per thousand beyond that |
 
 ## Get these first — they unblock the most
 
 | Key | Sign up at | Without it | With it |
 |---|---|---|---|
-| **NVD** | `nvd.nist.gov/developers/request-an-api-key` | 5 requests per 30 seconds | 50 per 30 seconds |
+| **NVD** | done — see Status above | 5 requests per 30 seconds | 50 per 30 seconds |
 | **Semantic Scholar** | done — see Status above | shared pool, returns 429 quickly | 1 request per second, reliably |
 | **GitHub token** | done — see Status above | 60 requests an hour | 5,000 an hour |
 | **Bright Data** | done — see Status above | nothing | 5,000 requests a month |
@@ -79,5 +79,5 @@ contact address, or it returns 403.
 
 ## When a key is missing
 
-Say so and use the next source in the chain in `known-apis.md`. A missing key is a reason to
-switch, never a reason to report the question unanswerable.
+`lookup.py` records that source as `not configured` and continues its fixed route. A session MUST
+NOT inspect the key or choose a competing prose route.

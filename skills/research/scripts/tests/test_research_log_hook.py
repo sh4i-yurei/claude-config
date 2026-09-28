@@ -39,6 +39,34 @@ class ResearchLogHookTests(unittest.TestCase):
             self.assertEqual(record["repo"], "repo")
             self.assertIsNone(record["archive"])
 
+    def test_firecrawl_connector_updates_shared_seeded_quota(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            payload = {
+                "session_id": "session",
+                "tool_name": "mcp__firecrawl__firecrawl_search",
+                "tool_input": {"query": "example"},
+                "tool_response": [
+                    {
+                        "type": "text",
+                        "text": json.dumps(
+                            {"success": True, "data": [], "creditsUsed": 2}
+                        ),
+                    }
+                ],
+            }
+            with (
+                patch.object(research_log, "STATE_FILE", root / "state.json"),
+                patch.object(research_log, "GATEWAY_STATE", root / "gw-state.json"),
+                patch.object(research_log, "GATEWAY_LOCK", root / "gw.lock"),
+                patch.object(research_log, "append_log"),
+                patch.object(research_log.time, "time", return_value=1_790_294_400.0),
+                patch.object(sys, "stdin", io.StringIO(json.dumps(payload))),
+            ):
+                self.assertEqual(research_log.main(), 0)
+            state = json.loads((root / "gw-state.json").read_text())
+            self.assertEqual(state["api.firecrawl.dev"]["window_used"], 213)
+
 
 if __name__ == "__main__":
     unittest.main()
