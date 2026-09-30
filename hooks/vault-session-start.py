@@ -12,9 +12,7 @@ actual work, so it reports counts and names, never content.
 import os
 import re
 import sys
-from datetime import datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 VAULT = Path(os.environ.get("SECOND_BRAIN", Path.home() / "Documents/Second_Brain"))
 MAX_LISTED = 8  # Beyond this, a list stops being orienting and starts being noise.
@@ -88,8 +86,7 @@ def main() -> int:
     inbox = [
         p.stem
         for p in notes("00_Inbox")
-        if "09_Archive" not in p.parts
-        and frontmatter(p).get("status") != "done"
+        if "09_Archive" not in p.parts and frontmatter(p).get("status") != "done"
     ]
 
     # telos.md is the one file in the vault that is about Mark rather than about
@@ -105,28 +102,13 @@ def main() -> int:
             telos_note = (
                 "- 50_Personal/telos.md is scaffolded but unwritten. It is the only "
                 "note about Mark rather than about work. Offer to fill it in as an "
-                "interview, the way /journal works."
+                "interview."
             )
         else:
             telos_note = (
                 "- Read 50_Personal/telos.md before proposing direction. It is Mark's "
                 "own account of what he is doing and why."
             )
-
-    # Mark journals in the MORNING about the DAY BEFORE, so the question is never
-    # "is today written" — today is not finished. Asking about today would nag him
-    # every single day about a day that cannot be written yet.
-    today = datetime.now(ZoneInfo("America/Chicago")).date()
-    yesterday = today - timedelta(days=1)
-    entry = (
-        VAULT / "50_Personal" / "51_Journal" / str(yesterday.year) / f"{yesterday}.md"
-    )
-    journal_note = None
-    if not entry.exists():
-        journal_note = (
-            f"- No journal entry for {yesterday} yet. Offer /journal — he writes in "
-            "the morning about the day before. Offer once."
-        )
 
     def fmt(label: str, items: list[str]) -> None:
         if not items:
@@ -143,8 +125,6 @@ def main() -> int:
     fmt("Inbox (unfiled)", inbox)
     if telos_note:
         lines.append(telos_note)
-    if journal_note:
-        lines.append(journal_note)
 
     if not lines:
         return 0

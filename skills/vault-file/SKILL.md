@@ -49,9 +49,6 @@ write-up beside them. Use `_Templates/research-topic.md`. Never put third-party
 content — transcripts, article copies — in the vault; it is a git repository and that
 is someone else's work.
 
-**A daily entry** → `50_Personal/51_Journal/<year>/YYYY-MM-DD.md`. Use the `journal`
-skill, which runs it as an interview rather than handing over a blank template.
-
 **Something personal** → `50_Personal`. No naming convention; imposing one here
 only makes the folder get avoided.
 

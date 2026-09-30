@@ -1,6 +1,6 @@
 ---
 name: weekly-review
-description: Runs Mark's weekly review over his Obsidian vault — rolls up the week's journal entries, runs the vault health and drift checks, and turns what they find into decisions. Use it when he asks for a weekly review, says he wants to catch up on the week, or runs /weekly. Also offer it on a Sunday or Monday, or when the vault has not been reviewed in more than a week. This is the only recurring step that keeps the vault honest, so it matters more than it looks.
+description: Runs Mark's weekly review over his Obsidian vault — rolls up the week from its buildlogs and changed notes, runs the vault health and drift checks, and turns what they find into decisions. Use it when he asks for a weekly review, says he wants to catch up on the week, or runs /weekly. Also offer it on a Sunday or Monday, or when the vault has not been reviewed in more than a week. This is the only recurring step that keeps the vault honest, so it matters more than it looks.
 ---
 
 # Weekly review
@@ -10,9 +10,9 @@ schema gets written once, the checks get built once. **This is the only part tha
 has to happen again**, and it is therefore the only part that can decay — which
 makes it the piece the whole design rests on.
 
-It does two jobs that happen to share a cadence: it rolls up the week's journal so
-the daily entries are worth having written, and it resolves what the drift checks
-found so the vault keeps telling the truth.
+It does two jobs that happen to share a cadence: it rolls up what the week's work
+recorded, and it resolves what the drift checks found so the vault keeps telling the
+truth.
 
 ## Recap before planning
 
@@ -24,19 +24,15 @@ what you did. The recap is what makes the plan honest.
 
 ```bash
 python3 ~/.claude/skills/vault-query/scripts/query.py status
+python3 ~/.claude/skills/vault-query/scripts/query.py recent --days 7
 ```
 
-Read the week's journal entries in `50_Personal/51_Journal/<year>/`. Pull out what
-actually happened, what went well, and anything that reads like it wants to become
-writing.
+Read the week's buildlog entries and the notes that changed. Pull out what actually
+happened, what went well, and anything that reads like it wants to become writing.
 
-Daily entries are only worth writing if something later reads them together. A week
-of entries nobody revisits is a week of wasted evenings — this is the step that pays
-for them.
-
-If there are no entries, say so plainly and move on. **Do not count missed days, do
-not present a streak, and do not suggest backfilling.** A review that opens with a
-scolding is a review he stops running.
+If the week recorded little, say so plainly and move on. **Do not count quiet days and
+do not suggest backfilling.** A review that opens with a scolding is a review he stops
+running.
 
 ## 2. Run the checks and resolve what they find
 
