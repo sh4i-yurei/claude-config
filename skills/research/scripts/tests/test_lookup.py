@@ -948,6 +948,61 @@ class LookupTests(unittest.TestCase):
         self.assertEqual(page_outcome["answer"]["credits_used"], 1)
         self.assertEqual(page_outcome["answer"]["title"], "Example Domain")
 
+    def test_firecrawl_v2_search_reads_results_under_data_web(self):
+        search = self.response(
+            "Firecrawl search",
+            "https://api.firecrawl.dev/v2/search",
+            {
+                "success": True,
+                "data": {
+                    "web": [
+                        {
+                            "title": "Example",
+                            "url": "https://example.com",
+                            "description": "Example result",
+                        },
+                        {"title": "No address"},
+                    ]
+                },
+                "creditsUsed": 2,
+                "id": "search-id",
+            },
+        )
+        with mock.patch.object(lookup, "gateway_response", return_value=search):
+            outcome = lookup.search_lookup(["example"], root=self.root)
+        self.assertEqual(outcome["status"], "found")
+        self.assertEqual(
+            outcome["answer"]["results"],
+            [
+                {
+                    "title": "Example",
+                    "url": "https://example.com",
+                    "description": "Example result",
+                }
+            ],
+        )
+        self.assertEqual(outcome["answer"]["credits_used"], 2)
+        self.assertTrue(lookup.firecrawl_search_cacheable(search.envelope))
+
+    def test_firecrawl_v2_search_with_no_web_results_is_not_found(self):
+        empty = self.response(
+            "Firecrawl search",
+            "https://api.firecrawl.dev/v2/search",
+            {"success": True, "data": {"web": []}, "creditsUsed": 2},
+        )
+        with mock.patch.object(lookup, "gateway_response", return_value=empty):
+            outcome = lookup.search_lookup(["example"], root=self.root)
+        self.assertEqual(outcome["status"], "not found")
+        self.assertTrue(lookup.firecrawl_search_cacheable(empty.envelope))
+
+    def test_firecrawl_search_without_web_list_is_not_cacheable(self):
+        odd = self.response(
+            "Firecrawl search",
+            "https://api.firecrawl.dev/v2/search",
+            {"success": True, "data": {"news": []}},
+        )
+        self.assertFalse(lookup.firecrawl_search_cacheable(odd.envelope))
+
     def test_search_malformed_json_shape_returns_structured_error(self):
         malformed = self.response(
             "Firecrawl search", "https://api.firecrawl.dev/v2/search", []

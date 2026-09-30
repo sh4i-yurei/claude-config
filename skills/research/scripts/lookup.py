@@ -1846,6 +1846,18 @@ def firecrawl_credits(payload: Any) -> int | None:
     return None
 
 
+def firecrawl_search_results(payload: Any) -> list[Any] | None:
+    """Return the result list from a v1 (`data`) or v2 (`data.web`) search body."""
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data")
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict) and isinstance(data.get("web"), list):
+        return data["web"]
+    return None
+
+
 def firecrawl_search_cacheable(envelope: dict[str, Any]) -> bool:
     try:
         payload = json.loads(envelope["body"])
@@ -1854,7 +1866,7 @@ def firecrawl_search_cacheable(envelope: dict[str, Any]) -> bool:
     return (
         isinstance(payload, dict)
         and payload.get("success", True) is not False
-        and isinstance(payload.get("data"), list)
+        and firecrawl_search_results(payload) is not None
     )
 
 
@@ -1879,20 +1891,16 @@ def search_lookup(
         cache_validator=firecrawl_search_cacheable,
     )
     payload, attempt = remote_json(response)
-    data = payload.get("data") if isinstance(payload, dict) else None
-    rows = (
-        [
-            {
-                "title": row.get("title"),
-                "url": row.get("url"),
-                "description": row.get("description"),
-            }
-            for row in data
-            if isinstance(row, dict) and row.get("url")
-        ]
-        if isinstance(data, list)
-        else []
-    )
+    data = firecrawl_search_results(payload)
+    rows = [
+        {
+            "title": row.get("title"),
+            "url": row.get("url"),
+            "description": row.get("description"),
+        }
+        for row in data or []
+        if isinstance(row, dict) and row.get("url")
+    ]
     if rows:
         return result(
             "search",
