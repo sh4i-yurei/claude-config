@@ -13,8 +13,9 @@ at the moment of capture is what kills capture, so they're separated on purpose.
 
 If he knows where it goes, put it there and use the template. If he doesn't, or
 the conversation is mid-flow and stopping to decide would break it, drop it in
-`00_Inbox` and move on. An inbox item needs no frontmatter and no naming
-convention — anything that gets it captured is correct.
+`00_Inbox` and move on. An inbox item needs no naming convention, but it does need
+frontmatter, because frontmatter is how the vault is indexed and the vault check refuses a
+note without it. At capture, `type: note` and `created:` are enough.
 
 Capture what he actually said, in his framing. A captured idea that's been
 rewritten into your words has lost the thing that made it worth keeping.
@@ -58,7 +59,8 @@ only makes the folder get avoided.
 
 **Finished writing** → `30_Posts`.
 
-Then: rename to that folder's convention, add the frontmatter (no `title:` field —
+Then: rename to that folder's convention, complete the frontmatter for its new folder (no
+`title:` field —
 the filename is the identity), link it to whatever project it belongs to with
 `project: "[[Project Name]]"`, and move it with the Obsidian CLI rather than `mv`,
 so any wikilink pointing at the note follows it:
