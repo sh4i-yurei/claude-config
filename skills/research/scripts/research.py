@@ -1634,7 +1634,7 @@ def run_topic(
         check_cost = 0.0
         checker_budget_exit = False
         remaining = cost_limit - spent - float(gather_cost)
-        if unchecked_supported and budget_exit:
+        if budget_exit:
             checker_budget_exit = True
         elif unchecked_supported:
             if remaining <= 0:

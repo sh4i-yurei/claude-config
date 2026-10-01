@@ -2284,6 +2284,51 @@ Two: `70_Research/test/raw/b.json`.
             path.read_text(),
         )
 
+    def test_deep_gather_budget_exit_preserves_previously_checked_claim(self):
+        path = self.make_runnable_topic(self.root, "test-b15")
+        path.write_text(path.read_text().replace("**Mode:** survey", "**Mode:** deep"))
+        archive = path.parent / "raw" / "claim.json"
+        self.write_envelope(archive)
+        self.log_archive("test-b15", archive)
+        path.write_text(
+            path.read_text().replace(
+                "| 1 | TODO | | open |",
+                "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
+            )
+        )
+        supported = research.ledger_claims(path.read_text())
+        research.record_checked_claims(path, {1}, supported)
+
+        config = {
+            "presets": {
+                "deep": {
+                    "rounds": 3,
+                    "calls": 5,
+                    "cost_usd": 0.1,
+                    "source_floor": 0,
+                    "sources_per_claim": 2,
+                }
+            }
+        }
+        budget_exit = {
+            "error": True,
+            "subtype": "error_max_budget_usd",
+            "cost_usd": 0.2,
+        }
+        with (
+            mock.patch.object(research, "gather_once", return_value=budget_exit),
+            mock.patch.object(research, "isolated_check") as check,
+            mock.patch.object(research, "load_config", return_value=config),
+        ):
+            self.assertEqual(
+                research.run_topic("test-b15", root=self.root), "cost limit"
+            )
+        check.assert_not_called()
+        self.assertIn(
+            "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
+            path.read_text(),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
