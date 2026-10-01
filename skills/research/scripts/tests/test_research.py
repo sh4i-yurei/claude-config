@@ -637,6 +637,28 @@ I found the test result.
             research.write_topic("test-b16", root=self.root)
         self.assertEqual(synthesis.read_text(), "old synthesis")
 
+    def test_writer_refuses_supported_claim_that_has_not_passed_check(self):
+        path = self.make_runnable_topic(self.root, "test-b16")
+        archive = path.parent / "raw" / "proof.json"
+        self.write_envelope(archive)
+        path.write_text(
+            path.read_text().replace(
+                "| 1 | TODO | | open |",
+                "| 1 | SUPPORTED | `70_Research/test-b16/sources/raw/proof.json` | asserted |",
+            )
+        )
+        config = {
+            "presets": {"survey": {"cost_usd": 1}},
+            "agent": {"write_tools": ["Read", "Edit", "Write"]},
+        }
+        with (
+            mock.patch.object(research, "load_config", return_value=config),
+            mock.patch.object(research, "run_agent") as run,
+            self.assertRaisesRegex(ValueError, "has not passed the isolated check"),
+        ):
+            research.write_topic("test-b16", root=self.root)
+        run.assert_not_called()
+
     def test_run_command_gives_writer_only_the_remaining_override_budget(self):
         def runner(_topic, **kwargs):
             kwargs["usage"].update(spent=0.4, cost_limit=1.0, call_limit=2, rounds=1)
@@ -761,6 +783,15 @@ I found the test result.
         )
         config = {"presets": {"survey": {"sources_per_claim": 1, "source_floor": 1}}}
         with mock.patch.object(research, "load_config", return_value=config):
+            self.assertIn(
+                "supported claim 1 has not passed the isolated check",
+                research.final_problems(
+                    "test-b16", root=self.root, run_vault_check=False
+                ),
+            )
+            research.record_checked_claims(
+                path, {1}, research.ledger_claims(path.read_text())
+            )
             self.assertEqual(
                 research.final_problems(
                     "test-b16", root=self.root, run_vault_check=False
@@ -1229,6 +1260,29 @@ I found the test result.
         ):
             research.run_topic("test-b14", root=self.root)
         self.assertEqual(path.read_text(), before)
+
+        digest = "a" * 64
+
+        def forges_checked_claim(*_args, **_kwargs):
+            path.write_text(
+                before.replace(
+                    "| Claim | Content SHA-256 |\n|---|---|",
+                    "| Claim | Content SHA-256 |\n|---|---|\n| 1 | " + digest + " |",
+                )
+            )
+            return {"error": False, "cost_usd": 0.1}
+
+        with (
+            mock.patch.object(
+                research, "gather_once", side_effect=forges_checked_claim
+            ),
+            mock.patch.object(research, "isolated_check") as check,
+            mock.patch.object(research, "load_config", return_value=config),
+            self.assertRaisesRegex(ValueError, "changed protected.*Checked claims"),
+        ):
+            research.run_topic("test-b14", root=self.root)
+        self.assertEqual(path.read_text(), before)
+        check.assert_not_called()
         self.assertTrue(
             any(
                 record["status"] == "failed protected controls; cost_usd=0.100000"
@@ -1998,6 +2052,7 @@ Two: `70_Research/test/raw/b.json`.
                 "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
             )
         )
+        before = path.read_text()
         with (
             mock.patch.object(
                 research,
@@ -2007,10 +2062,70 @@ Two: `70_Research/test/raw/b.json`.
             self.assertRaisesRegex(ValueError, "invalid JSON"),
         ):
             research.isolated_check("test-b15", {1}, cost_limit=0.5, root=self.root)
-        self.assertIn(
-            "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
-            path.read_text(),
+        self.assertEqual(path.read_text(), before)
+
+    def test_round_loop_records_only_real_checker_acceptances(self):
+        path = self.make_runnable_topic(self.root, "test-b15")
+        path.write_text(
+            path.read_text().replace("1. filled", "1. First claim\n2. Second claim")
         )
+        archive = path.parent / "raw" / "claim.json"
+
+        def gather(*_args, **_kwargs):
+            self.write_envelope(archive)
+            self.log_archive("test-b15", archive)
+            path.write_text(
+                path.read_text().replace(
+                    "| 1 | TODO | | open |",
+                    "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | first |\n"
+                    "| 2 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | second |",
+                )
+            )
+            return {"error": False, "cost_usd": 0.1}
+
+        checker = {
+            "error": False,
+            "cost_usd": 0.1,
+            "events": [],
+            "structured_output": {
+                "claims": [
+                    {
+                        "claim": 1,
+                        "supported": True,
+                        "passage": "proof",
+                        "reason": "",
+                    },
+                    {
+                        "claim": 2,
+                        "supported": False,
+                        "passage": "",
+                        "reason": "not proved",
+                    },
+                ]
+            },
+        }
+        config = {
+            "agent": {"check_tools": ["Read"]},
+            "presets": {
+                "survey": {
+                    "rounds": 1,
+                    "calls": 5,
+                    "cost_usd": 1,
+                    "source_floor": 0,
+                }
+            },
+        }
+        with (
+            mock.patch.object(research, "gather_once", side_effect=gather),
+            mock.patch.object(research, "run_agent", return_value=checker),
+            mock.patch.object(research, "load_config", return_value=config),
+        ):
+            self.assertEqual(
+                research.run_topic("test-b15", root=self.root), "round limit"
+            )
+        text = path.read_text()
+        self.assertEqual(set(research.checked_claims(text)), {1})
+        self.assertIn("| 2 | TODO |", text)
 
     def test_round_loop_accounts_for_isolated_check_budget_exit(self):
         path = self.make_runnable_topic(self.root, "test-b15")
@@ -2078,6 +2193,51 @@ Two: `70_Research/test/raw/b.json`.
                     "calls": 5,
                     "cost_usd": 0.1,
                     "source_floor": 0,
+                }
+            }
+        }
+        with (
+            mock.patch.object(research, "gather_once", side_effect=gather),
+            mock.patch.object(research, "isolated_check") as check,
+            mock.patch.object(research, "load_config", return_value=config),
+        ):
+            self.assertEqual(
+                research.run_topic("test-b15", root=self.root), "cost limit"
+            )
+        check.assert_not_called()
+        self.assertIn(
+            "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
+            path.read_text(),
+        )
+
+    def test_deep_budget_exit_skips_downstream_ledger_validation(self):
+        path = self.make_runnable_topic(self.root, "test-b15")
+        path.write_text(path.read_text().replace("**Mode:** survey", "**Mode:** deep"))
+        archive = path.parent / "raw" / "claim.json"
+
+        def gather(*_args, **_kwargs):
+            self.write_envelope(archive)
+            self.log_archive("test-b15", archive)
+            path.write_text(
+                path.read_text().replace(
+                    "| 1 | TODO | | open |",
+                    "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
+                )
+            )
+            return {
+                "error": True,
+                "subtype": "error_max_budget_usd",
+                "cost_usd": 0.2,
+            }
+
+        config = {
+            "presets": {
+                "deep": {
+                    "rounds": 3,
+                    "calls": 5,
+                    "cost_usd": 0.1,
+                    "source_floor": 0,
+                    "sources_per_claim": 2,
                 }
             }
         }

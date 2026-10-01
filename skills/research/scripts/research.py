@@ -644,6 +644,15 @@ def record_checked_claims(
     sources_file.write_text(text, encoding="utf-8")
 
 
+def unchecked_supported_claims(text: str) -> set[int]:
+    records = checked_claims(text)
+    return {
+        claim
+        for claim, (description, archives) in ledger_claims(text).items()
+        if records.get(claim) != claim_check_digest(description, archives)
+    }
+
+
 def archive_claims(text: str) -> dict[str, list[str]]:
     claims: dict[str, list[str]] = defaultdict(list)
     for line in section(text, "Ledger").splitlines():
@@ -900,6 +909,13 @@ def write_topic(
     synthesis = topic_root / f"{topic}.md"
     previous_synthesis = synthesis.read_bytes() if synthesis.is_file() else None
     source_text = sources_file.read_text(encoding="utf-8")
+    unchecked = unchecked_supported_claims(source_text)
+    if unchecked:
+        claims = ", ".join(str(claim) for claim in sorted(unchecked))
+        raise ValueError(
+            f"supported claim {claims} has not passed the isolated check; "
+            "run research.py run to check it"
+        )
     mode_match = re.search(r"^\*\*Mode:\*\* (survey|deep)$", source_text, re.MULTILINE)
     if mode_match is None:
         raise ValueError("sources file has no valid Mode")
@@ -1079,6 +1095,8 @@ def scriptable_problems(
         if claim not in statuses:
             problems.append(f"claim {claim} has no valid ledger status")
     claims = ledger_claims(text)
+    for claim in sorted(unchecked_supported_claims(text)):
+        problems.append(f"supported claim {claim} has not passed the isolated check")
     for claim, (_description, archives) in claims.items():
         required_sources = preset.get("sources_per_claim", 1)
         if len(set(archives)) < required_sources:
@@ -1623,6 +1641,29 @@ def run_topic(
                     )
         round_cost = float(gather_cost) + float(check_cost)
         spent += round_cost
+        if checker_budget_exit:
+            final_statuses = claim_statuses(sources_file.read_text(encoding="utf-8"))
+            moved = sum(
+                before_statuses.get(claim, "TODO") != status
+                for claim, status in final_statuses.items()
+            )
+            append_round(
+                sources_file,
+                round_number=number,
+                calls=max(0, run_call_count(topic, root=root) - before_calls),
+                new_archives=len(raw_archives(topic_root) - before_archives),
+                claims_moved=moved,
+                cost=round_cost,
+                stop="cost limit",
+            )
+            if usage is not None:
+                usage.update(
+                    spent=spent,
+                    cost_limit=cost_limit,
+                    call_limit=call_limit,
+                    rounds=number,
+                )
+            return "cost limit"
         after_text = sources_file.read_text(encoding="utf-8")
         required_sources = preset.get("sources_per_claim", 1)
         if required_sources > 1:
