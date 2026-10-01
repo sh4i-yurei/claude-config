@@ -809,7 +809,7 @@ def replace_how_far_field(text: str, field: str, value: str) -> str:
 
 def normalize_sources_wikilink(text: str, topic: str) -> str:
     note = f"{topic}-sources"
-    pattern = rf"\[\[(?:[^|\]\n]*/)?{re.escape(note)}(?:\|[^\]\n]+)?\]\]"
+    pattern = rf"\[\[[^|\]\n]+/{re.escape(note)}(?:\|[^\]\n]+)?\]\]"
     return re.sub(pattern, f"[[{note}]]", text)
 
 
