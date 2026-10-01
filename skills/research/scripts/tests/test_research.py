@@ -1622,12 +1622,25 @@ One source cites two archives: `70_Research/test/raw/a.json` and `70_Research/te
             "- First source: `70_Research/test/raw/a.json`.\n"
             "- Second source: `70_Research/test/raw/b.json`.",
         )
+        indented_bullets = text.replace(
+            "One source cites two archives: `70_Research/test/raw/a.json` and `70_Research/test/raw/b.json`.",
+            "  - First source: `70_Research/test/raw/a.json`.\n"
+            "  - Second source: `70_Research/test/raw/b.json`.",
+        )
+        nested_bullet = text.replace(
+            "One source cites two archives: `70_Research/test/raw/a.json` and `70_Research/test/raw/b.json`.",
+            "- First source: `70_Research/test/raw/a.json`.\n"
+            "    - Detail: `70_Research/test/raw/b.json`.\n"
+            "- Second source: `70_Research/test/raw/b.json`.",
+        )
         paragraphs = text.replace(
             "One source cites two archives: `70_Research/test/raw/a.json` and `70_Research/test/raw/b.json`.",
             "First source: `70_Research/test/raw/a.json`.\n\n"
             "Second source: `70_Research/test/raw/b.json`.",
         )
         self.assertEqual(research.supported_source_count(bulleted), 2)
+        self.assertEqual(research.supported_source_count(indented_bullets), 2)
+        self.assertEqual(research.supported_source_count(nested_bullet), 2)
         self.assertEqual(research.supported_source_count(paragraphs), 2)
         self.assertTrue(research.proved(bulleted, 2))
         self.assertTrue(research.proved(paragraphs, 2))

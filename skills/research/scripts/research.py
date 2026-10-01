@@ -1352,7 +1352,9 @@ def supported_source_count(text: str) -> int:
     for paragraph in re.split(r"\n\s*\n", section(text, "Sources").strip()):
         lines = paragraph.splitlines()
         bullets = [
-            index for index, line in enumerate(lines) if re.match(r"^[-*+]\s+", line)
+            index
+            for index, line in enumerate(lines)
+            if re.match(r"^ {0,3}[-*+]\s+", line)
         ]
         if not bullets:
             entries.append(paragraph)
