@@ -1616,6 +1616,22 @@ One source cites two archives: `70_Research/test/raw/a.json` and `70_Research/te
 """
         self.assertEqual(research.supported_source_count(text), 1)
         self.assertFalse(research.proved(text, 2))
+
+        bulleted = text.replace(
+            "One source cites two archives: `70_Research/test/raw/a.json` and `70_Research/test/raw/b.json`.",
+            "- First source: `70_Research/test/raw/a.json`.\n"
+            "- Second source: `70_Research/test/raw/b.json`.",
+        )
+        paragraphs = text.replace(
+            "One source cites two archives: `70_Research/test/raw/a.json` and `70_Research/test/raw/b.json`.",
+            "First source: `70_Research/test/raw/a.json`.\n\n"
+            "Second source: `70_Research/test/raw/b.json`.",
+        )
+        self.assertEqual(research.supported_source_count(bulleted), 2)
+        self.assertEqual(research.supported_source_count(paragraphs), 2)
+        self.assertTrue(research.proved(bulleted, 2))
+        self.assertTrue(research.proved(paragraphs, 2))
+
         duplicate = text.replace(
             "| 1 | SUPPORTED |",
             "| 1 | TODO | | duplicate |\n| 1 | SUPPORTED |",

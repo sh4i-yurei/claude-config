@@ -1348,11 +1348,24 @@ def supported_source_count(text: str) -> int:
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         if len(cells) >= 4 and cells[1] == "SUPPORTED":
             cited.update(ARCHIVE_REFERENCE.findall(cells[2]))
-    paragraphs = re.split(r"\n\s*\n", section(text, "Sources").strip())
+    entries: list[str] = []
+    for paragraph in re.split(r"\n\s*\n", section(text, "Sources").strip()):
+        lines = paragraph.splitlines()
+        bullets = [
+            index for index, line in enumerate(lines) if re.match(r"^[-*+]\s+", line)
+        ]
+        if not bullets:
+            entries.append(paragraph)
+            continue
+        if bullets[0] > 0:
+            entries.append("\n".join(lines[: bullets[0]]))
+        for position, start in enumerate(bullets):
+            end = bullets[position + 1] if position + 1 < len(bullets) else len(lines)
+            entries.append("\n".join(lines[start:end]))
     return sum(
-        bool(cited & set(ARCHIVE_REFERENCE.findall(paragraph)))
-        for paragraph in paragraphs
-        if paragraph.strip()
+        bool(cited & set(ARCHIVE_REFERENCE.findall(entry)))
+        for entry in entries
+        if entry.strip()
     )
 
 
