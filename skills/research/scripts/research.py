@@ -1051,7 +1051,7 @@ def scriptable_problems(
         problems.append("source floor is not met")
     if PLACEHOLDER in text:
         problems.append("sources file still contains a placeholder")
-    for paragraph in re.split(r"\n\s*\n", section(text, "Sources").strip()):
+    for paragraph in re.split(r"\n\s*\n", section(text, "Sources").strip("\n")):
         content = paragraph.strip()
         heading_only = content and all(
             line.startswith("#") for line in content.splitlines()
@@ -1355,11 +1355,32 @@ def supported_source_count(text: str) -> int:
         cells = [cell.strip() for cell in line.strip("|").split("|")]
         if len(cells) >= 4 and cells[1] == "SUPPORTED":
             cited.update(ARCHIVE_REFERENCE.findall(cells[2]))
-    paragraphs = re.split(r"\n\s*\n", section(text, "Sources").strip())
+    sources_match = re.search(
+        r"^## Sources[ \t]*\r?$([\s\S]*?)(?=^## |\Z)", text, re.MULTILINE
+    )
+    sources_text = sources_match.group(1) if sources_match else ""
+    entries: list[str] = []
+    for paragraph in re.split(r"\n\s*\n", sources_text.strip("\r\n")):
+        lines = paragraph.splitlines()
+        candidates = []
+        for index, line in enumerate(lines):
+            match = re.match(r"^( {0,3})[-*+]\s+", line)
+            if match:
+                candidates.append((index, len(match.group(1))))
+        top_level_indent = min((indent for _index, indent in candidates), default=None)
+        bullets = [index for index, indent in candidates if indent == top_level_indent]
+        if not bullets:
+            entries.append(paragraph)
+            continue
+        if bullets[0] > 0:
+            entries.append("\n".join(lines[: bullets[0]]))
+        for position, start in enumerate(bullets):
+            end = bullets[position + 1] if position + 1 < len(bullets) else len(lines)
+            entries.append("\n".join(lines[start:end]))
     return sum(
-        bool(cited & set(ARCHIVE_REFERENCE.findall(paragraph)))
-        for paragraph in paragraphs
-        if paragraph.strip()
+        bool(cited & set(ARCHIVE_REFERENCE.findall(entry)))
+        for entry in entries
+        if entry.strip()
     )
 
 
