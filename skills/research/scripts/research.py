@@ -865,6 +865,12 @@ def replace_how_far_field(text: str, field: str, value: str) -> str:
     )
 
 
+def normalize_sources_wikilink(text: str, topic: str) -> str:
+    note = f"{topic}-sources"
+    pattern = rf"\[\[[^|\]\n]+/{re.escape(note)}(?:\|[^\]\n]+)?\]\]"
+    return re.sub(pattern, f"[[{note}]]", text)
+
+
 def check_writer_tools(
     events: list[dict], sources_file: Path, synthesis: Path
 ) -> list[str]:
@@ -981,6 +987,7 @@ Do not discuss the temporary generated-field markers in the prose.
             raise TypeError("write call did not report its cost")
         with gateway_lock(LOCK_PATH):
             text = synthesis.read_text(encoding="utf-8")
+            text = normalize_sources_wikilink(text, topic)
             calls = run_call_count(topic, root=root)
             limit = call_limit if call_limit is not None else preset["calls"]
             text = replace_how_far_field(text, "Calls", f"{calls} of {limit}")
