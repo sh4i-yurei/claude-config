@@ -209,6 +209,7 @@ class ResearchLogTests(unittest.TestCase):
             "## Search plan",
             "## Required claims",
             "## Ledger",
+            "## Checked claims",
             "## Rounds",
             "## Queries run",
             "## Sources",
@@ -702,7 +703,7 @@ I found the test result.
             run.call_args.kwargs["working_directory"],
             self.root / "70_Research" / "test-b16",
         )
-        self.assertIn("Do not edit Rounds or Queries run", prompt)
+        self.assertIn("Do not edit Checked claims, Rounds or Queries run", prompt)
 
     def test_final_check_validates_synthesis_and_log_count(self):
         path = self.make_runnable_topic(self.root, "test-b16")
@@ -1142,14 +1143,16 @@ I found the test result.
         check.assert_called_once_with("test-b14", {1}, cost_limit=1.8, root=self.root)
         self.assertIn("| 1 | 0 | 1 | 1 | 0.200000 | proved claims |", path.read_text())
 
-    def test_round_loop_rechecks_existing_supported_claim(self):
+    def test_round_loop_checks_only_new_or_changed_claims_on_second_run(self):
         path = self.make_runnable_topic(self.root)
         archive = path.parent / "raw" / "proof.json"
         self.write_envelope(archive)
         self.log_archive("test-b14", archive)
-        text = path.read_text().replace(
+        text = path.read_text().replace("1. filled", "1. First claim\n2. Second claim")
+        text = text.replace(
             "| 1 | TODO | | open |",
-            "| 1 | SUPPORTED | `70_Research/test-b14/sources/raw/proof.json` | asserted |",
+            "| 1 | SUPPORTED | `70_Research/test-b14/sources/raw/proof.json` | first |\n"
+            "| 2 | SUPPORTED | `70_Research/test-b14/sources/raw/proof.json` | second |",
         )
         text = text.replace(
             "## Sources\n",
@@ -1175,7 +1178,36 @@ I found the test result.
             self.assertEqual(
                 research.run_topic("test-b14", root=self.root), "proved claims"
             )
-        check.assert_called_once_with("test-b14", {1}, cost_limit=1.9, root=self.root)
+        check.assert_called_once_with(
+            "test-b14", {1, 2}, cost_limit=1.9, root=self.root
+        )
+
+        path.write_text(
+            path.read_text()
+            .replace("2. Second claim", "2. Changed second claim\n3. New third claim")
+            .replace(
+                "| 2 | SUPPORTED | `70_Research/test-b14/sources/raw/proof.json` | second |",
+                "| 2 | SUPPORTED | `70_Research/test-b14/sources/raw/proof.json` | changed |\n"
+                "| 3 | SUPPORTED | `70_Research/test-b14/sources/raw/proof.json` | new |",
+            )
+        )
+        with (
+            mock.patch.object(
+                research, "gather_once", return_value={"error": False, "cost_usd": 0.1}
+            ),
+            mock.patch.object(
+                research,
+                "isolated_check",
+                return_value={"cost_usd": 0.1, "rejected": {}, "budget_exit": False},
+            ) as check,
+            mock.patch.object(research, "load_config", return_value=config),
+        ):
+            self.assertEqual(
+                research.run_topic("test-b14", root=self.root), "proved claims"
+            )
+        check.assert_called_once_with(
+            "test-b14", {2, 3}, cost_limit=1.9, root=self.root
+        )
 
     def test_round_loop_restores_protected_plan_fields(self):
         path = self.make_runnable_topic(self.root)
@@ -1516,7 +1548,9 @@ Evidence: `70_Research/test/raw/a.json`.
         }
 
         def exhausted_gather(*_args, **_kwargs):
-            (path.parent / "raw" / "proof.json").write_text("{}")
+            archive = path.parent / "raw" / "proof.json"
+            self.write_envelope(archive)
+            self.log_archive("test-b14", archive)
             path.write_text(
                 path.read_text().replace(
                     "| 1 | TODO | | open |",
@@ -1532,9 +1566,11 @@ Evidence: `70_Research/test/raw/a.json`.
             self.assertEqual(
                 research.run_topic("test-b14", root=self.root), "cost limit"
             )
-        self.assertIn("| 1 | 0 | 1 | 0 | 0.200000 | cost limit |", path.read_text())
-        self.assertIn("| 1 | TODO |", path.read_text())
-        self.assertIn("gather exhausted the cost limit", path.read_text())
+        self.assertIn("| 1 | 0 | 1 | 1 | 0.200000 | cost limit |", path.read_text())
+        self.assertIn(
+            "| 1 | SUPPORTED | `70_Research/test-b14/sources/raw/proof.json` | asserted |",
+            path.read_text(),
+        )
 
         other_root = self.root / "missing"
         self.make_runnable_topic(other_root)
@@ -1903,7 +1939,7 @@ Two: `70_Research/test/raw/b.json`.
         self.assertIn("research-check-", str(run.call_args.kwargs["working_directory"]))
         self.assertNotIn("Bash", run.call_args.args[1])
 
-    def test_isolated_check_fails_closed_on_malformed_or_budget_result(self):
+    def test_isolated_check_failure_results_preserve_supported_ledger(self):
         for index, result in enumerate(
             (
                 {
@@ -1941,7 +1977,10 @@ Two: `70_Research/test/raw/b.json`.
                         )
                         self.assertTrue(outcome["budget_exit"])
                         self.assertEqual(outcome["cost_usd"], 0.2)
-                self.assertIn("| 1 | TODO |", path.read_text())
+                self.assertIn(
+                    "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
+                    path.read_text(),
+                )
                 self.assertTrue(
                     any(
                         str(record["status"]).startswith("failed ")
@@ -1949,7 +1988,7 @@ Two: `70_Research/test/raw/b.json`.
                     )
                 )
 
-    def test_isolated_check_fails_closed_when_agent_output_cannot_parse(self):
+    def test_isolated_check_exception_preserves_supported_ledger(self):
         path = self.make_runnable_topic(self.root, "test-b15")
         archive = path.parent / "raw" / "claim.json"
         archive.write_text("{}")
@@ -1968,15 +2007,18 @@ Two: `70_Research/test/raw/b.json`.
             self.assertRaisesRegex(ValueError, "invalid JSON"),
         ):
             research.isolated_check("test-b15", {1}, cost_limit=0.5, root=self.root)
-        self.assertIn("| 1 | TODO |", path.read_text())
-        self.assertIn("Claude returned invalid JSON", path.read_text())
+        self.assertIn(
+            "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
+            path.read_text(),
+        )
 
     def test_round_loop_accounts_for_isolated_check_budget_exit(self):
         path = self.make_runnable_topic(self.root, "test-b15")
         archive = path.parent / "raw" / "claim.json"
 
         def gather(*_args, **_kwargs):
-            archive.write_text("{}")
+            self.write_envelope(archive)
+            self.log_archive("test-b15", archive)
             path.write_text(
                 path.read_text().replace(
                     "| 1 | TODO | | open |",
@@ -2008,8 +2050,50 @@ Two: `70_Research/test/raw/b.json`.
             self.assertEqual(
                 research.run_topic("test-b15", root=self.root), "cost limit"
             )
-        self.assertIn("| 1 | TODO |", path.read_text())
-        self.assertIn("| 1 | 0 | 1 | 0 | 0.500000 | cost limit |", path.read_text())
+        self.assertIn(
+            "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
+            path.read_text(),
+        )
+        self.assertIn("| 1 | 0 | 1 | 1 | 0.500000 | cost limit |", path.read_text())
+
+    def test_round_loop_cost_limit_before_check_preserves_supported_ledger(self):
+        path = self.make_runnable_topic(self.root, "test-b15")
+        archive = path.parent / "raw" / "claim.json"
+
+        def gather(*_args, **_kwargs):
+            self.write_envelope(archive)
+            self.log_archive("test-b15", archive)
+            path.write_text(
+                path.read_text().replace(
+                    "| 1 | TODO | | open |",
+                    "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
+                )
+            )
+            return {"error": False, "cost_usd": 0.2}
+
+        config = {
+            "presets": {
+                "survey": {
+                    "rounds": 1,
+                    "calls": 5,
+                    "cost_usd": 0.1,
+                    "source_floor": 0,
+                }
+            }
+        }
+        with (
+            mock.patch.object(research, "gather_once", side_effect=gather),
+            mock.patch.object(research, "isolated_check") as check,
+            mock.patch.object(research, "load_config", return_value=config),
+        ):
+            self.assertEqual(
+                research.run_topic("test-b15", root=self.root), "cost limit"
+            )
+        check.assert_not_called()
+        self.assertIn(
+            "| 1 | SUPPORTED | `70_Research/test-b15/sources/raw/claim.json` | asserted |",
+            path.read_text(),
+        )
 
 
 if __name__ == "__main__":
