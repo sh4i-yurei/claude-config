@@ -1630,7 +1630,7 @@ One source cites two archives: `70_Research/test/raw/a.json` and `70_Research/te
         nested_bullet = text.replace(
             "One source cites two archives: `70_Research/test/raw/a.json` and `70_Research/test/raw/b.json`.",
             "- First source: `70_Research/test/raw/a.json`.\n"
-            "    - Detail: `70_Research/test/raw/b.json`.\n"
+            "  - Detail: `70_Research/test/raw/b.json`.\n"
             "- Second source: `70_Research/test/raw/b.json`.",
         )
         paragraphs = text.replace(
