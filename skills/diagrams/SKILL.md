@@ -45,6 +45,12 @@ a `flowchart` with one `subgraph` per C4 boundary.
 - Label every arrow with what travels along it (`HTTPS`, `Tailscale SSH`, `SMTP 587`).
 - Use the real names: `web`, `control`, `hub`. Never invent a machine or a link — if
   you're not sure a connection exists, check the note or the machine, or leave it out.
+- Draw the real route, hop by hop. If traffic goes through a jump host, a subnet router
+  or a proxy, the arrow goes through that box, not straight past it. When one machine
+  reaches another two different ways (a private scrape and a public check, say), draw
+  both, because the difference is usually the point.
+- Before drawing an arrow, find the sentence in the project note that says how that
+  traffic travels. Knowing that two machines talk is not enough.
 - **One story per diagram.** "How the public reaches the site" and "how I reach and
   watch the estate" are two diagrams, not one. Keep to about ten boxes and eight
   arrows. When arrows have to cross between several groups, the layout loops wires
