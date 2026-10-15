@@ -45,23 +45,42 @@ a `flowchart` with one `subgraph` per C4 boundary.
 - Label every arrow with what travels along it (`HTTPS`, `Tailscale SSH`, `SMTP 587`).
 - Use the real names: `web`, `control`, `hub`. Never invent a machine or a link — if
   you're not sure a connection exists, check the note or the machine, or leave it out.
-- Keep it under about fifteen boxes. Bigger than that means two diagrams at two
-  zoom levels.
+- **One story per diagram.** "How the public reaches the site" and "how I reach and
+  watch the estate" are two diagrams, not one. Keep to about ten boxes and eight
+  arrows. When arrows have to cross between several groups, the layout loops wires
+  around the whole picture; that is the signal to split.
+- When two sources both point at the same pair of boxes, put the pair in a `subgraph`
+  and point at the subgraph. Four crossing arrows become two straight ones.
+- Give boxes colour with `classDef`, one class per group (Mark's devices, DigitalOcean
+  servers, the house, outside services), with a dark fill and white text so they read
+  in both themes. Never force a text colour on a `subgraph` label; let the theme pick
+  it, or it vanishes in one of the two themes.
+- A long chain reads better top to bottom (`flowchart TB`) than as one thin strip
+  left to right, which shrinks to nothing at note width.
 
 ## Check it before he sees it
 
-Render it in the `dev` container and look at the image:
+Render it in the `dev` container twice, once in each theme, because Mark's Obsidian
+is dark and GitHub is usually light:
 
 ```bash
-distrobox enter dev -- mmdc -i <scratchpad>/d.mmd -o <scratchpad>/d.png
+distrobox enter dev -- mmdc -i <scratchpad>/d.mmd -o <scratchpad>/d-dark.png -t dark -b '#1e1e1e'
+distrobox enter dev -- mmdc -i <scratchpad>/d.mmd -o <scratchpad>/d-light.png -t default
 ```
 
-Then Read the PNG. Fix and re-render if any of these are true:
+Then Read both PNGs. "It rendered and the paths can be followed" is not a pass. The
+first estate diagram met that bar and still looked awful in Obsidian. Fix and
+re-render if any of these are true:
 
 - it failed to render;
-- labels overlap or run off a box;
-- lines cross so much the path can't be followed;
+- boxes, groups and labels are close enough in colour that nothing stands out;
+- any label overlaps something or disappears in one theme;
+- any wire loops around the outside of the picture, or two wires cross;
+- a box has nothing connected to it and no reason to be there;
+- it is much wider than tall, so the text would be tiny at note width;
 - something in the picture disagrees with the text it sits under.
+
+Would Mark look at it and think it was drawn on purpose? If not, it is not done.
 
 The images are throwaway and go in the scratchpad, never in the vault or a repo. The
 Mermaid text is the source of truth.
