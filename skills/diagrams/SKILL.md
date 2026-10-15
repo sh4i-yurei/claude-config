@@ -74,6 +74,11 @@ distrobox enter dev -- mmdc -i <scratchpad>/d.mmd -o <scratchpad>/d-dark.png -t 
 distrobox enter dev -- mmdc -i <scratchpad>/d.mmd -o <scratchpad>/d-light.png -t default
 ```
 
+`mmdc` here is pinned to the Mermaid version Obsidian bundles (11.13.0, from
+`~/.local/share/mmdc-obsidian`), because a newer Mermaid lays the same text out
+differently and the check has to see what Obsidian draws. When Obsidian updates its
+Mermaid, update the pin in that folder's `package.json` to match.
+
 Then Read both PNGs. "It rendered and the paths can be followed" is not a pass. The
 first estate diagram met that bar and still looked awful in Obsidian. Fix and
 re-render if any of these are true:
