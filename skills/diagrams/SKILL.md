@@ -98,7 +98,23 @@ Mermaid text is the source of truth.
 
 ## Polish for an audience
 
-For a blog post or portfolio piece, the Mermaid source becomes a finished picture
-through Claude Design. Which route — a canvas made directly, or a prompt Mark pastes
-— is decision 5 in [[Diagram workflow]], and it's still being settled. Read that
-decision before doing either.
+For a blog post or portfolio piece, the Mermaid source becomes a finished figure through
+Claude Design (decision 8 in [[Diagram workflow]]):
+
+1. Write Mark a prompt to paste into Claude Design. It lists every component and every
+   connection with its exact label, says which boxes sit inside which boundary, says
+   nothing may be added, removed or renamed, and says no arrow may cross another or pass
+   through a box. Include the Mermaid source as reference.
+2. When he downloads the result, the zip is Claude Design's source, not an image. Extract
+   it into its own empty scratch folder and find the latest version (`… v3.dc.html` beats
+   `… v2.dc.html`).
+3. Render that file to a PNG with the headless Chrome in `~/.local/share/mmdc-obsidian`
+   (Puppeteer, `deviceScaleFactor: 2` for a sharp image), at the size its root `<div>`
+   declares.
+4. Look at the PNG and check it against the list in the prompt, label by label. Claude
+   Design leaves things out and lets arrows run into logos; say exactly what is wrong and
+   give him a one-line fix prompt rather than editing the downloaded copy, so his Claude
+   Design project stays the master.
+5. The blog takes PNGs under `site/images/blog/<post>/` in `~/Documents/keepbreathing`, with
+   `width`, `height`, `loading="lazy"` and full alt text. Which post a figure belongs to is
+   his call.
