@@ -55,6 +55,12 @@ cases = [
         "claude",
     ),
     ("allow", INFRA, "grep -n 'git merge' README.md", "claude"),
+    (
+        "allow",
+        INFRA,
+        "cat > body.md <<'EOF'\nThe hook refuses `git merge` and `gh pr merge`.\nEOF",
+        "claude",
+    ),
     # Prefixes that still put the command in command position.
     ("deny", INFRA, "sudo git merge x", "claude"),
     (

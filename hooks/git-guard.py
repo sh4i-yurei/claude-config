@@ -30,8 +30,9 @@ OVERRIDE = (
 # Only a word in command position counts: the start of the text, after a separator, at the start
 # of a script passed to a shell with -c (as in `bash -lc '...'`), or after a prefix like `--` or
 # `sudo`. Without this, a commit message saying "refuses git merge", or a grep for it, would
-# itself be refused.
-START = r"(?:^|[;&|(`\n{]|-\w*c\s+['\"]|\b(?:sudo|exec|then|do|else|time|env|xargs|nohup)\b|\s--)\s*"
+# itself be refused. A backtick doesn't count, although a shell can run a command inside one:
+# Markdown uses backticks for code, and issue bodies and notes mention `git merge` that way.
+START = r"(?:^|[;&|(\n{]|-\w*c\s+['\"]|\b(?:sudo|exec|then|do|else|time|env|xargs|nohup)\b|\s--)\s*"
 # git, then any global options such as -C <dir> or -c key=value, then the subcommand.
 GIT = START + r"git\b(?P<opts>(?:\s+(?:-C\s+\S+|-c\s+\S+|--[\w-]+(?:=\S+)?))*)\s+"
 MERGE = re.compile(GIT + r"merge(?![\w-])")
