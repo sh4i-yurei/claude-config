@@ -77,7 +77,7 @@ see:
 Ask about the active projects specifically. Six or seven is a short enough list to
 walk.
 
-## 4. Then plan
+## 4. Then plan the next iteration
 
 Now, with the week actually read, ask what he would genuinely pick up. Whatever is
 in `## Next` on a project note should be something he would do if he sat down now.
@@ -86,6 +86,25 @@ Anything else is an open question or a different project.
 If a project has not moved in weeks and he does not intend to pick it up, that is
 what `simmering` is for. Moving it there is not giving up — it is what keeps
 `active` meaning something.
+
+Size every piece of work as it leaves the inbox. A **fix** is done now, gets a
+buildlog line, and is written up by the next session at the latest. A **feature**
+becomes a Next item on an existing project and an issue when that project has a
+repository. **Architecture** means a new system or anything that touches security or
+data; it gets a project note with a full specification before building starts. Size
+is the amount of process the work needs, not an estimate of hours.
+
+Then plan the coming week on the private GitHub Project called **Development**:
+
+1. Move the Ready cards chosen for the coming week into its Iteration. Fill in
+   Priority, Size and Estimate before they move.
+2. Move every unfinished card from the ending iteration into the coming one. This
+   is rollover, not completion; leave Done cards in the iteration where they finished.
+3. Post a board status update that says what finished, how many points completed,
+   what rolled over, what the coming week is for, and what is blocked.
+
+When a milestone closes, post a status update for that outcome too. Close it only
+after its issues are closed and its done-when checks pass.
 
 ## Keep it short
 

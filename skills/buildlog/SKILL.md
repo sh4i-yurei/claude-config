@@ -132,6 +132,7 @@ are paths and key names, not voice.
 Saw:   curl -I still returned max-age=300; nginx -s reload exited clean
 Cause: git pull replaced nginx.conf (new inode); the bind mount was pinned to the old one
 Fix:   docker restart — real fix is mounting the directory, not the file
+Prevent: mount the directory so a future pull cannot leave nginx on a stale inode
 ```
 
 `Saw` comes first deliberately. It's the part that evaporates fastest and the
@@ -142,6 +143,15 @@ output** — not a paraphrase, not a summary. If the terminal said
 If the fix was a workaround, say so and name the real fix. Future-Mark will hit
 this again and the note should tell him whether he's looking at a patch or a
 solution.
+
+After `Fix`, add `Prevent`: the change that stops the same failure from happening
+again. This is different from restoring service. A restart may be the fix, while a
+mount change or a regression test is the prevention.
+
+If an incident paged, record whether it was severity 1 or 2 and add a short
+timeline. An incident that created a ticket instead is severity 3. Those severities
+come from the alert route, so do not invent a separate scale. Keep the incident in
+the buildlog instead of creating a separate postmortem document.
 
 ### When it just worked
 
