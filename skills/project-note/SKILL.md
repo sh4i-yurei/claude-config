@@ -1,6 +1,6 @@
 ---
 name: project-note
-description: Creates and updates project notes in ~/Documents/Second_Brain/10_Projects, grouped into domain subfolders (11_Infrastructure, 12_Web, 13_Mail, 14_Security, 15_Code, 16_Tooling) with finished work in 19_Archive. A project note is the specification for the project and the front door to it: it must be fully decided and research-backed before a buildlog opens. Use this when he starts a new project or has an idea for one, when a decision gets made that should be recorded, when work finishes or changes what is next, when he asks where something stands or what he decided, and after any substantial work session so the note reflects reality. Also use it when a project note has grown wrong — accumulating history, backlogs or how-to content that belongs in other folders. Trigger it even when he does not mention notes, projects folders, or the vault.
+description: Creates and updates project notes in ~/Documents/Second_Brain/10_Projects, grouped into domain subfolders (11_Infrastructure, 12_Web, 13_Mail, 14_Security, 15_Code, 16_Tooling) with finished work in 19_Archive. A project note is the specification for the project and the front door to it: it must be fully decided and research-backed before a buildlog opens. Use this when he starts a new project or has an idea for one, when a decision gets made that should be recorded, when work finishes or changes what is next, when he asks where something stands or what he decided, and after any substantial work session so the note reflects reality. Also use it for program charters, the notes that group related projects under one goal, and before working on any project whose note names a program. Also use it when a project note has grown wrong — accumulating history, backlogs or how-to content that belongs in other folders. Trigger it even when he does not mention notes, projects folders, or the vault.
 ---
 
 # Project notes
@@ -48,6 +48,31 @@ Projects live in a domain subfolder, not at the top of `10_Projects`:
 | 15 | Code | Learning to program by building things worth finishing |
 | 16 | Tooling | Things built to make the other work faster |
 | 19 | Archive | Finished. Moved here, never deleted. |
+
+## Programs
+
+Some projects belong to a **program**: a group of projects run toward one shared goal and
+built on one shared design. The program's **charter** (`type: program`) sits in the same
+domain folder as its projects and holds what belongs to none of them alone: the goal, the
+reference architecture, the order the projects get built in, and the decisions that apply to
+all of them. The full rules are in the "Program charters" section of `10_Projects/README.md`.
+
+- **A project names its program** with `program: "[[Charter Name]]"` in its frontmatter.
+  That field is the only membership record. The charter's member table is a Dataview query
+  over it, so never hand-maintain a list of members.
+- **Before working on a project that names a program, read the charter first.** Its decisions
+  bind every member. A project decision that contradicts one is relitigating it, and has to
+  be raised with Mark rather than recorded.
+- **Put each decision where it applies.** If it affects one project, it goes in that project's
+  note. If it affects several, it goes in the charter, and the projects link to it rather
+  than copying it.
+- **A charter never holds build steps and never gets a buildlog.** Its roadmap orders the
+  projects. Each project's own Next orders that project's work. The vault check warns when a
+  buildlog points at a charter.
+- **A charter closes when its last project does** and nothing more is planned. The vault check
+  refuses a `done` charter with an unfinished member.
+
+Start a charter from `_Templates/program-charter.md`.
 
 ## The five states
 
@@ -136,6 +161,21 @@ would answer it, and it should say plainly that nothing there blocks the build. 
 something there does block the build, the build should not have started. Keep answered
 ones struck through, pointing at the decision that settled them.
 
+## Risks and known limits
+
+A risk is something that might go wrong. A known limit is a deliberate shortcut that is already
+true. Both go under **Risks**, but a known limit is named plainly, with the reason it was accepted
+and what remains incomplete, so a conscious trade-off doesn't turn into an invisible assumption.
+If the project has a repository, mirror it as a `tech-debt` issue labelled `debt:deliberate`: the
+note keeps the reason, and the issue keeps the work visible where changes are made.
+
+**A shortcut only counts as deliberate if the record shows someone chose it.** Search the
+buildlog, the decisions, the reviews and the session transcripts for the moment it was weighed. If
+nobody ever chose it, it isn't a known limit with a reason to record. It's accidental debt:
+`debt:accidental`, a gap found after the fact. Never ask Mark to remember a reason the record
+doesn't hold. The `node_exporter` firewall rules were first written up as deliberate and turned
+out to be accidental (Development workflow decision 45).
+
 ## What does not belong, and where it goes instead
 
 History → `20_Buildlogs`. Step-by-step instructions → `40_Reference`. Draft prose →
@@ -152,3 +192,9 @@ definition of done and its own eventual blog post, it is several projects. Split
 and cross-link with `[[wikilinks]]`. Don't maintain a list of related notes by hand
 — anything carrying `project: "[[This Project]]"` in its frontmatter already shows
 up in the backlinks pane, and a hand-kept list only goes stale.
+
+When the separate efforts all serve one goal and share one design, the original note
+becomes their **program charter** instead. The shared goal, architecture and cross-cutting
+decisions stay in it. Each effort moves out to its own project note carrying
+`program: "[[Original Name]]"`, taking its build steps and project-specific decisions with
+it.
