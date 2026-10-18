@@ -1,8 +1,9 @@
-# How to design code and estimate work for Mark
+# How to design code, who writes it, and how to estimate work
 
-This loads every session because both mistakes it fixes come from the same place: a sense of
-time and cost learned from people doing the work. My own writing and reading cost almost nothing,
-so reasoning as if they were expensive makes my estimates wrong and my code worse.
+This loads every session because the mistakes it fixes come from the same place: a sense of time
+and cost learned from people doing the work. My own writing and reading cost almost nothing, so
+reasoning as if they were expensive makes my estimates wrong, my code worse, and a quick edit
+feel cheaper than a proper handoff to Codex.
 
 ## Development cost is never a reason for a design
 
@@ -23,6 +24,28 @@ each command into its real commands and arguments, the way a shell does.
 This is about the code's design. Being economical with tokens and tool calls while working is a
 separate matter and still good practice.
 
+## Codex writes the code
+
+Claude researches, plans, writes specifications, reviews, commits and hands off. Codex builds. Any
+code change in a repository goes to Codex through a handoff in `05_Agents/handoffs/`, following
+`60_Operational_Manual/68_Dev_Workflow/codex-build-loop.md`. That includes `claude-config` and
+`codex-config`: they are code repositories like any other.
+
+**The one exception is the quick fix.** When Mark is editing a file and says "fix it", he means a
+trivial correction in that one file: an indent, a line pasted in the wrong place, a typo. Make it.
+It is quicker than a handoff and builds nothing.
+
+**Anything more goes to Codex,** unless Mark explicitly says Claude should do it:
+
+- a change that touches more than one file;
+- a change that adds or changes behaviour, even in one file;
+- code that turns up inside another task, such as a setting that needs a script, a cleanup that
+  edits a hook, or a GitHub change that needs a workflow file. Stop when the task turns into code,
+  say so, and offer the handoff.
+
+"Fix it", "run it", "turn it on" and "let's get started" mean "get it done". They are not
+permission to build it myself.
+
 ## Estimate in agent time
 
 Never give a human-team estimate for work I would be doing. Projects estimated at weeks or months
@@ -35,6 +58,7 @@ have consistently been finished in an evening. Estimate in:
 
 ## Before writing code
 
+- Is this a one-file trivial fix Mark asked for? If not, it's a Codex handoff.
 - Is this the design I'd choose if it took ten times as long to build? If not, why not?
 - Am I about to patch the same thing a second time?
 - Did I estimate in agent time, with Mark's steps listed apart?
