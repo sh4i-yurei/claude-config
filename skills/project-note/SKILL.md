@@ -17,6 +17,19 @@ character `ROADMAP.md` it replaced. That file failed not because it was long but
 because it was six documents at once: status, backlog, a security plan, a phased
 rollout, and a blog outline. Length is not the problem; a real project's note is long.
 
+## Sizing the design
+
+`00_Inbox/README.md` is the authority for deciding how much design an item needs. Ask three
+questions: Is it a new system or service? Does it touch authentication, secrets or how data is
+stored? Does it need a data migration or a schema change? Any yes makes it architecture. If the
+size is unclear, call it a feature.
+
+A fix gets a sentence in its issue naming the problem and the change. A feature gets a short
+design in the project note or issue: the problem, approach, affected interfaces or data, test
+plan, and failure modes. Architecture gets that design plus at least two options compared with
+the reasons the other options lost. Ask Codex to critique the architecture before the build
+handoff.
+
 ## Fully decided before the buildlog opens
 
 Before any building starts, the note carries the research, every design question the
