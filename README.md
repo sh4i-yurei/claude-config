@@ -44,9 +44,8 @@ words have their source spans decoded. Ruff excludes explicitly named vendor fil
 The guard reads commands only from Bash PreToolUse events. Codex also sends patch text
 in `tool_input.command` for `apply_patch`, and that text is not a shell command.
 
-Claude Code's `~/.claude/settings.json` registers it for Bash PreToolUse. Claude's
-registration currently has no agent flag. After W1 lands, Claude adds `--agent claude` to
-that command. Codex's `~/Documents/codex-config/hooks.json` registers the same hook for
+Claude Code's `~/.claude/settings.json` registers it for Bash PreToolUse with
+`--agent claude`. Codex's `~/Documents/codex-config/hooks.json` registers the same hook for
 PreToolUse with a 10-second timeout and no agent flag, so the strict rules apply. The
 flag selects a rule set; GitHub repository rules enforce protected branches.
 
@@ -61,6 +60,27 @@ Any other wrapper, shell, interpreter, or `eval` is outside the guard's view.
 This includes a heredoc routed through a compound command into a shell.
 GitHub repository rulesets enforce protected branches even when the guard
 cannot see the eventual command, as decisions 15 and 17 specify.
+
+## Handoff check registration
+
+To check build handoffs before Claude writes or edits them, add this entry to the
+`PreToolUse` hooks in `~/.claude/settings.json` after `handoff-check.py` is on `main`:
+
+```json
+{
+  "matcher": "Write|Edit",
+  "hooks": [
+    {"type": "command", "command": "python3 ~/.claude/hooks/handoff-check.py"}
+  ]
+}
+```
+
+The hook checks only files under `05_Agents/handoffs/` with
+`template: handoff-codex-build` in their frontmatter. It reads required section names
+from `Second_Brain/_Templates/handoff-codex-build.md` on each invocation.
+Tests set `HANDOFF_CHECK_ROOT` and `HANDOFF_BUILD_TEMPLATE` to point the hook at
+repository fixtures. If the template cannot be read, the hook allows the write
+and sends a warning to Claude through `additionalContext`.
 
 ## What is not here
 
