@@ -1,0 +1,3 @@
+[tool.ruff]
+extend-exclude = ["vendor/bashlex"]
+force-exclude = true

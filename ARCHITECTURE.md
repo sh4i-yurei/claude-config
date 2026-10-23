@@ -16,7 +16,7 @@ also runs one of these hooks, `git-guard.py`, from its own `hooks.json`.
 
 | Piece | Responsibility | Interface | Fails how | Must not |
 |---|---|---|---|---|
-| `hooks/git-guard.py` | Refuse git and gh commands that skip the pull request workflow, for Claude and Codex | Claude Code and Codex PreToolUse event on stdin; a deny decision on stdout | Never blocks a command that names neither git nor gh | Judge a command by searching its text; loosen its rules for a caller it can't identify |
+| `hooks/git-guard.py`, `hooks/bashlex_compat.py` | Warn Claude and Codex before guarded git and gh actions; correct parser quoting in one compatibility module imported once per process | PreToolUse event on stdin; optional `--agent claude` hint; deny decision on stdout; vendored bashlex 0.18; 64 KB command cap and five-second judgement budget | Malformed events, oversized commands, and internal errors return a deny decision; hook startup failures and timeouts depend on the agent runtime | Judge commands by text search; treat an agent flag as identity proof; replace GitHub branch rules |
 | `hooks/research-gate.py`, `research-log.py`, `research_log_shared.py` | Pace and record web fetches | PreToolUse and PostToolUse events | Gate refuses; recorder never blocks | Keep a second copy of the domain logic outside `research_log_shared.py` |
 | `hooks/writing-style-gate.py` | Put the writing rules in front of a vault write | PreToolUse event, additional context | Never refuses | Refuse a write |
 | `hooks/vale-post-lint.py` | Lint a post with Vale after it's written | PostToolUse event | Reports, never blocks | Edit the post |

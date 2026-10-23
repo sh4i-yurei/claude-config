@@ -34,6 +34,34 @@ done
 `~/.claude/settings.json` is not in this repository. Because it refers to the hooks through
 `~/.claude/hooks`, it needs no change when this repository moves.
 
+## Agent guard registration
+
+`hooks/git-guard.py` runs under the host's `/usr/bin/python3`. It loads the vendored
+`bashlex` 0.18 parser from `vendor/bashlex/`; its license is beside the package. The
+vendor files match the upstream release. `hooks/bashlex_compat.py` contains both quote
+corrections: heredoc delimiters lose their quotes before matching, and nested script
+words have their source spans decoded. Ruff excludes explicitly named vendor files.
+The guard reads commands only from Bash PreToolUse events. Codex also sends patch text
+in `tool_input.command` for `apply_patch`, and that text is not a shell command.
+
+Claude Code's `~/.claude/settings.json` registers it for Bash PreToolUse. Claude's
+registration currently has no agent flag. After W1 lands, Claude adds `--agent claude` to
+that command. Codex's `~/Documents/codex-config/hooks.json` registers the same hook for
+PreToolUse with a 10-second timeout and no agent flag, so the strict rules apply. The
+flag selects a rule set; GitHub repository rules enforce protected branches.
+
+The guard parses simple commands, lists, pipelines, groups, loops, substitutions,
+and redirects. It follows scripts passed to `bash` or `sh` with a short `-c`
+option, direct heredocs and here-strings fed to those shells, and the named
+options of `distrobox enter`, `flatpak-spawn --host`, `env`, `sudo`, `timeout`,
+`command`, `exec`, `nohup`, and `xargs`. It checks commands up to 64 KB and
+refuses a command when its five-second judgement budget expires.
+
+Any other wrapper, shell, interpreter, or `eval` is outside the guard's view.
+This includes a heredoc routed through a compound command into a shell.
+GitHub repository rulesets enforce protected branches even when the guard
+cannot see the eventual command, as decisions 15 and 17 specify.
+
 ## What is not here
 
 - The vault's integrity check is `.github/scripts/check.py` in the vault. The

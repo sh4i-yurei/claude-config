@@ -1,0 +1,65 @@
+[
+  {
+    "name": "wrapped review",
+    "cwd": "feature",
+    "claude": "allow",
+    "codex": "allow",
+    "command": "distrobox enter dev -- bash -lc 'set -o pipefail; timeout 300s claude -p \"Read ~/Documents/Second_Brain/05_Agents/handoffs/2026-10-22-codex-to-claude-testing-1r-changed-lines-gate-review-1.md and carry out its Request.\" --output-format json --json-schema '\\''{\"type\":\"object\",\"required\":[\"verdict\",\"findings\"],\"properties\":{\"verdict\":{\"enum\":[\"pass\",\"changes_required\"]},\"findings\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"required\":[\"severity\",\"summary\"],\"properties\":{\"severity\":{\"enum\":[\"blocking\",\"non_blocking\"]},\"file\":{\"type\":\"string\"},\"line\":{\"type\":\"integer\"},\"summary\":{\"type\":\"string\"},\"evidence\":{\"type\":\"string\"}}}}}}'\\'' --add-dir ~/Documents/Second_Brain --allowedTools \"Read,Grep,Glob,Bash(git diff:*),Bash(git status:*),Bash(.venv/bin/python -m pytest:*)\" --disallowedTools \"Edit,Write,NotebookEdit,WebFetch,WebSearch\" --settings '\\''{\"disableAllHooks\": true}'\\'' | jq -c '\\''{verdict: .structured_output.verdict, cost: .total_cost_usd, findings: .structured_output.findings}'\\'''"
+  },
+  {
+    "name": "heredoc one",
+    "cwd": "feature",
+    "claude": "allow",
+    "codex": "allow",
+    "command": "python3 - <<'PY'\nimport json,glob,collections\nfiles=glob.glob('/var/home/sh4i_yurei/.codex/sessions/2026/10/22/*.jsonl')\nc=collections.Counter()\nfor p in files:\n for line in open(p):\n  try: o=json.loads(line)\n  except: continue\n  c[o.get('type')]+=1\nprint('files',len(files),'record types',c)\nPY"
+  },
+  {
+    "name": "heredoc two",
+    "cwd": "feature",
+    "claude": "allow",
+    "codex": "allow",
+    "command": ".venv/bin/python - <<'PY'\nimport json\nfrom pathlib import Path\nroot = Path('mutants')\nmeta = [p for p in root.rglob('*.meta') if not any(part.startswith('.') for part in p.relative_to(root).parts)]\ndata = {k: v for p in meta for k, v in json.loads(p.read_text())['exit_code_by_key'].items()}\nsurvivors = sorted(k for k, v in data.items() if v == 0)\nprint(f'{len(meta)} meta files; {len(data)} mutants; {len(survivors)} survivors')\nprint('\\n'.join(survivors))\nPY"
+  },
+  {
+    "name": "heredoc three",
+    "cwd": "feature",
+    "claude": "allow",
+    "codex": "allow",
+    "command": "python3 - <<'PY'\nimport json,glob,collections\nc=collections.Counter()\nfor p in glob.glob('/var/home/sh4i_yurei/.codex/sessions/2026/10/22/*.jsonl'):\n for line in open(p):\n  try:o=json.loads(line)\n  except:continue\n  if o.get('type')=='response_item':\n   z=o.get('payload',{});c[(z.get('type'),z.get('name'))]+=1\nprint(c.most_common(18))\nPY"
+  },
+  {
+    "name": "read-only sampler",
+    "cwd": "feature",
+    "claude": "allow",
+    "codex": "allow",
+    "command": "python3 - <<'PY'\nimport importlib.util,sys,shlex\nprint(sys.executable,sys.version.split()[0], 'bashlex=',importlib.util.find_spec('bashlex'))\nfor x in [\"cat <<'EOF'\\ngit merge\\nEOF\", \"echo $(git merge x)\", \"distrobox enter dev -- bash -lc 'git status; git merge x'\"]:\n z=shlex.shlex(x,posix=True,punctuation_chars=True);z.whitespace_split=True; print(repr(x),list(z))\nPY"
+  },
+  {
+    "name": "feature fast forward",
+    "cwd": "feature",
+    "claude": "allow",
+    "codex": "allow",
+    "command": "git -C ~/Documents/worktrees/claude-config-3.1 merge -q --ff-only origin/main"
+  },
+  {
+    "name": "Claude direct push",
+    "cwd": "config",
+    "claude": "allow",
+    "codex": "deny",
+    "command": "git push -q origin main"
+  },
+  {
+    "name": "Codex feature push",
+    "cwd": "feature",
+    "claude": "allow",
+    "codex": "allow",
+    "command": "git push -u origin feature/agent-aware-git-guard"
+  },
+  {
+    "name": "commit message",
+    "cwd": "feature",
+    "claude": "allow",
+    "codex": "allow",
+    "command": "git commit -m \"refuses git merge\""
+  }
+]
