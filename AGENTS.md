@@ -9,3 +9,7 @@ rules. Use the Research tooling tests once that project provides them. There
 is no repository-wide GitHub Actions workflow; the nested
 `skills/humanizer` package has its own validation workflow and is outside
 Research tooling unless the spec names it.
+
+Read `ARCHITECTURE.md` before changing anything. This checkout is live: `~/.claude` links into
+it, so build in the worktree the handoff names, never by switching branches here. Run the tests
+with `python3 tests/test_git_guard.py` and check whitespace with `git diff --check`.
