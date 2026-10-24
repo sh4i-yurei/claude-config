@@ -1,0 +1,111 @@
+[global."debt:code"]
+color = "F9D0C4"
+description = "Debt in the code itself"
+
+[global."debt:design"]
+color = "F9D0C4"
+description = "Debt in a design decision"
+
+[global."debt:test"]
+color = "F9D0C4"
+description = "Debt in the tests"
+
+[global."debt:docs"]
+color = "F9D0C4"
+description = "Debt in the documentation"
+
+[global."debt:infra"]
+color = "F9D0C4"
+description = "Debt in infrastructure, CI or tooling"
+
+[global."debt:accidental"]
+color = "FEF2C0"
+description = "Debt found after the fact"
+
+[global."debt:bit-rot"]
+color = "FEF2C0"
+description = "Debt from things changing around the code"
+
+[global."debt:deliberate"]
+color = "FEF2C0"
+description = "Debt taken on purpose, with a reason"
+
+[global.deferred]
+color = "BFD4F2"
+description = "Still intended, not now"
+
+[global.dependencies]
+color = "0366d6"
+description = "Pull requests that update a dependency file"
+
+[global.tech-debt]
+color = "FBCA04"
+description = "A known shortcut or decay to pay back"
+
+[global."type:chore"]
+color = "C5DEF5"
+description = "Maintenance with no change in behaviour"
+
+[global."type:docs"]
+color = "0075CA"
+description = "Documentation only"
+
+[global."type:feature"]
+color = "1D76DB"
+description = "New behaviour"
+
+[global."type:fix"]
+color = "D73A4A"
+description = "Something broken"
+
+[global.workflow-exception]
+color = "D93F0B"
+description = "A process step bent on purpose, with the reason on record"
+
+[repository."sh4i-yurei/ci-workflows"."scope:ci"]
+color = "5319E7"
+description = ""
+
+[repository."sh4i-yurei/claude-config"."scope:ci"]
+color = "5319E7"
+description = ""
+
+[repository."sh4i-yurei/codex-config"."scope:ci"]
+color = "5319E7"
+description = ""
+
+[repository."sh4i-yurei/keepbreath-contact-api"."scope:ci"]
+color = "5319E7"
+description = ""
+
+[repository."sh4i-yurei/keepbreathing"."scope:ci"]
+color = "5319E7"
+description = ""
+
+[repository."sh4i-yurei/keepbreathing-infra"."scope:access"]
+color = "C5DEF5"
+description = "Area: access"
+
+[repository."sh4i-yurei/keepbreathing-infra"."scope:baseline"]
+color = "C5DEF5"
+description = "Area: baseline"
+
+[repository."sh4i-yurei/keepbreathing-infra"."scope:ci"]
+color = "5319E7"
+description = "Area: ci"
+
+[repository."sh4i-yurei/keepbreathing-infra"."scope:hub"]
+color = "C5DEF5"
+description = "Area: hub"
+
+[repository."sh4i-yurei/keepbreathing-infra"."scope:node-exporter"]
+color = "C5DEF5"
+description = "Area: node-exporter"
+
+[repository."sh4i-yurei/keepbreathing-infra"."scope:tailscale"]
+color = "C5DEF5"
+description = "Area: tailscale"
+
+[repository."sh4i-yurei/keepbreathing-infra"."scope:workstation"]
+color = "C5DEF5"
+description = "Area: workstation"

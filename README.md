@@ -12,6 +12,11 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
 - `rules/`: instructions loaded into every session, such as the writing style.
 - `tools/`: standalone scripts that aren't skills. `tools/token-usage/` measures where Claude
   Code's and Codex's tokens go, from their session files.
+- `tools/workflow/`: `labels.toml` defines global labels and repository-specific `scope:` labels.
+  `workflow.toml` lists GitHub owners to query and repositories every workflow tool skips.
+  `config.py` validates both files, and `sync_labels.py` applies the definitions to every active
+  repository returned by GitHub for those owners. A newly created repository receives the global
+  labels without an entry in either file.
 - `vale/`: configuration for Vale, the prose linter. `vale.ini` covers posts and is run by
   the `vale-post-lint.py` hook; `vale-sweep.ini` covers every prose note and is run by the
   vault sweep. `styles/` holds the rules: `keepbreath`, my own, and `ai-tells`, a downloaded
@@ -81,6 +86,24 @@ from `Second_Brain/_Templates/handoff-codex-build.md` on each invocation.
 Tests set `HANDOFF_CHECK_ROOT` and `HANDOFF_BUILD_TEMPLATE` to point the hook at
 repository fixtures. If the template cannot be read, the hook allows the write
 and sends a warning to Claude through `additionalContext`.
+
+## Synchronizing labels
+
+Run these commands in the `dev` shell from the `claude-config` repository root. The first loads
+GitHub authentication into the current shell, and the second prints every planned create, update
+and delete without changing GitHub:
+
+```bash
+eval "$(vault-env)"
+/usr/bin/python3 tools/workflow/sync_labels.py --dry-run
+```
+
+After reviewing the plan, omit `--dry-run` to apply it. The command skips archived repositories
+and the exceptions in `workflow.toml`. It keeps undefined labels that still appear on open issues
+or open pull requests, prints their numbers, continues through the other repositories, and exits 1. A configuration
+or GitHub error exits 2. Edit `labels.toml` to change the shared label definitions; repository
+entries there apply only to their named repository. GitHub's default labels are absent from the
+file, so the sync removes unused defaults.
 
 ## What is not here
 

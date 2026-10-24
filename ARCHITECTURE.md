@@ -27,6 +27,10 @@ also runs one of these hooks, `git-guard.py`, from its own `hooks.json`.
 | `rules/` | Instructions loaded into every session | Markdown, loaded whole | — | Hold anything that only some sessions need; that belongs in a skill |
 | `skills/` | One folder per skill: `SKILL.md` and its scripts | Loaded when the skill applies | Per skill | Duplicate a rule from `rules/` |
 | `tools/` | Standalone scripts that aren't skills | Run by hand | — | Be wired to a hook |
+| `tools/workflow/labels.toml` | Define global labels and each repository's scope labels | TOML tables keyed by label name and repository | Invalid definitions stop the sync before GitHub calls | Include GitHub's default labels or a repository list for global labels |
+| `tools/workflow/workflow.toml` | Define owners to query and repositories all workflow tools skip | `owners` and `exceptions` TOML arrays; G3 adds board mappings | Invalid configuration stops the sync before GitHub calls | Enumerate active repositories or hold label definitions |
+| `tools/workflow/config.py` | Read and validate both workflow TOML files for tools | `load()` returns owners, exceptions and label maps; raises `ConfigError` naming a bad file | Refuses missing or malformed configuration | Make GitHub calls or mutate labels |
+| `tools/workflow/sync_labels.py` | Query GitHub repositories and reconcile their labels | `python3 tools/workflow/sync_labels.py [--dry-run]`; exit 0 for success, 1 for labels still used by open issues or pull requests, 2 for an error | Stops on a failed GitHub call; names kept labels and continues | Read TOML itself, list repositories in code, delete a label used by an open issue or pull request, or write in dry-run mode |
 | `vale/` | Vale's configuration and styles | Read by Vale | — | — |
 | `tests/` | Tests for the hooks and tools | `python3 -m pytest` | — | Depend on the live `~/.claude` folder |
 
