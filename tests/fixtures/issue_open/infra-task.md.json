@@ -1,0 +1,18 @@
+{
+  "name": "task.md",
+  "path": ".github/ISSUE_TEMPLATE/task.md",
+  "sha": "567be83e9a44c54101d706c9fd1b94c820cb8bc9",
+  "size": 246,
+  "url": "https://api.github.com/repos/sh4i-yurei/keepbreathing-infra/contents/.github/ISSUE_TEMPLATE/task.md?ref=main",
+  "html_url": "https://github.com/sh4i-yurei/keepbreathing-infra/blob/main/.github/ISSUE_TEMPLATE/task.md",
+  "git_url": "https://api.github.com/repos/sh4i-yurei/keepbreathing-infra/git/blobs/567be83e9a44c54101d706c9fd1b94c820cb8bc9",
+  "download_url": "https://raw.githubusercontent.com/sh4i-yurei/keepbreathing-infra/main/.github/ISSUE_TEMPLATE/task.md?token=BXRT7HHENJT6WIYCFBPHLG3K3WLRXAA",
+  "type": "file",
+  "content": "LS0tCm5hbWU6IFRhc2sKYWJvdXQ6IEEgcGxhbm5lZCBwaWVjZSBvZiB3b3Jr\nLCB1c3VhbGx5IGEgc3RlcCBmcm9tIHRoZSBwcm9qZWN0J3MgTmV4dCBsaXN0\nCi0tLQoKPCEtLSBXaGljaCBwcm9qZWN0IGFuZCBzdGVwIHRoaXMgaXMsIGFu\nZCB3aHkgaXQncyBuZWVkZWQuIC0tPgoKIyMgV2hhdCBjaGFuZ2VzCgojIyBE\nb25lIHdoZW4KCjwhLS0gQSBjaGVjayBzb21lb25lIGVsc2UgY291bGQgcnVu\nLCBub3QgYSBmZWVsaW5nLiAtLT4K\n",
+  "encoding": "base64",
+  "_links": {
+    "self": "https://api.github.com/repos/sh4i-yurei/keepbreathing-infra/contents/.github/ISSUE_TEMPLATE/task.md?ref=main",
+    "git": "https://api.github.com/repos/sh4i-yurei/keepbreathing-infra/git/blobs/567be83e9a44c54101d706c9fd1b94c820cb8bc9",
+    "html": "https://github.com/sh4i-yurei/keepbreathing-infra/blob/main/.github/ISSUE_TEMPLATE/task.md"
+  }
+}

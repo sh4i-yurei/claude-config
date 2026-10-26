@@ -1,0 +1,11 @@
+repo = "sh4i-yurei/claude-config"
+kind = "feature"
+title = "G3a dry-run verification"
+scope = "scope:ci"
+milestone = "Workflow · M1: Global GitHub workflow"
+parent = 20
+
+[body]
+context = "Verify the issue opener against live read-only GitHub data."
+changes = "This is a dry run; no issue is created."
+done = "The command prints its planned calls and leaves GitHub unchanged."

@@ -1,0 +1,140 @@
+{
+  "fields": [
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVQc",
+      "name": "Title",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVQg",
+      "name": "Assignees",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTSSF_lAHODeM_nM4BnbqbzhmAVQk",
+      "name": "Status",
+      "options": [
+        {
+          "id": "f75ad846",
+          "name": "Backlog"
+        },
+        {
+          "id": "3f5349bd",
+          "name": "Ready"
+        },
+        {
+          "id": "e55983cd",
+          "name": "In progress"
+        },
+        {
+          "id": "47fc9ee4",
+          "name": "In review"
+        },
+        {
+          "id": "98236657",
+          "name": "Done"
+        }
+      ],
+      "type": "ProjectV2SingleSelectField"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVQo",
+      "name": "Labels",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVQw",
+      "name": "Linked pull requests",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVQ4",
+      "name": "Milestone",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVQ8",
+      "name": "Repository",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVRM",
+      "name": "Reviewers",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVRU",
+      "name": "Parent issue",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVRc",
+      "name": "Sub-issues progress",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVRk",
+      "name": "Created",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVRs",
+      "name": "Updated",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmAVRw",
+      "name": "Closed",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTSSF_lAHODeM_nM4BnbqbzhmBA-o",
+      "name": "Priority",
+      "options": [
+        {
+          "id": "3ccbee9a",
+          "name": "P1"
+        },
+        {
+          "id": "9e659860",
+          "name": "P2"
+        },
+        {
+          "id": "341e8fa9",
+          "name": "P3"
+        }
+      ],
+      "type": "ProjectV2SingleSelectField"
+    },
+    {
+      "id": "PVTSSF_lAHODeM_nM4BnbqbzhmBA-s",
+      "name": "Size",
+      "options": [
+        {
+          "id": "b745a6d4",
+          "name": "Fix"
+        },
+        {
+          "id": "bd35567a",
+          "name": "Feature"
+        },
+        {
+          "id": "7eacb6ce",
+          "name": "Architecture"
+        }
+      ],
+      "type": "ProjectV2SingleSelectField"
+    },
+    {
+      "id": "PVTF_lAHODeM_nM4BnbqbzhmBA-w",
+      "name": "Estimate",
+      "type": "ProjectV2Field"
+    },
+    {
+      "id": "PVTIF_lAHODeM_nM4BnbqbzhmBA-0",
+      "name": "Iteration",
+      "type": "ProjectV2IterationField"
+    }
+  ],
+  "totalCount": 17
+}

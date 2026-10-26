@@ -1,0 +1,18 @@
+{
+  "name": "config.yml",
+  "path": ".github/ISSUE_TEMPLATE/config.yml",
+  "sha": "3ba13e0cec6cbbfd462e9ebf529dd2093148cd69",
+  "size": 28,
+  "url": "https://api.github.com/repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE/config.yml?ref=main",
+  "html_url": "https://github.com/sh4i-yurei/.github/blob/main/.github/ISSUE_TEMPLATE/config.yml",
+  "git_url": "https://api.github.com/repos/sh4i-yurei/.github/git/blobs/3ba13e0cec6cbbfd462e9ebf529dd2093148cd69",
+  "download_url": "https://raw.githubusercontent.com/sh4i-yurei/.github/main/.github/ISSUE_TEMPLATE/config.yml",
+  "type": "file",
+  "content": "YmxhbmtfaXNzdWVzX2VuYWJsZWQ6IGZhbHNlCg==\n",
+  "encoding": "base64",
+  "_links": {
+    "self": "https://api.github.com/repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE/config.yml?ref=main",
+    "git": "https://api.github.com/repos/sh4i-yurei/.github/git/blobs/3ba13e0cec6cbbfd462e9ebf529dd2093148cd69",
+    "html": "https://github.com/sh4i-yurei/.github/blob/main/.github/ISSUE_TEMPLATE/config.yml"
+  }
+}

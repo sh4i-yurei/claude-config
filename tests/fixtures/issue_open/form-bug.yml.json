@@ -1,0 +1,18 @@
+{
+  "name": "bug.yml",
+  "path": ".github/ISSUE_TEMPLATE/bug.yml",
+  "sha": "7c37b3958dea935e237dd84bbfed353ac4faf45d",
+  "size": 954,
+  "url": "https://api.github.com/repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE/bug.yml?ref=main",
+  "html_url": "https://github.com/sh4i-yurei/.github/blob/main/.github/ISSUE_TEMPLATE/bug.yml",
+  "git_url": "https://api.github.com/repos/sh4i-yurei/.github/git/blobs/7c37b3958dea935e237dd84bbfed353ac4faf45d",
+  "download_url": "https://raw.githubusercontent.com/sh4i-yurei/.github/main/.github/ISSUE_TEMPLATE/bug.yml",
+  "type": "file",
+  "content": "bmFtZTogQnVnCmRlc2NyaXB0aW9uOiBSZXBvcnQgc29tZXRoaW5nIHRoYXQg\nZG9lcyBub3Qgd29yayBhcyBleHBlY3RlZApsYWJlbHM6IFsidHlwZTpmaXgi\nXQpib2R5OgogIC0gdHlwZTogdGV4dGFyZWEKICAgIGlkOiBoYXBwZW5lZAog\nICAgYXR0cmlidXRlczoKICAgICAgbGFiZWw6IFdoYXQgaGFwcGVuZWQKICAg\nICAgZGVzY3JpcHRpb246IERlc2NyaWJlIHRoZSBwcm9ibGVtIGFuZCBwYXN0\nZSB0aGUgcmVhbCBlcnJvciBvciBvdXRwdXQgd2hlbiBhdmFpbGFibGUuCiAg\nICB2YWxpZGF0aW9uczoKICAgICAgcmVxdWlyZWQ6IHRydWUKICAtIHR5cGU6\nIHRleHRhcmVhCiAgICBpZDogZXhwZWN0ZWQKICAgIGF0dHJpYnV0ZXM6CiAg\nICAgIGxhYmVsOiBXaGF0IEkgZXhwZWN0ZWQKICAgICAgZGVzY3JpcHRpb246\nIERlc2NyaWJlIHRoZSByZXN1bHQgeW91IGV4cGVjdGVkLgogIC0gdHlwZTog\ndGV4dGFyZWEKICAgIGlkOiByZXByb2R1Y2UKICAgIGF0dHJpYnV0ZXM6CiAg\nICAgIGxhYmVsOiBIb3cgdG8gcmVwcm9kdWNlCiAgICAgIGRlc2NyaXB0aW9u\nOiBHaXZlIHRoZSBzdGVwcyBpbiBvcmRlciwgc3RhcnRpbmcgZnJvbSBhIGtu\nb3duIHN0YXRlLgogIC0gdHlwZTogdGV4dGFyZWEKICAgIGlkOiB3aGVyZQog\nICAgYXR0cmlidXRlczoKICAgICAgbGFiZWw6IFdoZXJlCiAgICAgIGRlc2Ny\naXB0aW9uOiBOYW1lIHRoZSBwcm9qZWN0IG9yIGVudmlyb25tZW50IHdoZXJl\nIHlvdSBzYXcgaXQgYW5kIHRoZSBjb21taXQgeW91IHVzZWQsIGlmIGFwcGxp\nY2FibGUuCiAgLSB0eXBlOiB0ZXh0YXJlYQogICAgaWQ6IGRvbmUKICAgIGF0\ndHJpYnV0ZXM6CiAgICAgIGxhYmVsOiBEb25lIHdoZW4KICAgICAgZGVzY3Jp\ncHRpb246IEdpdmUgYSBjaGVjayBzb21lb25lIGVsc2UgY2FuIHJ1biB0byBj\nb25maXJtIHRoZSBmaXguCiAgICB2YWxpZGF0aW9uczoKICAgICAgcmVxdWly\nZWQ6IHRydWUK\n",
+  "encoding": "base64",
+  "_links": {
+    "self": "https://api.github.com/repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE/bug.yml?ref=main",
+    "git": "https://api.github.com/repos/sh4i-yurei/.github/git/blobs/7c37b3958dea935e237dd84bbfed353ac4faf45d",
+    "html": "https://github.com/sh4i-yurei/.github/blob/main/.github/ISSUE_TEMPLATE/bug.yml"
+  }
+}

@@ -13,10 +13,11 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
 - `tools/`: standalone scripts that aren't skills. `tools/token-usage/` measures where Claude
   Code's and Codex's tokens go, from their session files.
 - `tools/workflow/`: `labels.toml` defines global labels and repository-specific `scope:` labels.
-  `workflow.toml` lists GitHub owners to query and repositories every workflow tool skips.
+  `workflow.toml` lists GitHub owners, workflow exceptions and each active repository's board.
   `config.py` validates both files, and `sync_labels.py` applies the definitions to every active
   repository returned by GitHub for those owners. A newly created repository receives the global
-  labels without an entry in either file.
+  labels without an entry in either file. `issue.py open` creates a checked issue and places it
+  and stray open issues on that repository's board.
 - `vale/`: configuration for Vale, the prose linter. `vale.ini` covers posts and is run by
   the `vale-post-lint.py` hook; `vale-sweep.ini` covers every prose note and is run by the
   vault sweep. `styles/` holds the rules: `keepbreath`, my own, and `ai-tells`, a downloaded
@@ -104,6 +105,54 @@ or open pull requests, prints their numbers, continues through the other reposit
 or GitHub error exits 2. Edit `labels.toml` to change the shared label definitions; repository
 entries there apply only to their named repository. GitHub's default labels are absent from the
 file, so the sync removes unused defaults.
+
+## Opening an issue from a file
+
+Run these commands in the `dev` shell from the repository root. PyYAML is needed by the same
+`/usr/bin/python3` that runs the command. If it is absent in `dev`, install it in that shell with
+`/usr/bin/python3 -m pip install --user --break-system-packages PyYAML`.
+
+```bash
+eval "$(vault-env)"
+/usr/bin/python3 tools/workflow/issue.py open issue.toml --dry-run
+/usr/bin/python3 tools/workflow/issue.py open issue.toml
+```
+
+The first invocation validates the file, reads GitHub's current issue form, labels, milestone,
+related issues and board, and prints the body and planned GitHub calls. It changes nothing. Review
+that output before running the second invocation. The command refuses a repository until it has a
+`[boards]` entry in `workflow.toml`; it prints the line to add. A repository with its own Markdown
+issue templates is refused until those templates are replaced by forms. Exit 2 means the input
+was refused or a GitHub step failed. If a step fails after issue creation, the output includes the
+new issue URL and lists completed and unfinished steps.
+
+The input is TOML. `repo`, `kind` and `title` are required. `kind` is the name of a `.yml` or
+`.yaml` issue form without its extension. `body` is a TOML table keyed by that form's field ids;
+required fields must have values. The optional `scope` is a `scope:` label from `labels.toml`,
+and is required when that repository defines scope labels. `milestone` is a milestone title or
+number. `parent` is an issue number, and `blocked_by` is a list of issue numbers. Each related
+issue must exist in the same repository. These are the only accepted keys. For example:
+
+```toml
+repo = "sh4i-yurei/claude-config"
+kind = "feature"
+title = "Describe the feature"
+scope = "scope:ci"
+milestone = "Workflow · M1: Global GitHub workflow"
+parent = 20
+blocked_by = [22]
+
+[body]
+context = "Project, step and reason."
+changes = "What changes."
+done = "The condition that finishes the issue."
+```
+
+The tool reads this repository's forms when it has any; otherwise it reads the forms from
+the issue repository owner's `.github` repository. It renders fields in form order, adds the form's labels and the scope label,
+links the parent and blockers, and puts the issue on its configured board with Status Backlog.
+Priority, Size, Estimate and Iteration stay empty for triage. It also adds any open issues from
+the same repository that are missing from that board, with Status Backlog.
 
 ## What is not here
 

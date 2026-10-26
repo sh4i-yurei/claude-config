@@ -1,0 +1,189 @@
+[
+  {
+    "id": 12811926845,
+    "node_id": "LA_kwDOUrsrDs8AAAAC-6Z9PQ",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/debt:accidental",
+    "name": "debt:accidental",
+    "color": "FEF2C0",
+    "default": false,
+    "description": "Debt found after the fact",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12823871183,
+    "node_id": "LA_kwDOUrsrDs8AAAAC_Fy-zw",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/debt:bit-rot",
+    "name": "debt:bit-rot",
+    "color": "FEF2C0",
+    "default": false,
+    "description": "Debt from things changing around the code",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12823871009,
+    "node_id": "LA_kwDOUrsrDs8AAAAC_Fy-IQ",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/debt:code",
+    "name": "debt:code",
+    "color": "F9D0C4",
+    "default": false,
+    "description": "Debt in the code itself",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12823871237,
+    "node_id": "LA_kwDOUrsrDs8AAAAC_Fy_BQ",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/debt:deliberate",
+    "name": "debt:deliberate",
+    "color": "FEF2C0",
+    "default": false,
+    "description": "Debt taken on purpose, with a reason",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12823871031,
+    "node_id": "LA_kwDOUrsrDs8AAAAC_Fy-Nw",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/debt:design",
+    "name": "debt:design",
+    "color": "F9D0C4",
+    "default": false,
+    "description": "Debt in a design decision",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12823871095,
+    "node_id": "LA_kwDOUrsrDs8AAAAC_Fy-dw",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/debt:docs",
+    "name": "debt:docs",
+    "color": "F9D0C4",
+    "default": false,
+    "description": "Debt in the documentation",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12823871141,
+    "node_id": "LA_kwDOUrsrDs8AAAAC_Fy-pQ",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/debt:infra",
+    "name": "debt:infra",
+    "color": "F9D0C4",
+    "default": false,
+    "description": "Debt in infrastructure, CI or tooling",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12823871059,
+    "node_id": "LA_kwDOUrsrDs8AAAAC_Fy-Uw",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/debt:test",
+    "name": "debt:test",
+    "color": "F9D0C4",
+    "default": false,
+    "description": "Debt in the tests",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12795741341,
+    "node_id": "LA_kwDOUrsrDs8AAAAC-q-EnQ",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/deferred",
+    "name": "deferred",
+    "color": "BFD4F2",
+    "default": false,
+    "description": "Still intended, not now",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12823871370,
+    "node_id": "LA_kwDOUrsrDs8AAAAC_Fy_ig",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/dependencies",
+    "name": "dependencies",
+    "color": "0366d6",
+    "default": false,
+    "description": "Pull requests that update a dependency file",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12795741212,
+    "node_id": "LA_kwDOUrsrDs8AAAAC-q-EHA",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/scope:ci",
+    "name": "scope:ci",
+    "color": "5319E7",
+    "default": false,
+    "description": "",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12811926785,
+    "node_id": "LA_kwDOUrsrDs8AAAAC-6Z9AQ",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/tech-debt",
+    "name": "tech-debt",
+    "color": "FBCA04",
+    "default": false,
+    "description": "A known shortcut or decay to pay back",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12795740898,
+    "node_id": "LA_kwDOUrsrDs8AAAAC-q-C4g",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/type:chore",
+    "name": "type:chore",
+    "color": "C5DEF5",
+    "default": false,
+    "description": "Maintenance with no change in behaviour",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12795741074,
+    "node_id": "LA_kwDOUrsrDs8AAAAC-q-Dkg",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/type:docs",
+    "name": "type:docs",
+    "color": "0075CA",
+    "default": false,
+    "description": "Documentation only",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12795740774,
+    "node_id": "LA_kwDOUrsrDs8AAAAC-q-CZg",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/type:feature",
+    "name": "type:feature",
+    "color": "1D76DB",
+    "default": false,
+    "description": "New behaviour",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12823871586,
+    "node_id": "LA_kwDOUrsrDs8AAAAC_FzAYg",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/type:fix",
+    "name": "type:fix",
+    "color": "D73A4A",
+    "default": false,
+    "description": "Something broken",
+    "archived_at": null,
+    "archived_by": null
+  },
+  {
+    "id": 12795741278,
+    "node_id": "LA_kwDOUrsrDs8AAAAC-q-EXg",
+    "url": "https://api.github.com/repos/sh4i-yurei/claude-config/labels/workflow-exception",
+    "name": "workflow-exception",
+    "color": "D93F0B",
+    "default": false,
+    "description": "A process step bent on purpose, with the reason on record",
+    "archived_at": null,
+    "archived_by": null
+  }
+]

@@ -1,2 +1,11 @@
 owners = ["sh4i-yurei"]
 exceptions = ["sh4i-yurei/second-brain"]
+
+[boards]
+"sh4i-yurei/.github" = { owner = "sh4i-yurei", number = 1 }
+"sh4i-yurei/ci-workflows" = { owner = "sh4i-yurei", number = 1 }
+"sh4i-yurei/claude-config" = { owner = "sh4i-yurei", number = 1 }
+"sh4i-yurei/codex-config" = { owner = "sh4i-yurei", number = 1 }
+"sh4i-yurei/keepbreath-contact-api" = { owner = "sh4i-yurei", number = 1 }
+"sh4i-yurei/keepbreathing" = { owner = "sh4i-yurei", number = 1 }
+"sh4i-yurei/keepbreathing-infra" = { owner = "sh4i-yurei", number = 1 }

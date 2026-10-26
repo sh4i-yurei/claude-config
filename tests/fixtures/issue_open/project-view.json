@@ -1,0 +1,20 @@
+{
+  "closed": false,
+  "fields": {
+    "totalCount": 17
+  },
+  "id": "PVT_kwHODeM_nM4Bnbqb",
+  "items": {
+    "totalCount": 70
+  },
+  "number": 1,
+  "owner": {
+    "login": "sh4i-yurei",
+    "type": "User"
+  },
+  "public": false,
+  "readme": "## What this board is\n\nEvery open issue from my repositories that have issues, `keepbreathing-infra`, `keepbreath-contact-api` and `keepbreathing`, in one place. Planning for all my work happens in my notes. This board is where the repository work gets built, one issue and one pull request at a time.\n\n## How a card moves\n\n| Status | Means |\n| --- | --- |\n| **Backlog** | Captured. No decision recorded on the issue yet, or deferred. New issues land here automatically. |\n| **Ready** | Decided and buildable, with Priority, Size, Estimate and Iteration set. |\n| **In progress** | A branch exists, and the issue is assigned to me. |\n| **In review** | A pull request says \"Closes #N\" and is waiting on my review and merge. Linking the pull request moves the card here automatically. |\n| **Done** | Merged or closed. Moves here automatically. |\n\nEvery change to `main` in these repositories goes through a pull request with required CI checks and a squash merge.\n\n## Fields\n\n- **Priority**: P1 next up, P2 soon, P3 someday. The top of Ready is what's next.\n- **Size**: how much process the work needs. A fix is a branch and a short intent statement. A feature is an issue. Architecture gets a written specification before any build.\n- **Estimate**: points, 1, 2, 3, 5 or 8. Anything that would be an 8 is split into sub-issues.\n- **Iteration**: one-week iterations starting Mondays. Each week starts with a review that plans the next one, and the review posts a status update here.\n- **Milestone**: an outcome that works on its own, made of several issues.\n\n## Views\n\n- **This week**: the current iteration as a board, with point totals per column.\n- **Board**: all open work, sliced by repository.\n- **Backlog**: Backlog and Ready, by priority. Where each week gets planned.\n- **Review queue**: pull requests waiting on me, oldest first.\n- **Roadmap**: the coming weeks, with milestones marked.\n- **All work**: every field, for audits.",
+  "shortDescription": "Every open issue across my repositories, from captured to merged.",
+  "title": "Development",
+  "url": "https://github.com/users/sh4i-yurei/projects/1"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "feature.yml",
+  "path": ".github/ISSUE_TEMPLATE/feature.yml",
+  "sha": "2e673e630d7202b5acf0672c284119f4cd24eeca",
+  "size": 589,
+  "url": "https://api.github.com/repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE/feature.yml?ref=main",
+  "html_url": "https://github.com/sh4i-yurei/.github/blob/main/.github/ISSUE_TEMPLATE/feature.yml",
+  "git_url": "https://api.github.com/repos/sh4i-yurei/.github/git/blobs/2e673e630d7202b5acf0672c284119f4cd24eeca",
+  "download_url": "https://raw.githubusercontent.com/sh4i-yurei/.github/main/.github/ISSUE_TEMPLATE/feature.yml",
+  "type": "file",
+  "content": "bmFtZTogRmVhdHVyZQpkZXNjcmlwdGlvbjogUHJvcG9zZSBhIG5ldyBjYXBh\nYmlsaXR5CmxhYmVsczogWyJ0eXBlOmZlYXR1cmUiXQpib2R5OgogIC0gdHlw\nZTogdGV4dGFyZWEKICAgIGlkOiBjb250ZXh0CiAgICBhdHRyaWJ1dGVzOgog\nICAgICBsYWJlbDogUHJvamVjdCwgc3RlcCwgYW5kIHJlYXNvbgogICAgICBk\nZXNjcmlwdGlvbjogTmFtZSB0aGUgcHJvamVjdCBhbmQgc3RlcCB0aGlzIGJl\nbG9uZ3MgdG8sIGFuZCBleHBsYWluIHdoeSBpdCBpcyBuZWVkZWQuCiAgLSB0\neXBlOiB0ZXh0YXJlYQogICAgaWQ6IGNoYW5nZXMKICAgIGF0dHJpYnV0ZXM6\nCiAgICAgIGxhYmVsOiBXaGF0IGNoYW5nZXMKICAgICAgZGVzY3JpcHRpb246\nIERlc2NyaWJlIHRoZSBiZWhhdmlvciBvciByZXN1bHQgdGhpcyBhZGRzLgog\nIC0gdHlwZTogdGV4dGFyZWEKICAgIGlkOiBkb25lCiAgICBhdHRyaWJ1dGVz\nOgogICAgICBsYWJlbDogRG9uZSB3aGVuCiAgICAgIGRlc2NyaXB0aW9uOiBH\naXZlIGEgY2hlY2sgc29tZW9uZSBlbHNlIGNhbiBydW4gdG8gY29uZmlybSB0\naGUgcmVzdWx0LgogICAgdmFsaWRhdGlvbnM6CiAgICAgIHJlcXVpcmVkOiB0\ncnVlCg==\n",
+  "encoding": "base64",
+  "_links": {
+    "self": "https://api.github.com/repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE/feature.yml?ref=main",
+    "git": "https://api.github.com/repos/sh4i-yurei/.github/git/blobs/2e673e630d7202b5acf0672c284119f4cd24eeca",
+    "html": "https://github.com/sh4i-yurei/.github/blob/main/.github/ISSUE_TEMPLATE/feature.yml"
+  }
+}

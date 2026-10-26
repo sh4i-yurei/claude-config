@@ -77,3 +77,23 @@ def load():
     ):
         raise ConfigError("workflow.toml: missing or invalid exceptions")
     return owners, set(exceptions), global_labels, repository_labels
+
+
+def load_boards():
+    """Return validated repository-to-project mappings from workflow.toml."""
+    data = _read("workflow.toml").get("boards")
+    if not isinstance(data, dict):
+        raise ConfigError("workflow.toml: missing or invalid boards table")
+    for repo, board in data.items():
+        if (
+            not isinstance(repo, str)
+            or "/" not in repo
+            or not isinstance(board, dict)
+            or set(board) != {"owner", "number"}
+            or not isinstance(board["owner"], str)
+            or not board["owner"]
+            or type(board["number"]) is not int
+            or board["number"] < 1
+        ):
+            raise ConfigError(f"workflow.toml: invalid board mapping for {repo}")
+    return data
