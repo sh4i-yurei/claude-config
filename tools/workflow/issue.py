@@ -198,25 +198,25 @@ def related(repo, number):
     return issue
 
 
-def board_data(board):
+def board_data(board, status_name="Backlog"):
     base = [str(board["number"]), "--owner", board["owner"], "--format", "json"]
     project = gh(["project", "view", *base])
     fields = gh(["project", "field-list", *base, "--limit", "100"])["fields"]
     items = gh(["project", "item-list", *base, "--limit", "10000"])["items"]
     status = next((field for field in fields if field.get("name") == "Status"), None)
-    backlog = next(
+    option = next(
         (
             option
             for option in (status or {}).get("options", [])
-            if option["name"] == "Backlog"
+            if option["name"] == status_name
         ),
         None,
     )
-    if not status or not backlog:
+    if not status or not option:
         raise IssueError(
-            f"project {board['owner']}/{board['number']}: no Status Backlog option"
+            f"project {board['owner']}/{board['number']}: no Status {status_name} option"
         )
-    return project["id"], status["id"], backlog["id"], items
+    return project["id"], status["id"], option["id"], items
 
 
 def board_add(board, url):
@@ -450,14 +450,171 @@ def open_issue(path, dry_run):
     return 0
 
 
+def form_sections(body):
+    """Read GitHub's issue-form heading layout and the text below each heading."""
+    sections = {}
+    heading = None
+    for line in body.splitlines():
+        if line.startswith("### "):
+            heading = line[4:].strip()
+            sections.setdefault(heading, [])
+        elif heading is not None:
+            sections[heading].append(line)
+    return {name: "\n".join(lines).strip() for name, lines in sections.items()}
+
+
+def ready_issue(reference, check):
+    if reference.count("#") != 1:
+        raise IssueError("issue must be owner/repo#number")
+    repo, number_text = reference.split("#")
+    if (
+        repo.count("/") != 1
+        or not all(repo.split("/"))
+        or not number_text.isdigit()
+        or int(number_text) < 1
+    ):
+        raise IssueError("issue must be owner/repo#number")
+    number = int(number_text)
+    try:
+        _, _, _, repository_labels = load()
+        boards = load_boards()
+    except ConfigError as error:
+        raise IssueError(str(error)) from error
+    if repo not in boards:
+        raise IssueError(f"no board mapping for {repo}")
+    issue = related(repo, number)
+    board = boards[repo]
+    project_id, status_id, ready_id, items = board_data(board, "Ready")
+    issue_url = issue["html_url"]
+    item = next(
+        (item for item in items if item.get("content", {}).get("url") == issue_url),
+        None,
+    )
+    if item is None:
+        raise IssueError(f"{reference} is not on its repository's board")
+
+    source, files = form_files(repo)
+    forms = [read_form(source, file["name"]) for file in files.values()]
+    labels = [label["name"] for label in issue.get("labels", [])]
+    types = [label for label in labels if label.startswith("type:")]
+    matched = [
+        form
+        for form in forms
+        if any(label in types for label in form.get("labels", []))
+    ]
+    form = matched[0] if len(types) == 1 and len(matched) == 1 else None
+    scope_labels = set(repository_labels.get(repo, {}))
+    scopes = [label for label in labels if label.startswith("scope:")]
+    output = []
+    unmet = False
+
+    def report(ok, name, detail=""):
+        nonlocal unmet
+        output.append(f"{'met' if ok else 'unmet'}: {name}{detail}")
+        unmet |= not ok
+
+    report(
+        len(types) == 1 and form is not None,
+        "one type: label",
+        " (" + ", ".join(types) + ")" if types and len(types) != 1 else "",
+    )
+    report(
+        not scope_labels or len(scopes) == 1 and scopes[0] in scope_labels,
+        "a scope: label" if scope_labels else "scope: label not required",
+        " (" + ", ".join(scopes) + ")"
+        if scopes and (len(scopes) != 1 or scopes[0] not in scope_labels)
+        else "",
+    )
+
+    def required_labels(candidate):
+        return {
+            field["attributes"]["label"]
+            for field in candidate["body"]
+            if field.get("type") != "markdown"
+            and field.get("validations", {}).get("required")
+        }
+
+    required = (
+        required_labels(form)
+        if form
+        else set.intersection(*(required_labels(candidate) for candidate in forms))
+        if forms
+        else set()
+    )
+    sections = form_sections(issue.get("body") or "")
+    missing = sorted(
+        label
+        for label in required
+        if not sections.get(label) or sections[label] == "_No response_"
+    )
+    if missing:
+        for label in missing:
+            report(False, label)
+    else:
+        report(True, "required form sections")
+
+    for field in ("Priority", "Size", "Estimate"):
+        report(item.get(field.lower()) not in (None, ""), field)
+    try:
+        parent = api(f"repos/{repo}/issues/{number}/parent")
+    except IssueError as error:
+        if "No parent issue found" in str(error) and "404" in str(error):
+            parent = None
+        else:
+            raise
+    report(bool(issue.get("milestone") or parent), "milestone or parent")
+    blockers = api(f"repos/{repo}/issues/{number}/dependencies/blocked_by")
+    if not isinstance(blockers, list):
+        raise IssueError(f"{reference}: blocked_by response is not a list")
+    open_blockers = [blocker for blocker in blockers if blocker.get("state") == "open"]
+    if open_blockers:
+        for blocker in open_blockers:
+            blocker_repo = blocker["repository"]["full_name"]
+            report(
+                False,
+                f"open blocker {blocker_repo}#{blocker['number']}",
+            )
+    else:
+        report(True, "no open blocking issues")
+    architecture = item.get("size") == "Architecture"
+    design = any(
+        line.startswith("Design: ") for line in (issue.get("body") or "").splitlines()
+    )
+    report(
+        not architecture or design,
+        "Architecture design link"
+        if architecture and design
+        else "Architecture design link not required"
+        if not architecture
+        else "Design: line",
+    )
+    if unmet:
+        print("\n".join(output))
+        return 1
+    if not check:
+        board_status(project_id, status_id, ready_id, item["id"])
+        output.append(f"set Status Ready on {reference}")
+    else:
+        output.append(f"ready: {reference}")
+    print("\n".join(output))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     opener = commands.add_parser("open", help="create a checked issue from a TOML file")
     opener.add_argument("file")
     opener.add_argument("--dry-run", action="store_true")
+    ready_parser = commands.add_parser(
+        "ready", help="check an issue's Definition of Ready"
+    )
+    ready_parser.add_argument("issue")
+    ready_parser.add_argument("--check", action="store_true")
     arguments = parser.parse_args(argv)
     try:
+        if arguments.command == "ready":
+            return ready_issue(arguments.issue, arguments.check)
         return open_issue(arguments.file, arguments.dry_run)
     except IssueError as error:
         print(error)

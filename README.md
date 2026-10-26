@@ -154,6 +154,24 @@ links the parent and blockers, and puts the issue on its configured board with S
 Priority, Size, Estimate and Iteration stay empty for triage. It also adds any open issues from
 the same repository that are missing from that board, with Status Backlog.
 
+## Checking whether an issue is Ready
+
+Run this command in the `dev` shell from the repository root. It checks the issue against its
+current form and board fields. `--check` reports the same conditions without changing the board.
+
+```bash
+eval "$(vault-env)"
+/usr/bin/python3 tools/workflow/issue.py ready sh4i-yurei/claude-config#23 --check
+/usr/bin/python3 tools/workflow/issue.py ready sh4i-yurei/claude-config#23
+```
+
+The command requires one `type:` label, a defined `scope:` label where the repository has scope
+labels, every required form section, Priority, Size and Estimate, a milestone or parent, and no
+open issue blocking it. An Architecture-sized issue also needs a body line beginning `Design: `.
+It prints each condition as met or unmet. Exit 0 means all conditions are met and, without
+`--check`, the board Status is Ready. Exit 1 means an issue needs more work. Exit 2 means a
+configuration or GitHub error, including a missing board mapping or board item.
+
 ## What is not here
 
 - The vault's integrity check is `.github/scripts/check.py` in the vault. The
