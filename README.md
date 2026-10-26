@@ -142,7 +142,8 @@ The input is TOML. `repo`, `kind` and `title` are required. `kind` is the name o
 required fields must have values. The optional `scope` is a `scope:` label from `labels.toml`,
 and is required when that repository defines scope labels. `milestone` is a milestone title or
 number. `parent` is an issue number, and `blocked_by` is a list of issue numbers. Each related
-issue must exist in the same repository. These are the only accepted keys. For example:
+issue must exist in the same repository. The optional `labels` list accepts global label names
+from `labels.toml`, excluding `type:` and `scope:` labels. These are the only accepted keys. For example:
 
 ```toml
 repo = "sh4i-yurei/claude-config"

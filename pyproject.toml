@@ -5,4 +5,4 @@ force-exclude = true
 [tool.mutmut]
 source_paths = ["tools/workflow/issue.py"]
 also_copy = ["tools/workflow/config.py", "tools/workflow/labels.toml", "tools/workflow/workflow.toml"]
-pytest_add_cli_args_test_selection = ["tests/test_issue_ready.py"]
+pytest_add_cli_args_test_selection = ["tests/test_issue_ready.py", "tests/test_issue_open.py"]

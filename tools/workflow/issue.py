@@ -107,7 +107,7 @@ def read_form(repo, filename):
     return form
 
 
-def validate(data, form=None, scopes=None):
+def validate(data, form=None, scopes=None, global_labels=None):
     problems = []
     allowed = {
         "repo",
@@ -117,6 +117,7 @@ def validate(data, form=None, scopes=None):
         "milestone",
         "parent",
         "blocked_by",
+        "labels",
         "body",
     }
     problems += [f"unknown file key {key}" for key in sorted(set(data) - allowed)]
@@ -169,6 +170,26 @@ def validate(data, form=None, scopes=None):
                     for number in blocked
                     if type(number) is not int or number < 1
                 ]
+    if "labels" in data and global_labels is not None:
+        extra_labels = data["labels"]
+        if not isinstance(extra_labels, list) or not all(
+            isinstance(label, str) and label.strip() for label in extra_labels
+        ):
+            problems.append("labels must be a list of label names")
+        else:
+            for label in extra_labels:
+                if label.startswith("type:"):
+                    problems.append(
+                        f"labels: {label} is set by the issue form, not the labels list"
+                    )
+                elif label.startswith("scope:"):
+                    problems.append(
+                        f"labels: {label} is set by the scope key, not the labels list"
+                    )
+                elif label not in global_labels:
+                    problems.append(
+                        f"labels: {label} is not a global label in labels.toml"
+                    )
     return problems
 
 
@@ -258,7 +279,7 @@ def open_issue(path, dry_run):
     data = read_input(path)
     repo = data.get("repo")
     try:
-        _, exceptions, _, labels = load()
+        _, exceptions, global_labels, labels = load()
         boards, products = load_board_config()
     except ConfigError as error:
         raise IssueError(str(error)) from error
@@ -293,7 +314,10 @@ def open_issue(path, dry_run):
             problems.append(
                 f"kind {kind!r} matches no issue form; valid kinds: {', '.join(sorted(files))}"
             )
-    problems = validate(data, form, labels.get(repo, {}) if mapped else None) + problems
+    problems = (
+        validate(data, form, labels.get(repo, {}) if mapped else None, global_labels)
+        + problems
+    )
     milestone_number = None
     if mapped and (
         "milestone" in data
@@ -356,7 +380,11 @@ def open_issue(path, dry_run):
     body = render_body(form, data["body"])
     issue_labels = list(
         dict.fromkeys(
-            [*form.get("labels", []), *([data["scope"]] if "scope" in data else [])]
+            [
+                *form.get("labels", []),
+                *([data["scope"]] if "scope" in data else []),
+                *data.get("labels", []),
+            ]
         )
     )
     create = {"title": data["title"], "body": body, "labels": issue_labels}

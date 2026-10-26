@@ -1,3 +1,6 @@
+from contextlib import redirect_stdout
+import base64
+import io
 import json
 import os
 from pathlib import Path
@@ -6,14 +9,19 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/issue_open"
 WORKFLOW = ROOT / "tools/workflow"
 REPO = "sh4i-yurei/claude-config"
+sys.path.insert(0, str(WORKFLOW))
 sys.path.insert(0, str(ROOT))
+import tools.workflow.issue as issue_tool
+import config as workflow_config
 from tools.workflow.config import load_boards
 
 
@@ -54,19 +62,169 @@ class IssueOpen(unittest.TestCase):
     def run_open(self, data, *options):
         path = self.root / "issue.toml"
         path.write_text(data)
-        return subprocess.run(
-            [sys.executable, self.workflow / "issue.py", "open", str(path), *options],
-            cwd=self.root,
-            env=self.env,
-            text=True,
-            capture_output=True,
-        )
+        output = io.StringIO()
+        with (
+            patch.dict(os.environ, self.env),
+            patch.object(workflow_config, "DIRECTORY", self.workflow),
+            redirect_stdout(output),
+        ):
+            code = issue_tool.main(["open", str(path), *options])
+        return SimpleNamespace(returncode=code, stdout=output.getvalue(), stderr="")
 
     def valid(self, extra=""):
         return (
             f'repo = "{REPO}"\nkind = "feature"\ntitle = "A feature"\n'
             f'scope = "scope:ci"\n{extra}\n[body]\ndone = "It works"\n'
         )
+
+    def create_request(self, output):
+        prefix = f"Would call: POST repos/{REPO}/issues "
+        line = next(line for line in output.splitlines() if line.startswith(prefix))
+        return json.loads(line.removeprefix(prefix))
+
+    def issue_creates(self):
+        return [
+            call
+            for call in self.calls()
+            if call["args"][:2] == ["api", f"repos/{REPO}/issues"]
+            and "--method" in call["args"]
+        ]
+
+    def assert_no_writes(self):
+        self.assertFalse(
+            any(
+                "--method" in call["args"]
+                or call["args"][:2]
+                in (["project", "item-add"], ["project", "item-edit"])
+                for call in self.calls()
+            )
+        )
+
+    def test_dry_run_adds_global_labels_in_input_order(self):
+        result = self.run_open(
+            self.valid('labels = ["tech-debt", "debt:code", "debt:accidental"]'),
+            "--dry-run",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            self.create_request(result.stdout)["labels"],
+            ["type:feature", "scope:ci", "tech-debt", "debt:code", "debt:accidental"],
+        )
+        self.assert_no_writes()
+
+    def test_open_adds_global_labels_and_prints_them(self):
+        result = self.run_open(
+            self.valid('labels = ["tech-debt", "debt:code", "debt:accidental"]')
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        created = self.issue_creates()
+        self.assertEqual(len(created), 1)
+        expected = [
+            "type:feature",
+            "scope:ci",
+            "tech-debt",
+            "debt:code",
+            "debt:accidental",
+        ]
+        self.assertEqual(json.loads(created[0]["input"])["labels"], expected)
+        self.assertIn(
+            f"created https://github.com/{REPO}/issues/99 with labels {', '.join(expected)}",
+            result.stdout,
+        )
+
+    def test_dry_run_drops_duplicate_global_labels(self):
+        result = self.run_open(
+            self.valid('labels = ["tech-debt", "tech-debt"]'), "--dry-run"
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            self.create_request(result.stdout)["labels"],
+            ["type:feature", "scope:ci", "tech-debt"],
+        )
+        self.assert_no_writes()
+
+    def test_reserved_and_unknown_labels_are_refused(self):
+        cases = {
+            'labels = ["type:fix"]': "labels: type:fix is set by the issue form, not the labels list",
+            'labels = ["scope:ci"]': "labels: scope:ci is set by the scope key, not the labels list",
+            'labels = ["good first issue"]': "labels: good first issue is not a global label in labels.toml",
+        }
+        for value, message in cases.items():
+            with self.subTest(value=value):
+                result = self.run_open(self.valid(value), "--dry-run")
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn(message, result.stdout.splitlines())
+                self.assert_no_writes()
+
+    def test_invalid_labels_shape_is_refused(self):
+        for value in (
+            'labels = "tech-debt"',
+            'labels = ["tech-debt", 3]',
+            'labels = [""]',
+        ):
+            with self.subTest(value=value):
+                result = self.run_open(self.valid(value), "--dry-run")
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn(
+                    "labels must be a list of label names", result.stdout.splitlines()
+                )
+                self.assert_no_writes()
+
+    def test_label_and_unknown_key_problems_are_reported_together(self):
+        result = self.run_open(
+            self.valid('labels = ["type:fix"]\nunknown = 1'), "--dry-run"
+        )
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn(
+            "labels: type:fix is set by the issue form, not the labels list",
+            result.stdout.splitlines(),
+        )
+        self.assertIn("unknown file key unknown", result.stdout.splitlines())
+        self.assert_no_writes()
+
+    def test_no_labels_key_keeps_form_and_scope_labels(self):
+        result = self.run_open(self.valid(), "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            self.create_request(result.stdout)["labels"], ["type:feature", "scope:ci"]
+        )
+        self.assert_no_writes()
+
+    def test_scope_refused_when_repository_has_no_scope_labels(self):
+        path = self.workflow / "labels.toml"
+        content = path.read_text()
+        scope = (
+            '[repository."sh4i-yurei/claude-config"."scope:ci"]\n'
+            'color = "5319E7"\n'
+            'description = ""\n\n'
+        )
+        self.assertIn(scope, content)
+        path.write_text(content.replace(scope, "", 1))
+        result = self.run_open(self.valid(), "--dry-run")
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertIn(
+            "scope is not defined for this repository", result.stdout.splitlines()
+        )
+        self.assert_no_writes()
+
+    def test_form_without_labels_uses_scope_and_extra_labels(self):
+        fixtures = self.root / "fixtures"
+        shutil.copytree(FIXTURES, fixtures)
+        form_path = fixtures / "form-feature.yml.json"
+        form = json.loads(form_path.read_text())
+        body = base64.b64decode(form["content"]).decode()
+        self.assertIn('labels: ["type:feature"]\n', body)
+        form["content"] = base64.b64encode(
+            body.replace('labels: ["type:feature"]\n', "", 1).encode()
+        ).decode()
+        form_path.write_text(json.dumps(form))
+        self.env["FAKE_GH_FIXTURES"] = str(fixtures)
+        result = self.run_open(self.valid('labels = ["tech-debt"]'), "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(
+            self.create_request(result.stdout)["labels"], ["scope:ci", "tech-debt"]
+        )
+        self.assert_no_writes()
 
     def change_workflow(self, old, new):
         path = self.workflow / "workflow.toml"
@@ -451,7 +609,21 @@ class IssueOpen(unittest.TestCase):
 
     def test_missing_pyyaml_names_dependency(self):
         self.env["PYTHONNOUSERSITE"] = "1"
-        result = self.run_open(self.valid())
+        path = self.root / "issue.toml"
+        path.write_text(self.valid())
+        source_root = ROOT.parent if ROOT.name == "mutants" else ROOT
+        result = subprocess.run(
+            [
+                sys.executable,
+                source_root / "tools/workflow/issue.py",
+                "open",
+                str(path),
+            ],
+            cwd=self.root,
+            env=self.env,
+            text=True,
+            capture_output=True,
+        )
         self.assertEqual(result.returncode, 2)
         self.assertIn("PyYAML is required", result.stdout)
         self.assertFalse(any("--method" in call["args"] for call in self.calls()))
