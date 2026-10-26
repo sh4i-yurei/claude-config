@@ -62,6 +62,18 @@ class IssueReady(unittest.TestCase):
             else []
         )
 
+    def test_ready_uses_tooling_board_for_every_project_call(self):
+        result = self.run_ready()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        project_calls = [
+            call["args"] for call in self.calls() if call["args"][:1] == ["project"]
+        ]
+        self.assertTrue(project_calls)
+        self.assertTrue(
+            all(args[2:5] == ["2", "--owner", "sh4i-yurei"] for args in project_calls),
+            project_calls,
+        )
+
     def test_ready_sets_status_and_reports_every_met_item(self):
         self.state["board_fields"] = {
             "priority": "P1",

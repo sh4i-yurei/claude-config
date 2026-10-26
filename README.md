@@ -132,7 +132,7 @@ eval "$(vault-env)"
 The first invocation validates the file, reads GitHub's current issue form, labels, milestone,
 related issues and board, and prints the body and planned GitHub calls. It changes nothing. Review
 that output before running the second invocation. The command refuses a repository until it has a
-`[boards]` entry in `workflow.toml`; it prints the line to add. A repository with its own Markdown
+`[boards]` entry in `workflow.toml`; it prints the line to add and the available products. A repository with its own Markdown
 issue templates is refused until those templates are replaced by forms. Exit 2 means the input
 was refused or a GitHub step failed. If a step fails after issue creation, the output includes the
 new issue URL and lists completed and unfinished steps.

@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/issue_open"
 WORKFLOW = ROOT / "tools/workflow"
 REPO = "sh4i-yurei/claude-config"
+sys.path.insert(0, str(ROOT))
+from tools.workflow.config import load_boards
 
 
 class IssueOpen(unittest.TestCase):
@@ -66,14 +68,95 @@ class IssueOpen(unittest.TestCase):
             f'scope = "scope:ci"\n{extra}\n[body]\ndone = "It works"\n'
         )
 
-    def test_unmapped_repo_refuses_without_writes_and_names_mapping(self):
-        result = self.run_open(self.valid().replace(REPO, "sh4i-yurei/new-repo"))
+    def change_workflow(self, old, new):
+        path = self.workflow / "workflow.toml"
+        content = path.read_text()
+        self.assertIn(old, content)
+        path.write_text(content.replace(old, new, 1))
+
+    def assert_bad_workflow(self, message):
+        result = self.run_open(self.valid(), "--dry-run")
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
-        self.assertIn(
-            '"sh4i-yurei/new-repo" = { owner = "sh4i-yurei", number = 1 }',
-            result.stdout,
+        self.assertEqual(result.stdout, message + "\n")
+        self.assertFalse(self.calls())
+
+    def test_unmapped_repo_refuses_without_writes_and_names_mapping(self):
+        result = self.run_open(
+            self.valid().replace(REPO, "sh4i-yurei/new-repo"), "--dry-run"
+        )
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [
+                "no board mapping for sh4i-yurei/new-repo; add to workflow.toml [boards], naming its product:",
+                '"sh4i-yurei/new-repo" = "<product>"',
+                "products: keepbreath.ing, Tooling",
+            ],
         )
         self.assertFalse(self.calls())
+
+    def test_unmapped_repo_advice_lists_new_product_in_order(self):
+        self.change_workflow(
+            "[boards]",
+            '"Pong" = { owner = "sh4i-yurei", number = 3 }\n\n[boards]',
+        )
+        result = self.run_open(
+            self.valid().replace(REPO, "sh4i-yurei/new-repo"), "--dry-run"
+        )
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(
+            result.stdout.splitlines()[-1], "products: keepbreath.ing, Tooling, Pong"
+        )
+        self.assertFalse(self.calls())
+
+    def test_unknown_product_refused_before_gh(self):
+        self.change_workflow(
+            '"sh4i-yurei/keepbreathing" = "keepbreath.ing"',
+            '"sh4i-yurei/keepbreathing" = "Pong"',
+        )
+        self.assert_bad_workflow(
+            "workflow.toml: board mapping for sh4i-yurei/keepbreathing names unknown product Pong"
+        )
+
+    def test_old_board_shape_refused_before_gh(self):
+        self.change_workflow(
+            '"sh4i-yurei/keepbreathing" = "keepbreath.ing"',
+            '"sh4i-yurei/keepbreathing" = { owner = "sh4i-yurei", number = 1 }',
+        )
+        self.assert_bad_workflow(
+            "workflow.toml: invalid board mapping for sh4i-yurei/keepbreathing"
+        )
+
+    def test_invalid_product_refused_before_gh(self):
+        original = '"Tooling" = { owner = "sh4i-yurei", number = 2 }'
+        for replacement in (
+            '"Tooling" = { owner = "sh4i-yurei", number = 0 }',
+            '"Tooling" = { number = 2 }',
+            '"Tooling" = { owner = "sh4i-yurei", number = 2, title = "Tooling" }',
+        ):
+            with self.subTest(replacement=replacement):
+                self.change_workflow(original, replacement)
+                try:
+                    self.assert_bad_workflow("workflow.toml: invalid product Tooling")
+                finally:
+                    self.change_workflow(replacement, original)
+
+    def test_missing_products_table_refused_before_gh(self):
+        path = self.workflow / "workflow.toml"
+        content = path.read_text()
+        start = content.index("[products]")
+        end = content.index("[boards]")
+        path.write_text(content[:start] + content[end:])
+        self.assert_bad_workflow("workflow.toml: missing or invalid products table")
+
+    def test_products_cannot_share_a_board(self):
+        self.change_workflow(
+            '"Tooling" = { owner = "sh4i-yurei", number = 2 }',
+            '"Tooling" = { owner = "sh4i-yurei", number = 1 }',
+        )
+        self.assert_bad_workflow(
+            "workflow.toml: products keepbreath.ing and Tooling share board sh4i-yurei 1"
+        )
 
     def test_every_active_nonexception_repository_has_a_board(self):
         configured = tomllib.loads((WORKFLOW / "workflow.toml").read_text())
@@ -83,11 +166,19 @@ class IssueOpen(unittest.TestCase):
             set(configured["boards"]), active - set(configured["exceptions"])
         )
         self.assertEqual(
-            set(
-                (item["owner"], item["number"])
-                for item in configured["boards"].values()
-            ),
-            {("sh4i-yurei", 1)},
+            load_boards(),
+            {
+                repo: {"owner": "sh4i-yurei", "number": number}
+                for repo, number in {
+                    "sh4i-yurei/.github": 2,
+                    "sh4i-yurei/ci-workflows": 2,
+                    "sh4i-yurei/claude-config": 2,
+                    "sh4i-yurei/codex-config": 2,
+                    "sh4i-yurei/keepbreath-contact-api": 1,
+                    "sh4i-yurei/keepbreathing": 1,
+                    "sh4i-yurei/keepbreathing-infra": 1,
+                }.items()
+            },
         )
 
     def test_markdown_templates_refused_with_both_names(self):
@@ -156,8 +247,9 @@ class IssueOpen(unittest.TestCase):
             result.stdout.splitlines(),
             [
                 "kind must be a nonempty string",
-                "no board mapping for sh4i-yurei/new-repo; add to workflow.toml [boards]:",
-                '"sh4i-yurei/new-repo" = { owner = "sh4i-yurei", number = 1 }',
+                "no board mapping for sh4i-yurei/new-repo; add to workflow.toml [boards], naming its product:",
+                '"sh4i-yurei/new-repo" = "<product>"',
+                "products: keepbreath.ing, Tooling",
             ],
         )
         self.assertFalse(self.calls())
@@ -177,7 +269,7 @@ class IssueOpen(unittest.TestCase):
     def test_missing_owner_shared_forms_names_missing_forms(self):
         other = "missing-owner/other-repo"
         with (self.workflow / "workflow.toml").open("a") as config:
-            config.write(f'\n"{other}" = {{ owner = "sh4i-yurei", number = 1 }}\n')
+            config.write(f'\n"{other}" = "keepbreath.ing"\n')
         data = self.valid().replace(REPO, other).replace('scope = "scope:ci"\n', "")
         result = self.run_open(data)
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
@@ -200,7 +292,7 @@ class IssueOpen(unittest.TestCase):
     def test_shared_forms_come_from_issue_repository_owner(self):
         other = "second-owner/other-repo"
         with (self.workflow / "workflow.toml").open("a") as config:
-            config.write(f'\n"{other}" = {{ owner = "sh4i-yurei", number = 1 }}\n')
+            config.write(f'\n"{other}" = "keepbreath.ing"\n')
         data = self.valid().replace(REPO, other).replace('scope = "scope:ci"\n', "")
         result = self.run_open(data, "--dry-run")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -272,6 +364,10 @@ class IssueOpen(unittest.TestCase):
             for call in calls
             if call["args"][:2] == ["project", "item-add"]
         ]
+        self.assertTrue(
+            all(args[2:5] == ["2", "--owner", "sh4i-yurei"] for args in additions),
+            additions,
+        )
         for number in (18, 12):
             url = f"https://github.com/{REPO}/issues/{number}"
             self.assertTrue(
@@ -322,6 +418,26 @@ class IssueOpen(unittest.TestCase):
                 and "--single-select-option-id" not in call["args"]
                 for call in calls
             )
+        )
+
+    def test_dry_run_uses_tooling_board_for_every_project_call(self):
+        result = self.run_open(self.valid(), "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(
+            "Would call: project item-add 2 --owner sh4i-yurei --url NEW_ISSUE_URL",
+            result.stdout,
+        )
+        project_calls = [
+            call["args"] for call in self.calls() if call["args"][:1] == ["project"]
+        ]
+        self.assertTrue(project_calls)
+        self.assertTrue(
+            all(
+                args[2:5] == ["2", "--owner", "sh4i-yurei"]
+                for args in project_calls
+                if args[1] != "item-edit"
+            ),
+            project_calls,
         )
 
     def test_required_field_empty_and_extra_field_both_named(self):

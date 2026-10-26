@@ -79,21 +79,52 @@ def load():
     return owners, set(exceptions), global_labels, repository_labels
 
 
-def load_boards():
-    """Return validated repository-to-project mappings from workflow.toml."""
-    data = _read("workflow.toml").get("boards")
-    if not isinstance(data, dict):
+def load_board_config():
+    """Return repository board mappings and product names in configured order."""
+    data = _read("workflow.toml")
+    products = data.get("products")
+    if not isinstance(products, dict):
+        raise ConfigError("workflow.toml: missing or invalid products table")
+    used_boards = {}
+    for name, product in products.items():
+        if (
+            not name
+            or not isinstance(product, dict)
+            or set(product) != {"owner", "number"}
+            or not isinstance(product["owner"], str)
+            or not product["owner"]
+            or type(product["number"]) is not int
+            or product["number"] < 1
+        ):
+            raise ConfigError(f"workflow.toml: invalid product {name}")
+        board = (product["owner"], product["number"])
+        if board in used_boards:
+            raise ConfigError(
+                f"workflow.toml: products {used_boards[board]} and {name} "
+                f"share board {board[0]} {board[1]}"
+            )
+        used_boards[board] = name
+    boards = data.get("boards")
+    if not isinstance(boards, dict):
         raise ConfigError("workflow.toml: missing or invalid boards table")
-    for repo, board in data.items():
+    result = {}
+    for repo, product in boards.items():
         if (
             not isinstance(repo, str)
             or "/" not in repo
-            or not isinstance(board, dict)
-            or set(board) != {"owner", "number"}
-            or not isinstance(board["owner"], str)
-            or not board["owner"]
-            or type(board["number"]) is not int
-            or board["number"] < 1
+            or not isinstance(product, str)
+            or not product
         ):
             raise ConfigError(f"workflow.toml: invalid board mapping for {repo}")
-    return data
+        if product not in products:
+            raise ConfigError(
+                f"workflow.toml: board mapping for {repo} names unknown product {product}"
+            )
+        result[repo] = dict(products[product])
+    return result, list(products)
+
+
+def load_boards():
+    """Return validated repository-to-project mappings from workflow.toml."""
+    boards, _ = load_board_config()
+    return boards

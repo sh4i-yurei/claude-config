@@ -7,7 +7,7 @@ from pathlib import Path
 import subprocess
 import tomllib
 
-from config import ConfigError, load, load_boards
+from config import ConfigError, load, load_board_config, load_boards
 
 
 class IssueError(Exception):
@@ -259,7 +259,7 @@ def open_issue(path, dry_run):
     repo = data.get("repo")
     try:
         _, exceptions, _, labels = load()
-        boards = load_boards()
+        boards, products = load_board_config()
     except ConfigError as error:
         raise IssueError(str(error)) from error
     problems = []
@@ -269,9 +269,9 @@ def open_issue(path, dry_run):
     elif repo in exceptions:
         problems.append(f"{repo}: workflow exception")
     elif repo not in boards:
-        owner = repo.split("/", 1)[0]
         problems.append(
-            f'no board mapping for {repo}; add to workflow.toml [boards]:\n"{repo}" = {{ owner = "{owner}", number = 1 }}'
+            f"no board mapping for {repo}; add to workflow.toml [boards], naming its product:\n"
+            f'"{repo}" = "<product>"\nproducts: {", ".join(products)}'
         )
     else:
         mapped = True
