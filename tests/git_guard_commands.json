@@ -61,5 +61,250 @@
     "claude": "allow",
     "codex": "allow",
     "command": "git commit -m \"refuses git merge\""
-  }
+  },
+  {
+    "name": "wrapped real issue create",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "distrobox enter dev -- bash -lc 'eval \"$(vault-env)\" >/dev/null 2>&1; gh issue create -R sh4i-yurei/.github --title \"Tech debt from the default-templates review\" --body-file /tmp/td-dg.md'"
+  },
+  {
+    "name": "bare issue create",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh issue create"
+  },
+  {
+    "name": "issue new alias",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh issue new --title New --body Text"
+  },
+  {
+    "name": "issue create with arguments",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh issue create --title x --body y"
+  },
+  {
+    "name": "issue list POST from fields, based on real milestone command",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api repos/sh4i-yurei/claude-config/issues -f title=New"
+  },
+  {
+    "name": "issue list POST from typed field, based on real milestone command",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api repos/sh4i-yurei/claude-config/issues -F title=New"
+  },
+  {
+    "name": "issue list explicit GET with field reads",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh api repos/sh4i-yurei/claude-config/issues -f state=open --method GET"
+  },
+  {
+    "name": "issue list POST from input, based on real milestone command",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api repos/sh4i-yurei/claude-config/issues --input /tmp/issue.json"
+  },
+  {
+    "name": "issue list explicit short POST, based on real milestone command",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api -X POST repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "issue list explicit long POST, based on real milestone command",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api repos/sh4i-yurei/claude-config/issues --method POST"
+  },
+  {
+    "name": "issue POST after header option",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api -H Accept:application/vnd.github+json repos/sh4i-yurei/claude-config/issues -f title=New"
+  },
+  {
+    "name": "issue POST after hostname option",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api --hostname github.com repos/sh4i-yurei/claude-config/issues --method POST"
+  },
+  {
+    "name": "issue GET after header option",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh api -H Accept:application/vnd.github+json repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "graphql createIssue mutation, based on real graphql command",
+    "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api graphql -f query='mutation { createIssue(input:{repositoryId:\"R\",title:\"New\"}) { issue { id } } }'"
+  },
+  {
+    "name": "issue list read",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh api repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "issue list query read",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh api \"repos/sh4i-yurei/claude-config/issues?state=open\""
+  },
+  {
+    "name": "real milestone write",
+    "cwd": "feature", "claude": "allow", "codex": "deny", "other": "deny",
+    "command": "gh api repos/sh4i-yurei/claude-config/milestones -f title=\"Workflow · M1: Global GitHub workflow\" -f description=\"Every repository gets its labels from one file.\" -q .number"
+  },
+  {
+    "name": "real parent read",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh api repos/sh4i-yurei/claude-config/issues/22/parent"
+  },
+  {
+    "name": "real dependency read",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh api repos/sh4i-yurei/claude-config/issues/22/dependencies/blocked_by"
+  },
+  {
+    "name": "real graphql read",
+    "cwd": "feature", "claude": "allow", "codex": "deny", "other": "deny",
+    "command": "gh api graphql -f query='query { repository(owner:\"sh4i-yurei\", name:\"ci-workflows\") { issueTemplates { name } } }'"
+  },
+  {
+    "name": "real issue comment",
+    "cwd": "feature", "claude": "allow", "codex": "deny", "other": "deny",
+    "command": "gh issue comment 18 -R sh4i-yurei/claude-config --body-file /tmp/td18c.md"
+  },
+  {
+    "name": "real issue close",
+    "cwd": "feature", "claude": "allow", "codex": "deny", "other": "deny",
+    "command": "gh issue close 12 -R sh4i-yurei/claude-config --reason completed --comment \"Done by W1\""
+  },
+  {
+    "name": "real issue edit",
+    "cwd": "feature", "claude": "allow", "codex": "deny", "other": "deny",
+    "command": "gh issue edit 4 -R sh4i-yurei/.github --add-label tech-debt --add-label debt:accidental"
+  },
+  {
+    "name": "real issue tool open",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "/usr/bin/python3 tools/workflow/issue.py open /tmp/first-issue.toml"
+  },
+  {
+    "name": "issue create in commit message",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "git commit -m \"Refuse gh issue create that skips the tool\""
+  },
+  {
+    "name": "issue create in grep",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "grep -rn \"gh issue create\" hooks"
+  },
+  {
+    "name": "issue create in heredoc",
+    "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "cat <<'EOF'\ngh issue create\nEOF"
+  },
+  {
+    "name": "short equals POST", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api -X=POST repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "short attached POST", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api -XPOST repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "grouped include method POST", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api -iX POST repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "grouped include field POST", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api -if title=x repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "preview value before issue POST", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api -p corsair repos/sh4i-yurei/claude-config/issues -f title=x"
+  },
+  {
+    "name": "leading slash issue POST", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api /repos/sh4i-yurei/claude-config/issues -f title=x"
+  },
+  {
+    "name": "GraphQL attached raw query", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api graphql -fquery='mutation { createIssue(input:{title:\"x\"}) { issue { id } } }'"
+  },
+  {
+    "name": "GraphQL equals typed query", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api graphql -F=query='mutation { createIssue(input:{title:\"x\"}) { issue { id } } }'"
+  },
+  {
+    "name": "issue create after repo", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh issue -R sh4i-yurei/claude-config create"
+  },
+  {
+    "name": "issue new after repo equals", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh issue --repo=sh4i-yurei/claude-config new"
+  },
+  {
+    "name": "pr merge after repo", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny",
+    "command": "gh pr -R sh4i-yurei/claude-config merge 12"
+  },
+  {"name": "lowercase issue method", "cwd": "feature", "claude": "deny", "reason": "issue tool", "command": "gh api -X post repos/sh4i-yurei/claude-config/issues"},
+  {"name": "attached lowercase issue method", "cwd": "feature", "claude": "deny", "reason": "issue tool", "command": "gh api -Xpost repos/sh4i-yurei/claude-config/issues"},
+  {"name": "mixed case issue method", "cwd": "feature", "claude": "deny", "reason": "issue tool", "command": "gh api --method Post repos/sh4i-yurei/claude-config/issues -f title=x"},
+  {"name": "full URL issue create", "cwd": "feature", "claude": "deny", "reason": "issue tool", "command": "gh api https://api.github.com/repos/sh4i-yurei/claude-config/issues -f title=x"},
+  {"name": "strict lowercase GET", "cwd": "feature", "codex": "deny", "reason": "strict rules", "command": "gh api -X get repos/sh4i-yurei/claude-config/issues"},
+  {"name": "project item list", "cwd": "feature", "claude": "allow", "codex": "deny", "reason": "strict rules", "command": "gh project item-list 1 --owner sh4i-yurei --format json --limit 10000"},
+  {"name": "workflow run", "cwd": "feature", "claude": "allow", "command": "gh workflow run ci.yml --ref main"},
+  {"name": "deploy key list", "cwd": "feature", "claude": "allow", "command": "gh repo deploy-key list -R sh4i-yurei/.github"},
+  {"name": "built in help", "cwd": "feature", "claude": "allow", "command": "gh help issue"},
+  {"name": "codespace alias", "cwd": "feature", "claude": "allow", "command": "gh cs list"},
+  {"name": "cache alias", "cwd": "feature", "claude": "allow", "command": "gh cache ls -R sh4i-yurei/claude-config"},
+  {"name": "local alias", "cwd": "feature", "claude": "deny", "reason": "unknown gh command co", "command": "gh co 12"},
+  {"name": "unknown first word", "cwd": "feature", "claude": "deny", "reason": "unknown gh command madeup", "command": "gh madeup list"},
+  {
+    "name": "unknown api flag", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "unknown gh flag --future",
+    "command": "gh api --future repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "unknown issue flag", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "unknown gh flag --future",
+    "command": "gh issue create --future"
+  },
+  {
+    "name": "unknown new flag", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "unknown gh flag --future",
+    "command": "gh issue new --future"
+  },
+  {
+    "name": "unknown merge flag", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "unknown gh flag --future",
+    "command": "gh pr merge --future"
+  },
+  {
+    "name": "run list flags remain allowed", "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh run list --branch feature/x --commit abc1234 --limit 1"
+  },
+  {
+    "name": "run watch flags remain allowed", "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh run watch 123 --exit-status"
+  },
+  {
+    "name": "run view flags remain allowed", "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh run view 123 --log-failed"
+  },
+  {
+    "name": "pr checks with repo remains allowed", "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh pr checks 3 -R sh4i-yurei/.github"
+  },
+  {
+    "name": "strict lowercase get remains refused", "cwd": "feature", "claude": "allow", "codex": "deny", "other": "deny",
+    "command": "gh api -X get repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "last method GET wins", "cwd": "feature", "claude": "allow", "codex": "allow", "other": "allow",
+    "command": "gh api --method POST -X GET repos/sh4i-yurei/claude-config/issues"
+  },
+  {
+    "name": "last method POST wins", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
+    "command": "gh api -X GET --method POST repos/sh4i-yurei/claude-config/issues"
+  },
+  {"name": "codespace alias canonical child", "cwd": "feature", "claude": "allow", "codex": "deny", "reason": "strict rules", "command": "gh cs list --limit 5"},
+  {"name": "extension alias canonical child", "cwd": "feature", "claude": "allow", "command": "gh ext list"},
+  {"name": "ruleset alias canonical child", "cwd": "feature", "claude": "allow", "command": "gh rs list -R sh4i-yurei/.github"},
+  {"name": "pull request list alias", "cwd": "feature", "codex": "allow", "command": "gh pr ls -R sh4i-yurei/.github"},
+  {"name": "run list alias", "cwd": "feature", "codex": "allow", "command": "gh run ls --limit 1"},
+  {"name": "strict codespace alias", "cwd": "feature", "codex": "deny", "reason": "strict rules", "command": "gh cs list"},
+  {"name": "issue new canonical create", "cwd": "feature", "claude": "deny", "reason": "issue tool", "command": "gh issue new --title Test"},
+  {"name": "invalid group child ends path", "cwd": "feature", "claude": "allow", "command": "gh issue foo create"},
+  {"name": "local alias refused for every agent", "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "unknown gh command co", "command": "gh co 12"}
 ]

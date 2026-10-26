@@ -1,0 +1,1607 @@
+{
+  "name": "gh",
+  "aliases": [],
+  "flags": {
+    "--help": false,
+    "--version": false
+  },
+  "children": [
+    {
+      "name": "agent-task",
+      "aliases": [
+        "agent",
+        "agent-tasks",
+        "agents"
+      ],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "create",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "alias",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "import",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "set",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "api",
+      "aliases": [],
+      "flags": {},
+      "children": []
+    },
+    {
+      "name": "attestation",
+      "aliases": [
+        "at"
+      ],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "download",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "trusted-root",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "verify",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "auth",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "login",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "logout",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "refresh",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "setup-git",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "switch",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "token",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "browse",
+      "aliases": [],
+      "flags": {},
+      "children": []
+    },
+    {
+      "name": "cache",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "codespace",
+      "aliases": [
+        "cs"
+      ],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "code",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "cp",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "create",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "jupyter",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "logs",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "ports",
+          "aliases": [],
+          "flags": {
+            "-c": true,
+            "--codespace": true,
+            "-q": true,
+            "--jq": true,
+            "--json": true,
+            "-R": true,
+            "--repo": true,
+            "--repo-owner": true,
+            "-t": true,
+            "--template": true,
+            "--help": false
+          },
+          "children": [
+            {
+              "name": "forward",
+              "aliases": [],
+              "flags": {},
+              "children": []
+            },
+            {
+              "name": "visibility",
+              "aliases": [],
+              "flags": {},
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "rebuild",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "ssh",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "stop",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "completion",
+      "aliases": [],
+      "flags": {},
+      "children": []
+    },
+    {
+      "name": "config",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "clear-cache",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "get",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "set",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "copilot",
+      "aliases": [],
+      "flags": {},
+      "children": []
+    },
+    {
+      "name": "discussion",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "comment",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "create",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "extension",
+      "aliases": [
+        "ext",
+        "extensions"
+      ],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "browse",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "create",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "exec",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "install",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "remove",
+          "aliases": [
+            "uninstall"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "search",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "upgrade",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "gist",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "clone",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "create",
+          "aliases": [
+            "new"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "rename",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "gpg-key",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "add",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "help",
+      "aliases": [],
+      "flags": {},
+      "children": []
+    },
+    {
+      "name": "issue",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "close",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "comment",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "create",
+          "aliases": [
+            "new"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "develop",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "lock",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "pin",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "reopen",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "transfer",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "unlock",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "unpin",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "label",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "clone",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "create",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "licenses",
+      "aliases": [],
+      "flags": {},
+      "children": []
+    },
+    {
+      "name": "org",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "pr",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "checkout",
+          "aliases": [
+            "co"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "checks",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "close",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "comment",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "create",
+          "aliases": [
+            "new"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "diff",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "lock",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "merge",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "ready",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "reopen",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "revert",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "review",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "status",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "unlock",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "update-branch",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "preview",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "prompter",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "project",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "close",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "copy",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "create",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "field-create",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "field-delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "field-list",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "item-add",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "item-archive",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "item-create",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "item-delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "item-edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "item-list",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "link",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "mark-template",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "unlink",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "release",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "create",
+          "aliases": [
+            "new"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete-asset",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "download",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "upload",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "verify",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "verify-asset",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "repo",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "archive",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "autolink",
+          "aliases": [],
+          "flags": {
+            "-R": true,
+            "--repo": true,
+            "--help": false
+          },
+          "children": [
+            {
+              "name": "create",
+              "aliases": [
+                "new"
+              ],
+              "flags": {},
+              "children": []
+            },
+            {
+              "name": "delete",
+              "aliases": [],
+              "flags": {},
+              "children": []
+            },
+            {
+              "name": "list",
+              "aliases": [
+                "ls"
+              ],
+              "flags": {},
+              "children": []
+            },
+            {
+              "name": "view",
+              "aliases": [],
+              "flags": {},
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "clone",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "create",
+          "aliases": [
+            "new"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "deploy-key",
+          "aliases": [],
+          "flags": {
+            "-R": true,
+            "--repo": true,
+            "--help": false
+          },
+          "children": [
+            {
+              "name": "add",
+              "aliases": [],
+              "flags": {},
+              "children": []
+            },
+            {
+              "name": "delete",
+              "aliases": [],
+              "flags": {},
+              "children": []
+            },
+            {
+              "name": "list",
+              "aliases": [
+                "ls"
+              ],
+              "flags": {},
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "edit",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "fork",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "gitignore",
+          "aliases": [],
+          "flags": {
+            "--help": false
+          },
+          "children": [
+            {
+              "name": "list",
+              "aliases": [
+                "ls"
+              ],
+              "flags": {},
+              "children": []
+            },
+            {
+              "name": "view",
+              "aliases": [],
+              "flags": {},
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "license",
+          "aliases": [],
+          "flags": {
+            "--help": false
+          },
+          "children": [
+            {
+              "name": "list",
+              "aliases": [
+                "ls"
+              ],
+              "flags": {},
+              "children": []
+            },
+            {
+              "name": "view",
+              "aliases": [],
+              "flags": {},
+              "children": []
+            }
+          ]
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "read-dir",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "read-file",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "rename",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "set-default",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "sync",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "unarchive",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "ruleset",
+      "aliases": [
+        "rs"
+      ],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "check",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "run",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "cancel",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "download",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "rerun",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "watch",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "search",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "code",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "commits",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "issues",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "prs",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "repos",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "secret",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "delete",
+          "aliases": [
+            "remove"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "set",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "skill",
+      "aliases": [
+        "skills"
+      ],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "install",
+          "aliases": [
+            "add"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "preview",
+          "aliases": [
+            "show"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "publish",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "search",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "update",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "ssh-key",
+      "aliases": [],
+      "flags": {
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "add",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "delete",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "status",
+      "aliases": [],
+      "flags": {},
+      "children": []
+    },
+    {
+      "name": "variable",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "delete",
+          "aliases": [
+            "remove"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "get",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "set",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "workflow",
+      "aliases": [],
+      "flags": {
+        "-R": true,
+        "--repo": true,
+        "--help": false
+      },
+      "children": [
+        {
+          "name": "disable",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "enable",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "list",
+          "aliases": [
+            "ls"
+          ],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "run",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        },
+        {
+          "name": "view",
+          "aliases": [],
+          "flags": {},
+          "children": []
+        }
+      ]
+    }
+  ]
+}

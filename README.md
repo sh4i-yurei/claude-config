@@ -49,6 +49,17 @@ corrections: heredoc delimiters lose their quotes before matching, and nested sc
 words have their source spans decoded. Ruff excludes explicitly named vendor files.
 The guard reads commands only from Bash PreToolUse events. Codex also sends patch text
 in `tool_input.command` for `apply_patch`, and that text is not a shell command.
+For every agent, the guard refuses `gh issue create`, `gh api` POST requests to a
+repository's issue list, and GraphQL `createIssue` mutations. Its refusal directs issue
+creation through `tools/workflow/issue.py open` in [Opening an issue from a file](#opening-an-issue-from-a-file).
+Issue reads, issue comments, edits and closes, and writes to other API endpoints remain
+available under each agent's other guard rules.
+The guard reads built-in `gh` commands and aliases from
+`hooks/gh-command-tree-2.97.0.json`. It resolves each command word to its canonical
+name before checking the strict read list, pull request merges, and issue creation.
+The tree also records flags accepted before a subcommand. An unknown first command
+or a flag needed to judge a command is refused as unjudgeable. Local aliases from
+`gh alias` are not in the versioned tree.
 
 Claude Code's `~/.claude/settings.json` registers it for Bash PreToolUse with
 `--agent claude`. Codex's `~/Documents/codex-config/hooks.json` registers the same hook for

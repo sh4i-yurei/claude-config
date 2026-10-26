@@ -1,7 +1,74 @@
-import json, os, subprocess, sys, tempfile, time
+import importlib.util, json, os, re, subprocess, sys, tempfile, time
 from pathlib import Path
 
 HOOK = os.path.join(os.path.dirname(__file__), "..", "hooks", "git-guard.py")
+
+
+def help_flags(output):
+    flags = {}
+    for line in output.splitlines():
+        if not line.startswith("  "):
+            continue
+        column = re.split(r"\s{3,}", line.strip(), maxsplit=1)[0]
+        if not re.fullmatch(r"(?:-[A-Za-z], )?--[\w-]+(?: \S+)?", column):
+            continue
+        names = re.findall(r"(?:--[\w-]+|-[A-Za-z])", column)
+        for name in names:
+            flags[name] = bool(re.search(r"--[\w-]+\s+\S+", column))
+    return flags
+
+
+def reference_nodes(output, root_help):
+    local_aliases = set()
+    in_aliases = False
+    for line in root_help.splitlines():
+        if line == "ALIAS COMMANDS":
+            in_aliases = True
+            continue
+        if in_aliases and line and not line.startswith(" "):
+            in_aliases = False
+        if in_aliases:
+            match = re.match(r"  ([\w-]+):", line)
+            if match:
+                local_aliases.add(match.group(1))
+    nodes = {(): {"name": "gh", "aliases": [], "flags": {}, "children": []}}
+    paths = {()}
+    aliases = set()
+    in_aliases = False
+    current = ()
+    for line in output.splitlines():
+        if re.match(r"^#{2,4} gh ", line):
+            in_aliases = False
+            match = re.match(r"^#{2,4} gh ((?:[a-z][a-z0-9-]*(?: |$))+)", line)
+            if match:
+                current = tuple(match.group(1).split())
+                if current[0] not in local_aliases:
+                    paths.add(current)
+        elif line == "Aliases":
+            in_aliases = True
+        elif in_aliases and line.startswith("gh "):
+            for alias in line.split(", "):
+                words = tuple(alias.removeprefix("gh ").split())
+                if words[0] not in local_aliases and current:
+                    aliases.add((current, words[-1]))
+        elif in_aliases and line and not line.startswith("gh "):
+            in_aliases = False
+    paths.add(("help",))
+    for path in sorted(paths, key=lambda item: (len(item), item)):
+        if not path:
+            continue
+        assert path[:-1] in nodes, ("missing parent", path)
+        node = {"name": path[-1], "aliases": [], "flags": {}, "children": []}
+        nodes[path] = node
+        nodes[path[:-1]]["children"].append(node)
+    for path, alias in sorted(aliases):
+        if alias != path[-1]:
+            nodes[path]["aliases"].append(alias)
+    for node in nodes.values():
+        node["children"].sort(key=lambda child: child["name"])
+    return nodes
+
+
 D = os.path.expanduser("~/Documents")
 TEMP = tempfile.TemporaryDirectory(
     prefix=".guard-tests-", dir=Path(__file__).resolve().parents[1]
@@ -205,13 +272,18 @@ cases += [
     ("allow", INFRA, "git --mystery-option log", "codex"),
     ("deny", INFRA, "git --mystery-option push origin feature/x", "codex"),
 ]
+issue_tool_reason_cases = []
 for item in json.loads(Path(__file__).with_name("git_guard_commands.json").read_text()):
-    for agent in ("claude", "codex"):
+    for agent in ("claude", "codex", "other"):
+        if agent not in item:
+            continue
         cwd = {"feature": INFRA, "main": MAIN, "config": CC}[item["cwd"]]
         command = item["command"].replace(
             "~/Documents/worktrees/claude-config-3.1", INFRA
         )
         cases.append((item[agent], cwd, command, agent))
+        if item.get("reason") and item[agent] == "deny":
+            issue_tool_reason_cases.append((cwd, command, agent, item["reason"]))
 
 fails = 0
 for want, cwd, cmd, who in cases:
@@ -241,6 +313,36 @@ for want, cwd, cmd, who in cases:
     print(
         f"{'ok  ' if ok else 'FAIL'} {want:5} {os.path.basename(cwd):20} {shown[:90]}"
     )
+for cwd, cmd, who, reason in issue_tool_reason_cases:
+    event = {"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": cmd}}
+    run = subprocess.run(
+        [sys.executable, HOOK, "--agent", who],
+        input=json.dumps(event),
+        capture_output=True,
+        text=True,
+    )
+    assert run.stdout, (cmd, "expected an issue-tool refusal")
+    decision = json.loads(run.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny", (cmd, decision)
+    if reason == "issue tool":
+        assert decision["permissionDecisionReason"] == (
+            "Use tools/workflow/issue.py open; see README.md, Opening an issue from a file."
+        ), (cmd, decision)
+    elif reason.startswith("unknown gh flag "):
+        flag = reason.removeprefix("unknown gh flag ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this gh command: it doesn't know the flag {flag}."
+        ), (cmd, decision)
+    elif reason.startswith("unknown gh command "):
+        word = reason.removeprefix("unknown gh command ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this gh command: it doesn't know the command {word}."
+        ), (cmd, decision)
+    elif reason == "strict rules":
+        assert decision["permissionDecisionReason"] == (
+            "Allowed gh commands: run list/view/watch; pr view/list/diff/checks/status; "
+            "issue view/list; repo view; api GET."
+        ), (cmd, decision)
 # Failures in the hook must be valid deny decisions, including an import failure.
 for raw in ("{}", "[]", "not-json", json.dumps({"cwd": INFRA, "tool_input": {}})):
     run = subprocess.run(
@@ -359,3 +461,102 @@ for cmd, phrase in (
 
 print(f"\n{len(cases) - fails}/{len(cases)} passed")
 assert fails == 0, f"{fails} behavior assertions failed"
+
+spec = importlib.util.spec_from_file_location("git_guard_under_test", HOOK)
+guard = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(guard)
+for name, command in {
+    "api": ("api",),
+    "issue-create": ("issue", "create"),
+    "pr-merge": ("pr", "merge"),
+}.items():
+    fixture = Path(__file__).with_name("fixtures") / "gh-help-2.97.0" / (name + ".txt")
+    expected = help_flags(fixture.read_text())
+    actual_help = subprocess.run(
+        ["gh", *command, "--help"], check=True, capture_output=True, text=True
+    )
+    actual = help_flags(actual_help.stdout)
+    for flag in sorted(expected.keys() | actual.keys()):
+        assert expected.get(flag) == actual.get(flag), (
+            name,
+            flag,
+            expected.get(flag),
+            actual.get(flag),
+        )
+    table = guard.GH_FLAG_TABLES.get(name)
+    assert table is not None, (name, "missing gh flag table")
+    for flag in sorted(expected.keys() | table.keys()):
+        assert expected.get(flag) == table.get(flag), (
+            name,
+            flag,
+            expected.get(flag),
+            table.get(flag),
+        )
+
+fixture_root = Path(__file__).with_name("fixtures") / "gh-help-2.97.0"
+tree = json.loads((Path(HOOK).with_name("gh-command-tree-2.97.0.json")).read_text())
+reference = (fixture_root / "reference.txt").read_text()
+root_help = (fixture_root / "root.txt").read_text()
+live_reference = subprocess.run(
+    ["gh", "reference"], check=True, capture_output=True, text=True
+).stdout
+live_root = subprocess.run(
+    ["gh", "--help"], check=True, capture_output=True, text=True
+).stdout
+expected_nodes = reference_nodes(reference, root_help)
+live_nodes = reference_nodes(live_reference, live_root)
+for path in sorted(set(expected_nodes) | set(live_nodes)):
+    assert path in expected_nodes and path in live_nodes, (
+        " ".join(path) or "gh",
+        "command differs from installed gh",
+    )
+    assert expected_nodes[path]["aliases"] == live_nodes[path]["aliases"], (
+        " ".join(path) or "gh",
+        "aliases differ from installed gh",
+        expected_nodes.get(path),
+        live_nodes.get(path),
+    )
+for path in sorted(path for path, node in expected_nodes.items() if node["children"]):
+    group = " ".join(path)
+    fixture = fixture_root / (
+        "root.txt" if not group else "groups/" + group.replace(" ", "-") + ".txt"
+    )
+    expected = help_flags(fixture.read_text())
+    live = help_flags(
+        subprocess.run(
+            ["gh", *group.split(), "--help"], check=True, capture_output=True, text=True
+        ).stdout
+    )
+    for flag in sorted(expected.keys() | live.keys()):
+        assert expected.get(flag) == live.get(flag), (
+            group or "gh",
+            flag,
+            expected.get(flag),
+            live.get(flag),
+        )
+    expected_nodes[path]["flags"] = expected
+    live_nodes[path]["flags"] = live
+
+
+def compare_nodes(expected, actual, path="gh"):
+    for field in ("name", "aliases", "flags"):
+        assert expected[field] == actual.get(field), (
+            path,
+            field,
+            expected[field],
+            actual.get(field),
+        )
+    expected_children = {node["name"]: node for node in expected["children"]}
+    actual_children = {node["name"]: node for node in actual.get("children", [])}
+    assert expected_children.keys() == actual_children.keys(), (
+        path,
+        "children",
+        sorted(expected_children),
+        sorted(actual_children),
+    )
+    for name, child in expected_children.items():
+        compare_nodes(child, actual_children[name], path + " " + name)
+
+
+compare_nodes(expected_nodes[()], tree)
+compare_nodes(live_nodes[()], tree)

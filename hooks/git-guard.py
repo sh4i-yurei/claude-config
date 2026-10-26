@@ -13,6 +13,7 @@ import shlex
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "vendor"))
 
@@ -37,8 +38,95 @@ GH_REASON = (
     "Allowed gh commands: run list/view/watch; pr view/list/diff/checks/status; "
     "issue view/list; repo view; api GET."
 )
+GH_FLAG_TABLES = {
+    "api": {
+        "--allow-escape-sequences": False,
+        "--cache": True,
+        "-F": True,
+        "--field": True,
+        "-H": True,
+        "--header": True,
+        "--hostname": True,
+        "-i": False,
+        "--include": False,
+        "--input": True,
+        "-q": True,
+        "--jq": True,
+        "-X": True,
+        "--method": True,
+        "--paginate": False,
+        "-p": True,
+        "--preview": True,
+        "-f": True,
+        "--raw-field": True,
+        "--silent": False,
+        "--slurp": False,
+        "-t": True,
+        "--template": True,
+        "--verbose": False,
+        "--help": False,
+    },
+    "issue-create": {
+        "-a": True,
+        "--assignee": True,
+        "--blocked-by": True,
+        "--blocking": True,
+        "-b": True,
+        "--body": True,
+        "-F": True,
+        "--body-file": True,
+        "-e": False,
+        "--editor": False,
+        "-l": True,
+        "--label": True,
+        "-m": True,
+        "--milestone": True,
+        "--parent": True,
+        "-p": True,
+        "--project": True,
+        "--recover": True,
+        "-T": True,
+        "--template": True,
+        "-t": True,
+        "--title": True,
+        "--type": True,
+        "-w": False,
+        "--web": False,
+        "--help": False,
+        "-R": True,
+        "--repo": True,
+    },
+    "pr-merge": {
+        "--admin": False,
+        "-A": True,
+        "--author-email": True,
+        "--auto": False,
+        "-b": True,
+        "--body": True,
+        "-F": True,
+        "--body-file": True,
+        "-d": False,
+        "--delete-branch": False,
+        "--disable-auto": False,
+        "--match-head-commit": True,
+        "-m": False,
+        "--merge": False,
+        "-r": False,
+        "--rebase": False,
+        "-s": False,
+        "--squash": False,
+        "-t": True,
+        "--subject": True,
+        "--help": False,
+        "-R": True,
+        "--repo": True,
+    },
+}
 PUSH_REASON = (
     "Name the branch: git push [-u] origin <branch> or <source>:<destination>."
+)
+ISSUE_REASON = (
+    "Use tools/workflow/issue.py open; see README.md, Opening an issue from a file."
 )
 DEADLINE = None
 MAX_COMMAND_BYTES = 64 * 1024
@@ -239,30 +327,153 @@ def git_problem(args, cwd, agent):
     return None
 
 
+def parse_gh(args):
+    """Parse command path and flags with gh's interspersed flag grammar."""
+    tree = json.loads(
+        (Path(__file__).with_name("gh-command-tree-2.97.0.json")).read_text()
+    )
+    path, positionals, flags = [], [], {}
+    node = tree
+    index = 0
+    ended = False
+    path_open = True
+    while index < len(args):
+        arg = args[index]
+        if arg == "--" and not ended:
+            ended = True
+            index += 1
+            continue
+        key = "-".join(path)
+        table = GH_FLAG_TABLES.get(key)
+        if table is None and (node["children"] or not path):
+            table = node["flags"]
+        if not path_open and node["children"]:
+            index += 1
+            continue
+        if table is None and path:
+            index += 1
+            continue
+        if not ended and arg.startswith("-") and arg != "-":
+            if arg.startswith("--"):
+                name, separator, attached = arg.partition("=")
+                if name not in table:
+                    return path, positionals, flags, name
+                takes_value = table[name]
+                if not takes_value and separator:
+                    return path, positionals, flags, name
+                if takes_value:
+                    if not separator:
+                        index += 1
+                        if index == len(args):
+                            return path, positionals, flags, name
+                        attached = args[index]
+                    flags.setdefault(name, []).append(attached)
+                    flags.setdefault("_ordered", []).append((name, attached))
+                else:
+                    flags.setdefault(name, []).append(None)
+                    flags.setdefault("_ordered", []).append((name, None))
+            else:
+                letters = arg[1:]
+                offset = 0
+                while offset < len(letters):
+                    name = "-" + letters[offset]
+                    if name not in table:
+                        return path, positionals, flags, name
+                    if table[name]:
+                        value = letters[offset + 1 :].removeprefix("=")
+                        if not value:
+                            index += 1
+                            if index == len(args):
+                                return path, positionals, flags, name
+                            value = args[index]
+                        flags.setdefault(name, []).append(value)
+                        flags.setdefault("_ordered", []).append((name, value))
+                        break
+                    flags.setdefault(name, []).append(None)
+                    flags.setdefault("_ordered", []).append((name, None))
+                    offset += 1
+            index += 1
+            continue
+        child = (
+            next(
+                (
+                    child
+                    for child in node["children"]
+                    if arg == child["name"] or arg in child["aliases"]
+                ),
+                None,
+            )
+            if path_open
+            else None
+        )
+        if child is not None:
+            path.append(child["name"])
+            node = child
+        elif not path:
+            return path, positionals, flags, "command " + arg
+        else:
+            positionals.append(arg)
+            path_open = False
+        index += 1
+    return path, positionals, flags, None
+
+
+def gh_values(flags, *names):
+    return [value for name, value in flags.get("_ordered", []) if name in names]
+
+
+def issue_creation_problem(path, positionals, flags):
+    if path == ["issue", "create"]:
+        return ISSUE_REASON
+    if path != ["api"]:
+        return None
+    endpoint = urlsplit(positionals[0]).path.lstrip("/") if positionals else None
+    methods = gh_values(flags, "-X", "--method")
+    method = methods[-1] if methods else None
+    field_values = gh_values(flags, "-f", "-F", "--raw-field", "--field")
+    fields = bool(field_values)
+    body = bool(gh_values(flags, "--input"))
+    if endpoint and re.fullmatch(r"repos/[^/]+/[^/]+/issues", endpoint):
+        if (method or ("POST" if fields or body else "GET")).upper() == "POST":
+            return ISSUE_REASON
+    queries = [
+        value.partition("=")[2] for value in field_values if value.startswith("query=")
+    ]
+    if endpoint == "graphql" and any(
+        re.search(r"\bmutation\b[\s\S]*\bcreateIssue\s*\(", query) for query in queries
+    ):
+        return ISSUE_REASON
+    return None
+
+
 def gh_problem(args, agent):
-    if len(args) >= 2 and args[:2] == ["pr", "merge"]:
+    path, positionals, flags, unknown = parse_gh(args)
+    if unknown:
+        if unknown.startswith("command "):
+            return (
+                "The guard can't judge this gh command: it doesn't know the command "
+                + unknown.removeprefix("command ")
+                + "."
+            )
+        return (
+            "The guard can't judge this gh command: it doesn't know the flag "
+            + unknown
+            + "."
+        )
+    if path == ["pr", "merge"]:
         return "gh pr merge is refused."
+    issue_reason = issue_creation_problem(path, positionals, flags)
+    if issue_reason:
+        return issue_reason
     if agent == "claude":
         return None
-    if not args:
+    if not path:
         return GH_REASON
-    if args[0] == "api":
-        method = None
-        fields = False
-        body = False
-        for i, arg in enumerate(args[1:], 1):
-            if arg in ("-X", "--method"):
-                method = args[i + 1] if i + 1 < len(args) else ""
-            elif arg.startswith("--method="):
-                method = arg.partition("=")[2]
-            elif arg.startswith("-X") and len(arg) > 2:
-                method = arg[2:]
-            elif arg in ("-f", "-F", "--field", "--raw-field") or arg.startswith(
-                ("--field=", "--raw-field=", "-f", "-F")
-            ):
-                fields = True
-            elif arg in ("--input",) or arg.startswith("--input="):
-                body = True
+    if path == ["api"]:
+        methods = gh_values(flags, "-X", "--method")
+        method = methods[-1] if methods else None
+        fields = bool(gh_values(flags, "-f", "-F", "--raw-field", "--field"))
+        body = bool(gh_values(flags, "--input"))
         return (
             None
             if method == "GET"
@@ -272,7 +483,7 @@ def gh_problem(args, agent):
             and not body
             else GH_REASON
         )
-    return None if tuple(args[:2]) in GH_READS else GH_REASON
+    return None if tuple(path) in GH_READS else GH_REASON
 
 
 def unwrap(args):
