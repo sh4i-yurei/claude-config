@@ -78,6 +78,10 @@ description = ""
 color = "5319E7"
 description = ""
 
+[repository."sh4i-yurei/keepbreath-contact-api"."scope:redis"]
+color = "C5DEF5"
+description = "Area: redis"
+
 [repository."sh4i-yurei/keepbreathing"."scope:ci"]
 color = "5319E7"
 description = ""
