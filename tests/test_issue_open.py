@@ -90,6 +90,17 @@ class IssueOpen(unittest.TestCase):
             and "--method" in call["args"]
         ]
 
+    def fail_board_add(self, message, board=2, url=None):
+        prefix = ["project", "item-add"]
+        if url is not None:
+            prefix += ["2", "--owner", "sh4i-yurei", "--url", url]
+        self.state["failure"] = {"prefix": prefix, "message": message}
+        self.state["lookup_board"] = board
+        self.save()
+
+    def board_lookups(self):
+        return [call for call in self.calls() if call["args"][:2] == ["api", "graphql"]]
+
     def assert_no_writes(self):
         self.assertFalse(
             any(
@@ -663,6 +674,264 @@ class IssueOpen(unittest.TestCase):
             "not completed",
         ):
             self.assertIn(phrase, result.stdout)
+
+    def test_new_issue_found_on_board_after_add_failure(self):
+        self.fail_board_add(
+            "GraphQL: Content already exists in this project (addProjectV2ItemById)",
+            url=f"https://github.com/{REPO}/issues/99",
+        )
+        result = self.run_open(self.valid())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("found new issue already on board\n", result.stdout)
+        self.assertIn("set new issue Status Backlog\n", result.stdout)
+        lookup = self.board_lookups()
+        self.assertEqual(len(lookup), 1)
+        self.assertEqual(
+            lookup[0]["args"][2:4],
+            [
+                "-f",
+                "query=query($url: URI!){ resource(url: $url){ ... on Issue { projectItems(first: 20){ nodes{ id project{ number owner{ ... on User { login } ... on Organization { login } } } } } } } }",
+            ],
+        )
+        self.assertEqual(
+            lookup[0]["args"][4:], ["-f", f"url=https://github.com/{REPO}/issues/99"]
+        )
+        edit = next(
+            call
+            for call in self.calls()
+            if call["args"][:2] == ["project", "item-edit"]
+        )
+        self.assertEqual(
+            edit["args"][edit["args"].index("--id") + 1], "PVTI_lAHODeM_nM4Bo2B8zhDt9uk"
+        )
+
+    def test_stray_found_on_board_after_add_failure(self):
+        self.fail_board_add(
+            "GraphQL: Content already exists in this project (addProjectV2ItemById)"
+        )
+        result = self.run_open(self.valid())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        for number in (18, 12):
+            self.assertIn(f"found stray #{number} already on board\n", result.stdout)
+            self.assertIn(f"set stray #{number} Status Backlog\n", result.stdout)
+        self.assertEqual(len(self.board_lookups()), 3)
+
+    def test_other_add_error_with_card_found_succeeds(self):
+        self.fail_board_add("HTTP 502")
+        result = self.run_open(self.valid())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("found new issue already on board\n", result.stdout)
+
+    def test_add_failure_without_card_on_configured_board_preserves_error(self):
+        message = (
+            "GraphQL: Content already exists in this project (addProjectV2ItemById)"
+        )
+        for board in (3, None):
+            with self.subTest(board=board):
+                self.fail_board_add(message, board)
+                result = self.run_open(self.valid())
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertEqual(
+                    result.stdout.splitlines()[:4],
+                    [
+                        f"https://github.com/{REPO}/issues/99",
+                        "completed: created https://github.com/sh4i-yurei/claude-config/issues/99 with labels type:feature, scope:ci",
+                        "not completed: added new issue to board; set new issue Status Backlog; added stray #18 to board; set stray #18 Status Backlog; added stray #12 to board; set stray #12 Status Backlog",
+                        f"failed: {message}",
+                    ],
+                )
+
+    def test_lookup_failure_reports_both_errors(self):
+        self.fail_board_add(
+            "GraphQL: Content already exists in this project (addProjectV2ItemById)"
+        )
+        self.state["lookup_failure"] = "HTTP 504"
+        self.save()
+        result = self.run_open(self.valid())
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn(
+            "not completed: added new issue to board; set new issue Status Backlog",
+            result.stdout,
+        )
+        self.assertIn(
+            "failed: GraphQL: Content already exists in this project (addProjectV2ItemById); checking the board also failed: HTTP 504",
+            result.stdout,
+        )
+
+    def test_successful_add_makes_no_board_lookup_and_keeps_calls(self):
+        result = self.run_open(self.valid())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(self.board_lookups(), [])
+        self.assertEqual(
+            [call["args"] for call in self.calls()],
+            [
+                ["api", f"repos/{REPO}/contents/.github/ISSUE_TEMPLATE"],
+                ["api", "repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE"],
+                [
+                    "api",
+                    "repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE/feature.yml",
+                ],
+                ["project", "view", "2", "--owner", "sh4i-yurei", "--format", "json"],
+                [
+                    "project",
+                    "field-list",
+                    "2",
+                    "--owner",
+                    "sh4i-yurei",
+                    "--format",
+                    "json",
+                    "--limit",
+                    "100",
+                ],
+                [
+                    "project",
+                    "item-list",
+                    "2",
+                    "--owner",
+                    "sh4i-yurei",
+                    "--format",
+                    "json",
+                    "--limit",
+                    "10000",
+                ],
+                [
+                    "issue",
+                    "list",
+                    "--repo",
+                    REPO,
+                    "--state",
+                    "open",
+                    "--limit",
+                    "10000",
+                    "--json",
+                    "number,url",
+                ],
+                ["api", f"repos/{REPO}/issues", "--method", "POST", "--input", "-"],
+                [
+                    "project",
+                    "item-add",
+                    "2",
+                    "--owner",
+                    "sh4i-yurei",
+                    "--url",
+                    f"https://github.com/{REPO}/issues/99",
+                    "--format",
+                    "json",
+                ],
+                [
+                    "project",
+                    "item-edit",
+                    "--id",
+                    "PVTI_NEW",
+                    "--project-id",
+                    "PVT_kwHODeM_nM4Bnbqb",
+                    "--field-id",
+                    "PVTSSF_lAHODeM_nM4BnbqbzhmAVQk",
+                    "--single-select-option-id",
+                    "f75ad846",
+                    "--format",
+                    "json",
+                ],
+                [
+                    "project",
+                    "item-add",
+                    "2",
+                    "--owner",
+                    "sh4i-yurei",
+                    "--url",
+                    f"https://github.com/{REPO}/issues/18",
+                    "--format",
+                    "json",
+                ],
+                [
+                    "project",
+                    "item-edit",
+                    "--id",
+                    "PVTI_NEW",
+                    "--project-id",
+                    "PVT_kwHODeM_nM4Bnbqb",
+                    "--field-id",
+                    "PVTSSF_lAHODeM_nM4BnbqbzhmAVQk",
+                    "--single-select-option-id",
+                    "f75ad846",
+                    "--format",
+                    "json",
+                ],
+                [
+                    "project",
+                    "item-add",
+                    "2",
+                    "--owner",
+                    "sh4i-yurei",
+                    "--url",
+                    f"https://github.com/{REPO}/issues/12",
+                    "--format",
+                    "json",
+                ],
+                [
+                    "project",
+                    "item-edit",
+                    "--id",
+                    "PVTI_NEW",
+                    "--project-id",
+                    "PVT_kwHODeM_nM4Bnbqb",
+                    "--field-id",
+                    "PVTSSF_lAHODeM_nM4BnbqbzhmAVQk",
+                    "--single-select-option-id",
+                    "f75ad846",
+                    "--format",
+                    "json",
+                ],
+            ],
+        )
+
+    def test_link_responses_keep_completed_text_when_status_fails(self):
+        self.state["failure"] = {
+            "prefix": ["project", "item-edit"],
+            "message": "HTTP 502",
+        }
+        self.save()
+        result = self.run_open(self.valid("parent = 20\nblocked_by = [22]"))
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [
+                f"https://github.com/{REPO}/issues/99",
+                f"completed: created https://github.com/{REPO}/issues/99 with labels type:feature, scope:ci; linked parent #20; linked blocked-by #22; added new issue to board",
+                "not completed: set new issue Status Backlog; added stray #18 to board; set stray #18 Status Backlog; added stray #12 to board; set stray #12 Status Backlog",
+                "failed: HTTP 502",
+            ],
+        )
+
+    def test_malformed_board_lookup_preserves_both_errors(self):
+        for shape, detail in (
+            ("not_mapping", "resource is not an issue"),
+            ("bad_data", "resource is not an issue"),
+            ("null_resource", "resource is not an issue"),
+            ("missing_project_items", "projectItems is missing"),
+            ("missing_nodes", "board cards are missing"),
+            ("bad_card", "board card is incomplete"),
+            ("bad_project", "board card is incomplete"),
+            ("bad_number", "board card is incomplete"),
+            ("bad_owner", "board card is incomplete"),
+            ("bad_login", "board card is incomplete"),
+            ("bad_id", "board card is incomplete"),
+        ):
+            with self.subTest(shape=shape):
+                self.fail_board_add("HTTP 502")
+                self.state["lookup_response"] = shape
+                self.save()
+                result = self.run_open(self.valid())
+                self.assertEqual(result.returncode, 2)
+                self.assertEqual(
+                    result.stdout.splitlines(),
+                    [
+                        f"https://github.com/{REPO}/issues/99",
+                        f"completed: created https://github.com/{REPO}/issues/99 with labels type:feature, scope:ci",
+                        "not completed: added new issue to board; set new issue Status Backlog; added stray #18 to board; set stray #18 Status Backlog; added stray #12 to board; set stray #12 Status Backlog",
+                        f"failed: HTTP 502; checking the board also failed: {detail}",
+                    ],
+                )
 
     def test_status_failure_reports_board_add_as_completed(self):
         self.state["failure"] = {

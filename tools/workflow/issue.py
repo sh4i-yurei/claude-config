@@ -256,6 +256,35 @@ def board_add(board, url):
     )
 
 
+def board_card(board, url):
+    query = "query($url: URI!){ resource(url: $url){ ... on Issue { projectItems(first: 20){ nodes{ id project{ number owner{ ... on User { login } ... on Organization { login } } } } } } } }"
+    response = gh(["api", "graphql", "-f", f"query={query}", "-f", f"url={url}"])
+    data = response.get("data") if isinstance(response, dict) else None
+    resource = data.get("resource") if isinstance(data, dict) else None
+    if not isinstance(resource, dict):
+        raise IssueError("resource is not an issue")
+    items = resource.get("projectItems")
+    if not isinstance(items, dict):
+        raise IssueError("projectItems is missing")
+    nodes = items.get("nodes")
+    if not isinstance(nodes, list):
+        raise IssueError("board cards are missing")
+    for card in nodes:
+        project = card.get("project") if isinstance(card, dict) else None
+        owner = project.get("owner") if isinstance(project, dict) else None
+        if (
+            not isinstance(project, dict)
+            or not isinstance(project.get("number"), int)
+            or not isinstance(owner, dict)
+            or not isinstance(owner.get("login"), str)
+            or not isinstance(card.get("id"), str)
+        ):
+            raise IssueError("board card is incomplete")
+        if project["number"] == board["number"] and owner["login"] == board["owner"]:
+            return card["id"]
+    return None
+
+
 def board_status(project_id, field_id, backlog_id, item_id):
     gh(
         [
@@ -425,53 +454,66 @@ def open_issue(path, dry_run):
     planned = []
     if parent:
         planned.append(
-            (
+            [
                 f"linked parent #{parent['number']}",
                 lambda: api(
                     f"repos/{repo}/issues/{parent['number']}/sub_issues",
                     payload={"sub_issue_id": created["id"]},
                 ),
-            )
+            ]
         )
     for issue in blocked:
         planned.append(
-            (
+            [
                 f"linked blocked-by #{issue['number']}",
                 lambda issue=issue: api(
                     f"repos/{repo}/issues/{created['number']}/dependencies/blocked_by",
                     payload={"issue_id": issue["id"]},
                 ),
-            )
+            ]
         )
     item_ids = {}
 
     def plan_board(description, item_url):
         def add():
-            item_ids[item_url] = board_add(board, item_url)["id"]
+            try:
+                item_ids[item_url] = board_add(board, item_url)["id"]
+            except IssueError as add_error:
+                try:
+                    item_id = board_card(board, item_url)
+                except IssueError as lookup_error:
+                    raise IssueError(
+                        f"{add_error}; checking the board also failed: {lookup_error}"
+                    ) from lookup_error
+                if item_id is None:
+                    raise
+                item_ids[item_url] = item_id
+                step[0] = f"found {description} already on board"
 
-        planned.append((f"added {description} to board", add))
+        step = [f"added {description} to board", add]
+        planned.append(step)
         planned.append(
-            (
+            [
                 f"set {description} Status Backlog",
                 lambda: board_status(
                     project_id, field_id, backlog_id, item_ids[item_url]
                 ),
-            )
+            ]
         )
 
     plan_board("new issue", url)
     for item in strays:
         plan_board(f"stray #{item['number']}", item["url"])
-    for index, (description, action) in enumerate(planned):
+    for index, step in enumerate(planned):
         try:
-            action()
+            step[1]()
         except (IssueError, KeyError) as error:
             print(url)
             print("completed: " + "; ".join(completed))
             print("not completed: " + "; ".join(name for name, _ in planned[index:]))
             print(f"failed: {error}")
             return 2
-        completed.append(description)
+        completed.append(step[0])
     print(url)
     for step in completed:
         print(step)

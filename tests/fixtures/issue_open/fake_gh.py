@@ -28,7 +28,50 @@ result = None
 if args[:1] == ["api"]:
     endpoint = args[1].split("?", 1)[0]
     method = args[args.index("--method") + 1] if "--method" in args else "GET"
-    if method == "GET":
+    if endpoint == "graphql":
+        if state.get("lookup_failure"):
+            print(state["lookup_failure"], file=sys.stderr)
+            sys.exit(1)
+        result = fixture("issue-board-card")
+        shape = state.get("lookup_response")
+        if shape == "not_mapping":
+            result = []
+        elif shape == "bad_data":
+            result["data"] = []
+        elif shape == "null_resource":
+            result["data"]["resource"] = None
+        elif shape == "missing_project_items":
+            result["data"]["resource"].pop("projectItems")
+        elif shape == "missing_nodes":
+            result["data"]["resource"]["projectItems"].pop("nodes")
+        elif shape in (
+            "bad_card",
+            "bad_project",
+            "bad_number",
+            "bad_owner",
+            "bad_login",
+            "bad_id",
+        ):
+            nodes = result["data"]["resource"]["projectItems"]["nodes"]
+            if shape == "bad_card":
+                nodes[0] = None
+            elif shape == "bad_project":
+                nodes[0]["project"] = None
+            elif shape == "bad_number":
+                nodes[0]["project"]["number"] = None
+            elif shape == "bad_owner":
+                nodes[0]["project"]["owner"] = None
+            elif shape == "bad_login":
+                nodes[0]["project"]["owner"]["login"] = None
+            else:
+                nodes[0]["id"] = None
+        else:
+            nodes = result["data"]["resource"]["projectItems"]["nodes"]
+            if state.get("lookup_board") is None:
+                nodes.clear()
+            else:
+                nodes[0]["project"]["number"] = state["lookup_board"]
+    elif method == "GET":
         if endpoint.endswith("/contents/.github/ISSUE_TEMPLATE"):
             if endpoint.startswith("repos/missing-owner/.github/"):
                 print("HTTP 404: Not Found", file=sys.stderr)
@@ -73,7 +116,7 @@ if args[:1] == ["api"]:
     elif method == "POST" and (
         endpoint.endswith("/sub_issues") or endpoint.endswith("/blocked_by")
     ):
-        result = {}
+        result = fixture("issue-20")
     else:
         print("unexpected API " + repr(args), file=sys.stderr)
         sys.exit(1)
