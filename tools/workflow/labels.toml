@@ -38,6 +38,10 @@ description = "Still intended, not now"
 color = "0366d6"
 description = "Pull requests that update a dependency file"
 
+[global.github_actions]
+color = "000000"
+description = "Pull requests that update GitHub Actions code"
+
 [global.tech-debt]
 color = "FBCA04"
 description = "A known shortcut or decay to pay back"
