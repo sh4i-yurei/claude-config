@@ -123,7 +123,6 @@ class LabelSync(unittest.TestCase):
                 "debt:docs",
                 "debt:infra",
                 "dependencies",
-                "github_actions",
             },
         )
 
