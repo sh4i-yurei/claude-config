@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Print the API tokens from the Bitwarden vault as shell exports.
+#
+#     eval "$(vault-env)"
+#
+# replaces the old `set -a; . ~/Documents/lockbox/keepbreathing/secrets.env; set +a`.
+# The tokens are hidden fields on the "API tokens (keepbreath.ing)" note, named
+# exactly as the variables were. Needs an unlocked session in the environment:
+#
+#     vu
+#
+# bw lives in the dev distrobox container. Run this from inside it (the vu function
+# in ~/.bashrc unlocks the vault and loads the session there).
+
+if [ "$#" -ne 0 ] || [ -t 1 ]; then
+    printf 'usage: eval "$(vault-env)"\n' >&2
+    exit 2
+fi
+
+item="API tokens (keepbreath.ing)"
+# bw only exists inside the dev container; on the host it dies on a missing node.
+[ -f /run/.containerenv ] || { echo "vault-env: bw runs only inside the dev container (distrobox enter dev)" >&2; exit 1; }
+# Never let bw prompt: an answered prompt mints a new key and retires the shared one.
+export BW_NOINTERACTION=true
+# Shells that did not source .bashrc (Claude's, git from an editor) still get the session.
+f="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bw-session"
+[ -n "${BW_SESSION:-}" ] || { [ -r "$f" ] && export BW_SESSION="$(cat "$f")"; }
+json=$(bw get item "$item" 2>/dev/null)
+
+if [ -z "$json" ]; then
+    echo "vault-env: nothing from the vault. Is it unlocked? Run vu." >&2
+    exit 1
+fi
+
+printf '%s' "$json" | python3 -c '
+import json, shlex, sys
+d = json.load(sys.stdin)
+for f in d.get("fields", []):
+    if f.get("name") and f.get("value") is not None:
+        print("export %s=%s" % (f["name"], shlex.quote(f["value"])))
+'

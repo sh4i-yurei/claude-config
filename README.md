@@ -40,6 +40,24 @@ done
 `~/.claude/settings.json` is not in this repository. Because it refers to the hooks through
 `~/.claude/hooks`, it needs no change when this repository moves.
 
+## Secrets for agents
+
+Agents use `vault-run` inside `dev` to pass a requested secret to one command. After it is linked
+as `~/.local/bin/vault-run`, a named hidden field goes into that command's environment:
+
+```bash
+vault-run --env GH_TOKEN -- gh run list
+```
+
+An item's login password goes to the command's standard input, followed by a newline:
+
+```bash
+vault-run --stdin "keepbreath0 sudo (hub)" -- ssh hub "sudo -S -p '' true"
+```
+
+The runner reads the existing vault session itself. It does not pass the session key to the
+command or print secret values.
+
 ## Agent guard registration
 
 `hooks/git-guard.py` runs under the host's `/usr/bin/python3`. It loads the vendored
