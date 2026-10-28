@@ -119,13 +119,12 @@ and sends a warning to Claude through `additionalContext`.
 
 ## Synchronizing labels
 
-Run these commands in the `dev` shell from the `claude-config` repository root. The first loads
-GitHub authentication into the current shell, and the second prints every planned create, update
-and delete without changing GitHub:
+Run this command in the `dev` shell from the `claude-config` repository root. `vault-run` gives
+it GitHub's token for that one run, and it prints every planned create, update and delete without
+changing GitHub:
 
 ```bash
-eval "$(vault-env)"
-/usr/bin/python3 tools/workflow/sync_labels.py --dry-run
+vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/sync_labels.py --dry-run
 ```
 
 After reviewing the plan, omit `--dry-run` to apply it. The command skips archived repositories
@@ -142,9 +141,8 @@ Run these commands in the `dev` shell from the repository root. PyYAML is needed
 `/usr/bin/python3 -m pip install --user --break-system-packages PyYAML`.
 
 ```bash
-eval "$(vault-env)"
-/usr/bin/python3 tools/workflow/issue.py open issue.toml --dry-run
-/usr/bin/python3 tools/workflow/issue.py open issue.toml
+vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py open issue.toml --dry-run
+vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py open issue.toml
 ```
 
 The first invocation validates the file, reads GitHub's current issue form, labels, milestone,
@@ -190,9 +188,8 @@ Run this command in the `dev` shell from the repository root. It checks the issu
 current form and board fields. `--check` reports the same conditions without changing the board.
 
 ```bash
-eval "$(vault-env)"
-/usr/bin/python3 tools/workflow/issue.py ready sh4i-yurei/claude-config#23 --check
-/usr/bin/python3 tools/workflow/issue.py ready sh4i-yurei/claude-config#23
+vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py ready sh4i-yurei/claude-config#23 --check
+vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py ready sh4i-yurei/claude-config#23
 ```
 
 The command requires one `type:` label, a defined `scope:` label where the repository has scope
