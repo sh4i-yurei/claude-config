@@ -1,6 +1,72 @@
 # G3b Ready mutants left by the completed scoped mutmut run.
 # The command parser's remaining mutants alter unchanged G3a Open behavior.
 survivors:
+  hooks.git-guard.x_command__mutmut_115: >-
+    bashlex redirect nodes always expose the heredoc attribute; removing getattr's fallback leaves every parsed command decision unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_11: >-
+    False and None are both false in the parser's only checks of this state, so command paths, flags, and decisions are unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_47: >-
+    Once a positional closes a command group, later tokens cannot extend its path or set flags; skipping another token or stopping produces the same decision.
+  hooks.git-guard.x_parse_gh__mutmut_48: >-
+    Once a positional closes a command group, later tokens cannot extend its path or set flags; skipping another token or stopping produces the same decision.
+  hooks.git-guard.x_parse_gh__mutmut_53: >-
+    This command path has no flag table; later tokens cannot set flags or affect any guard decision.
+  hooks.git-guard.x_parse_gh__mutmut_54: >-
+    This command path has no flag table; later tokens cannot set flags or affect any guard decision.
+  hooks.git-guard.x_parse_gh__mutmut_80: >-
+    The guard reads valued flags from _ordered, not their per-flag value lists; changing the unused list leaves decisions unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_81: >-
+    The guard reads valued flags from _ordered, not their per-flag value lists; changing the unused list leaves decisions unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_129: >-
+    The guard reads valued flags from _ordered, not their per-flag value lists; changing the unused list leaves decisions unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_130: >-
+    The guard reads valued flags from _ordered, not their per-flag value lists; changing the unused list leaves decisions unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_92: >-
+    The guard checks presence of this boolean flag; its stored attached value is never used by a decision.
+  hooks.git-guard.x_parse_gh__mutmut_97: >-
+    The guard checks presence of this boolean flag; its stored attached value is never used by a decision.
+  hooks.git-guard.x_parse_gh__mutmut_98: >-
+    The guard checks presence of this boolean flag; its stored attached value is never used by a decision.
+  hooks.git-guard.x_parse_gh__mutmut_100: >-
+    The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_104: >-
+    The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_105: >-
+    The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_106: >-
+    The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_107: >-
+    The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_154: >-
+    The guard checks presence of this shorthand boolean flag; its stored attached value is never used by a decision.
+  hooks.git-guard.x_parse_gh__mutmut_160: >-
+    The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_164: >-
+    The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_165: >-
+    The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
+  hooks.git-guard.x_parse_gh__mutmut_177: >-
+    When path_open is false and children exist, an earlier branch skips child lookup; without children, child lookup cannot find a command. The changed condition cannot change a path.
+  hooks.git-guard.x_parse_gh__mutmut_200: >-
+    False and None both close the command path, so later words are positional and every decision stays the same.
+  hooks.git-guard.x_session_path__mutmut_7: >-
+    Every split variant selects the final path component after the last slash, so the bw-session decision is identical for every input.
+  hooks.git-guard.x_session_path__mutmut_10: >-
+    Every split variant selects the final path component after the last slash, so the bw-session decision is identical for every input.
+  hooks.git-guard.x_session_path__mutmut_11: >-
+    Every split variant selects the final path component after the last slash, so the bw-session decision is identical for every input.
+  hooks.git-guard.x_unwrap__mutmut_79: >-
+    The changed length threshold affects only the two-word distrobox enter form, which contains no inner command and is allowed in either branch.
+  hooks.git-guard.x_unwrap__mutmut_80: >-
+    The changed length threshold affects only the two-word distrobox enter form, which contains no inner command and is allowed in either branch.
+  hooks.git-guard.x_unwrap__mutmut_108: >-
+    At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
+  hooks.git-guard.x_unwrap__mutmut_111: >-
+    At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
+  hooks.git-guard.x_unwrap__mutmut_235: >-
+    At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
+  hooks.git-guard.x_unwrap__mutmut_238: >-
+    At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
   tools.workflow.issue.x_ready_issue__mutmut_219: >-
     form_files refuses a repository with no forms before ready_issue reaches
     this expression. The changed condition only changes the empty-forms path,

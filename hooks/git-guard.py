@@ -20,7 +20,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "vendor"))
 DIRECT_PUSH_REPOS = {"claude-config", "codex-config", "second-brain"}
 PROTECTED_BRANCHES = {"main", "master"}
 BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
-WORD = re.compile(r"(?<![A-Za-z0-9_])(?:git|gh)(?![A-Za-z0-9_])")
+GUARDED_PROGRAMS = ("git", "gh", "bw", "vault-env")
+GIT, GH, BW, VAULT_ENV = GUARDED_PROGRAMS
+SESSION_FILE = "bw-session"
+FALLBACK_WORD = re.compile(
+    r"(?<![A-Za-z0-9_])(?:"
+    + "|".join(re.escape(name) for name in (*GUARDED_PROGRAMS, SESSION_FILE))
+    + r")(?![A-Za-z0-9_])"
+)
+PFLAG_BOOLEAN_VALUES = frozenset(
+    ("1", "t", "T", "TRUE", "true", "True", "0", "f", "F", "FALSE", "false", "False")
+)
 GH_READS = {
     ("run", "list"),
     ("run", "view"),
@@ -39,6 +49,17 @@ GH_REASON = (
     "issue view/list; repo view; api GET."
 )
 GH_FLAG_TABLES = {
+    "auth-status": {
+        "-a": False,
+        "--active": False,
+        "-h": True,
+        "--hostname": True,
+        "--jq": True,
+        "--json": True,
+        "-t": False,
+        "--show-token": False,
+        "--template": True,
+    },
     "api": {
         "--allow-escape-sequences": False,
         "--cache": True,
@@ -359,7 +380,11 @@ def parse_gh(args):
                 if name not in table:
                     return path, positionals, flags, name
                 takes_value = table[name]
-                if not takes_value and separator:
+                if (
+                    not takes_value
+                    and separator
+                    and attached not in PFLAG_BOOLEAN_VALUES
+                ):
                     return path, positionals, flags, name
                 if takes_value:
                     if not separator:
@@ -370,8 +395,10 @@ def parse_gh(args):
                     flags.setdefault(name, []).append(attached)
                     flags.setdefault("_ordered", []).append((name, attached))
                 else:
-                    flags.setdefault(name, []).append(None)
-                    flags.setdefault("_ordered", []).append((name, None))
+                    flags.setdefault(name, []).append(attached if separator else None)
+                    flags.setdefault("_ordered", []).append(
+                        (name, attached if separator else None)
+                    )
             else:
                 letters = arg[1:]
                 offset = 0
@@ -389,8 +416,17 @@ def parse_gh(args):
                         flags.setdefault(name, []).append(value)
                         flags.setdefault("_ordered", []).append((name, value))
                         break
-                    flags.setdefault(name, []).append(None)
-                    flags.setdefault("_ordered", []).append((name, None))
+                    attached = (
+                        letters[offset + 2 :]
+                        if letters[offset + 1 :].startswith("=")
+                        else None
+                    )
+                    if attached is not None and attached not in PFLAG_BOOLEAN_VALUES:
+                        return path, positionals, flags, name
+                    flags.setdefault(name, []).append(attached)
+                    flags.setdefault("_ordered", []).append((name, attached))
+                    if attached is not None:
+                        break
                     offset += 1
             index += 1
             continue
@@ -448,6 +484,10 @@ def issue_creation_problem(path, positionals, flags):
 
 def gh_problem(args, agent):
     path, positionals, flags, unknown = parse_gh(args)
+    if path == ["auth", "token"]:
+        return "Secrets stay out of transcripts: gh auth token prints a token."
+    if path == ["auth", "status"] and ("-t" in flags or "--show-token" in flags):
+        return "Secrets stay out of transcripts: gh auth status can show a token."
     if unknown:
         if unknown.startswith("command "):
             return (
@@ -490,6 +530,45 @@ def unwrap(args):
     args = list(args)
     while args:
         name = os.path.basename(args[0])
+        if name == "vault-run":
+            if len(args) == 2 and args[1] in ("-h", "--help"):
+                return [], None
+            index = 1
+            while index < len(args):
+                arg = args[index]
+                if arg == "--":
+                    if index + 1 == len(args):
+                        return (
+                            [],
+                            "Secrets stay out of transcripts: vault-run has no command.",
+                        )
+                    args = args[index + 1 :]
+                    break
+                if arg in ("--env", "--stdin"):
+                    index += 1
+                    if index == len(args) or not args[index] or args[index] == "--":
+                        return (
+                            [],
+                            "Secrets stay out of transcripts: vault-run options are incomplete.",
+                        )
+                elif arg.startswith(("--env=", "--stdin=")):
+                    if not arg.partition("=")[2]:
+                        return (
+                            [],
+                            "Secrets stay out of transcripts: vault-run options are incomplete.",
+                        )
+                else:
+                    return (
+                        [],
+                        "Secrets stay out of transcripts: vault-run options are unknown.",
+                    )
+                index += 1
+            else:
+                return (
+                    [],
+                    "Secrets stay out of transcripts: vault-run needs -- before its command.",
+                )
+            continue
         if name == "distrobox" and len(args) >= 2 and args[1] == "enter":
             index = 2
             while index < len(args) and args[index] != "--":
@@ -562,15 +641,39 @@ def unwrap(args):
             args = args[1:]
         else:
             break
-    return args
+    return args, None
+
+
+def session_path(value):
+    return "/" in value and value.rsplit("/", 1)[-1] == SESSION_FILE
 
 
 def command(node, cwd, agent, source, pipeline_input=()):
     words = [part for part in node.parts if part.kind == "word"]
-    args = unwrap([bashlex_compat.word_value(part, source) for part in words])
+    raw_args = [bashlex_compat.word_value(part, source) for part in words]
+    redirect_targets = [
+        bashlex_compat.word_value(part.output, source)
+        for part in node.parts
+        if part.kind == "redirect"
+        and isinstance(getattr(part, "output", None), bashlex.ast.node)
+    ]
+    if any(session_path(value) for value in (*raw_args, *redirect_targets)):
+        return cwd, "Secrets stay out of transcripts: bw-session is the vault key."
+    args, unwrap_problem = unwrap(raw_args)
+    if unwrap_problem:
+        return cwd, unwrap_problem
     if not args:
         return cwd, None
     name = os.path.basename(args[0])
+    if name == VAULT_ENV:
+        return cwd, "Secrets stay out of transcripts: use vault-run to fetch secrets."
+    if (
+        name == BW
+        and args[1:]
+        and args[1]
+        not in ("status", "lock", "sync", "help", "--help", "-h", "--version")
+    ):
+        return cwd, "Secrets stay out of transcripts: bw can read the vault."
     if name == "cd" and len(args) >= 2:
         return os.path.abspath(os.path.join(cwd, os.path.expanduser(args[1]))), None
     if name in ("bash", "sh"):
@@ -589,9 +692,9 @@ def command(node, cwd, agent, source, pipeline_input=()):
                 return cwd, script_problem(
                     bashlex_compat.word_value(part.output, source), cwd, agent
                 )
-    if name == "git":
+    if name == GIT:
         return cwd, git_problem(args[1:], cwd, agent)
-    if name == "gh":
+    if name == GH:
         return cwd, gh_problem(args[1:], agent)
     return cwd, None
 
@@ -652,8 +755,13 @@ def script_problem(script, cwd, agent):
     except Exception as exc:
         normalized = re.sub(r"['\"\\`]", "", script)
         return (
-            "Cannot parse a command mentioning git or gh: " + str(exc)
-            if WORD.search(normalized)
+            "Cannot parse a command mentioning "
+            + ", ".join(GUARDED_PROGRAMS[:-1])
+            + " or "
+            + GUARDED_PROGRAMS[-1]
+            + ": "
+            + str(exc)
+            if FALLBACK_WORD.search(normalized)
             else None
         )
     for tree in trees:

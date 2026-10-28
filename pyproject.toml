@@ -3,6 +3,6 @@ extend-exclude = ["vendor/bashlex"]
 force-exclude = true
 
 [tool.mutmut]
-source_paths = ["tools/workflow/issue.py", "tools/vault_run.py"]
-also_copy = ["tools/workflow/config.py", "tools/workflow/labels.toml", "tools/workflow/workflow.toml"]
-pytest_add_cli_args_test_selection = ["tests/test_issue_ready.py", "tests/test_issue_open.py", "tests/test_vault_run.py"]
+source_paths = ["tools/workflow/issue.py", "tools/vault_run.py", "hooks/git-guard.py"]
+also_copy = ["tools/workflow/config.py", "tools/workflow/labels.toml", "tools/workflow/workflow.toml", "hooks/bashlex_compat.py", "hooks/gh-command-tree-2.97.0.json", "vendor"]
+pytest_add_cli_args_test_selection = ["tests/test_issue_ready.py", "tests/test_issue_open.py", "tests/test_vault_run.py", "tests/test_vault_guard.py"]

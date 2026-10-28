@@ -65,7 +65,7 @@
   {
     "name": "wrapped real issue create",
     "cwd": "feature", "claude": "deny", "codex": "deny", "other": "deny", "reason": "issue tool",
-    "command": "distrobox enter dev -- bash -lc 'eval \"$(vault-env)\" >/dev/null 2>&1; gh issue create -R sh4i-yurei/.github --title \"Tech debt from the default-templates review\" --body-file /tmp/td-dg.md'"
+    "command": "distrobox enter dev -- bash -lc 'vault-run --env GH_TOKEN -- gh issue create -R sh4i-yurei/.github --title \"Tech debt from the default-templates review\" --body-file /tmp/td-dg.md'"
   },
   {
     "name": "bare issue create",
