@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 """Run a command with selected Bitwarden fields or one password."""
 
 import argparse

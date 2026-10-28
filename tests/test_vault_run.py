@@ -5,6 +5,7 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -127,6 +128,39 @@ print(json.dumps(items[sys.argv[3]]))
             if self.calls_file.exists()
             else []
         )
+
+    def run_link(self, *args):
+        link = self.root / "vault-run"
+        link.symlink_to(ROOT / "tools" / "vault_run.py")
+        return subprocess.run(
+            ["/usr/bin/bash", "-c", '"$0" "$@"', str(link), *args],
+            cwd=self.root,
+            env=self.environment,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_link_runs_help_as_command(self):
+        result = self.run_link("--help")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(
+            result.stdout.startswith(
+                "usage: vault-run [--env NAME]... [--stdin ITEM] -- COMMAND [ARG]...\n"
+            ),
+            result.stdout,
+        )
+
+    def test_link_passes_one_environment_field(self):
+        result = self.run_link(
+            "--env",
+            "GH_TOKEN",
+            "--",
+            PYTHON,
+            "-c",
+            "import os,sys; sys.exit(0 if os.environ.get('GH_TOKEN')=='dummy-gh' else 3)",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "")
 
     def test_one_environment_field(self):
         child = [
