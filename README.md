@@ -182,6 +182,23 @@ links the parent and blockers, and puts the issue on its configured board with S
 Priority, Size, Estimate and Iteration stay empty for triage. It also adds any open issues from
 the same repository that are missing from that board, with Status Backlog.
 
+## Filing a passed review's leftovers
+
+Run these commands in the `dev` shell from the repository root, after a review handoff has one
+review-result `json` block in its Response. The first command shows the planned issue without
+writing to GitHub. The second opens it through the same checks and board steps as `open`.
+
+```bash
+vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py debt review-handoff.md --dry-run
+vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py debt review-handoff.md
+```
+
+The command takes findings marked `non_blocking` whose `breaks_test_case` is `none` from a passed
+review. It uses the Chore form, the reviewed issue's scope label and the `tech-debt` label, then
+links that issue as its parent and puts the new issue in Backlog. It refuses a review already named
+in one of the parent's sub-issues, whether that sub-issue is open or closed. A review with no
+qualifying findings opens nothing. Exit 2 means the handoff was refused or a GitHub step failed.
+
 ## Checking whether an issue is Ready
 
 Run this command in the `dev` shell from the repository root. It checks the issue against its

@@ -9,6 +9,11 @@ import sys
 
 args = sys.argv[1:]
 fixtures = Path(os.environ["FAKE_GH_FIXTURES"])
+debt_fixtures = (
+    Path(os.environ["FAKE_GH_DEBT_FIXTURES"])
+    if "FAKE_GH_DEBT_FIXTURES" in os.environ
+    else None
+)
 calls = Path(os.environ["FAKE_GH_CALLS"])
 with calls.open("a") as out:
     out.write(json.dumps({"args": args, "input": sys.stdin.read()}) + "\n")
@@ -72,7 +77,27 @@ if args[:1] == ["api"]:
             else:
                 nodes[0]["project"]["number"] = state["lookup_board"]
     elif method == "GET":
-        if endpoint.endswith("/contents/.github/ISSUE_TEMPLATE"):
+        if endpoint.endswith("/issues/28/sub_issues") and debt_fixtures:
+            result = (
+                json.loads((debt_fixtures / "issue-28-sub-issues.json").read_text())
+                if not state.get("empty_sub_issues")
+                else []
+            )
+            result = state.get("sub_issues_response", result)
+        elif endpoint.endswith("/issues/1/sub_issues") and debt_fixtures:
+            result = []
+        elif endpoint.endswith("/issues/23/sub_issues") and debt_fixtures:
+            result = json.loads(
+                (debt_fixtures / "issue-23-sub-issues.json").read_text()
+            )
+        elif endpoint.endswith("/issues/28") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-28.json").read_text())
+            if state.get("remove_issue_labels"):
+                result.pop("labels")
+        elif endpoint.endswith("/issues/1") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-28.json").read_text())
+            result["number"] = 1
+        elif endpoint.endswith("/contents/.github/ISSUE_TEMPLATE"):
             if endpoint.startswith("repos/missing-owner/.github/"):
                 print("HTTP 404: Not Found", file=sys.stderr)
                 sys.exit(1)

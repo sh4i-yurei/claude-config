@@ -134,7 +134,7 @@ print(json.dumps(items[sys.argv[3]]))
         link.symlink_to(ROOT / "tools" / "vault_run.py")
         return subprocess.run(
             ["/usr/bin/bash", "-c", '"$0" "$@"', str(link), *args],
-            cwd=self.root,
+            cwd=ROOT,
             env=self.environment,
             capture_output=True,
             text=True,

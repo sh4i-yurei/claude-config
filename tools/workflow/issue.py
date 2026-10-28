@@ -1,9 +1,10 @@
-"""Open a checked GitHub issue and place open repository issues on its board."""
+"""Open checked GitHub issues, file review debt, and check readiness."""
 
 import argparse
 import base64
 import json
 from pathlib import Path
+import re
 import subprocess
 import tomllib
 
@@ -305,7 +306,10 @@ def board_status(project_id, field_id, backlog_id, item_id):
 
 
 def open_issue(path, dry_run):
-    data = read_input(path)
+    return open_data(read_input(path), dry_run)
+
+
+def open_data(data, dry_run):
     repo = data.get("repo")
     try:
         _, exceptions, global_labels, labels = load()
@@ -520,6 +524,124 @@ def open_issue(path, dry_run):
     return 0
 
 
+def review_result(path):
+    try:
+        lines = Path(path).read_text().splitlines()
+    except OSError as error:
+        raise IssueError(f"{path}: {error}") from error
+    response = []
+    in_response = False
+    for line in lines:
+        if line == "## Response":
+            in_response = True
+            continue
+        if in_response and line.startswith("## "):
+            break
+        if in_response:
+            response.append(line)
+    blocks = []
+    inside = False
+    content = []
+    for line in response:
+        if not inside and line == "```json":
+            inside = True
+            content = []
+        elif inside and line == "```":
+            inside = False
+            try:
+                value = json.loads("\n".join(content))
+            except json.JSONDecodeError:
+                continue
+            if (
+                isinstance(value, dict)
+                and {"repo", "issue", "item", "verdict", "findings"} <= value.keys()
+            ):
+                blocks.append(value)
+        elif inside:
+            content.append(line)
+    if len(blocks) != 1:
+        raise IssueError(
+            f"{Path(path).name}: expected exactly one review result block in Response, found {len(blocks)}"
+        )
+    return blocks[0]
+
+
+def debt_issue(path, dry_run):
+    result = review_result(path)
+    name = Path(path).name
+    if result["verdict"] != "pass":
+        raise IssueError(
+            f"{name}: the review's verdict is {result['verdict']}; only a passed review's leftovers are filed"
+        )
+    findings = result["findings"]
+    if not isinstance(findings, list):
+        raise IssueError(f"{name}: findings must be a list")
+    leftovers = [
+        finding
+        for finding in findings
+        if isinstance(finding, dict)
+        and finding.get("severity") == "non_blocking"
+        and finding.get("breaks_test_case") == "none"
+    ]
+    if not leftovers:
+        print(f"{name}: no leftover findings; nothing opened")
+        return 0
+    match = re.search(r"-review-(\d+)\.md$", name)
+    if match is None:
+        raise IssueError(f"{name}: expected a -review-<round>.md file name")
+    repo, number, item = result["repo"], result["issue"], result["item"]
+    if (
+        not isinstance(repo, str)
+        or repo.count("/") != 1
+        or type(number) is not int
+        or number < 1
+        or not isinstance(item, str)
+        or not item
+    ):
+        raise IssueError(f"{name}: review result has invalid repo, issue or item")
+    children = api(f"repos/{repo}/issues/{number}/sub_issues")
+    if not isinstance(children, list):
+        raise IssueError(f"{name}: GitHub returned invalid sub-issues")
+    for child in children:
+        if isinstance(child, dict) and name in (child.get("body") or ""):
+            raise IssueError(
+                f"{name}: #{child['number']} already files this review's leftovers"
+            )
+    issue = related(repo, number)
+    scopes = [
+        label["name"]
+        for label in issue.get("labels", [])
+        if label["name"].startswith("scope:")
+    ]
+    if len(scopes) != 1:
+        raise IssueError(f"{name}: #{number} must have one scope label")
+    changes = []
+    for finding in leftovers:
+        summary = finding.get("summary")
+        if not isinstance(summary, str) or not summary:
+            raise IssueError(f"{name}: leftover finding has no summary")
+        location = finding.get("file")
+        if location:
+            location = f"{location}:{finding['line']}"
+            changes.append(f"- {location}: {summary}")
+        else:
+            changes.append(f"- {summary}")
+    data = {
+        "repo": repo,
+        "kind": "chore",
+        "title": f"Tech debt from the review of {item}",
+        "scope": scopes[0],
+        "parent": number,
+        "labels": ["tech-debt"],
+        "body": {
+            "context": f"Non-blocking findings from {item}'s round {match.group(1)} review of #{number}, in 05_Agents/handoffs/{name}.",
+            "changes": "\n".join(changes),
+            "done": "Each finding above is fixed with a test, or closed in triage with the reason it stays.",
+        },
+    }
+    return open_data(data, dry_run)
+
+
 def form_sections(body):
     """Read GitHub's issue-form heading layout and the text below each heading."""
     sections = {}
@@ -676,6 +798,9 @@ def main(argv=None):
     opener = commands.add_parser("open", help="create a checked issue from a TOML file")
     opener.add_argument("file")
     opener.add_argument("--dry-run", action="store_true")
+    debt_parser = commands.add_parser("debt", help="file a passed review's leftovers")
+    debt_parser.add_argument("review_handoff")
+    debt_parser.add_argument("--dry-run", action="store_true")
     ready_parser = commands.add_parser(
         "ready", help="check an issue's Definition of Ready"
     )
@@ -685,6 +810,8 @@ def main(argv=None):
     try:
         if arguments.command == "ready":
             return ready_issue(arguments.issue, arguments.check)
+        if arguments.command == "debt":
+            return debt_issue(arguments.review_handoff, arguments.dry_run)
         return open_issue(arguments.file, arguments.dry_run)
     except IssueError as error:
         print(error)
