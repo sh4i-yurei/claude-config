@@ -13,10 +13,16 @@ survivors:
   tools.workflow.issue.x_review_result__mutmut_34: >-
     False and None are both false after a closing fence. Both states lead to the
     same next block selection and command result.
-  tools.workflow.issue.x_debt_issue__mutmut_79: >-
+  tools.workflow.issue.x_debt_issue__mutmut_83: >-
+    Re-reading the final file returns the same review result as the first read
+    when the handoff is stable during the command. Testing this difference would
+    require changing the input file between two internal reads.
+  tools.workflow.issue.x_debt_issue__mutmut_157: >-
     A missing or empty sub-issue body becomes either an empty string or XXXX.
-    Neither can contain a review file name ending in -review-N.md, so duplicate
-    detection, output and GitHub writes are identical.
+    Neither contains the given review file name, so the refusal and writes agree.
+  tools.workflow.issue.x_debt_issue__mutmut_169: >-
+    A missing or empty sub-issue body becomes either an empty string or XXXX.
+    Neither contains an earlier round's file name, so the refusal and writes agree.
   hooks.git-guard.x_command__mutmut_115: >-
     bashlex redirect nodes always expose the heredoc attribute; removing getattr's fallback leaves every parsed command decision unchanged.
   hooks.git-guard.x_parse_gh__mutmut_11: >-

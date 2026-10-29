@@ -569,26 +569,63 @@ def review_result(path):
 def debt_issue(path, dry_run):
     result = review_result(path)
     name = Path(path).name
-    if result["verdict"] != "pass":
-        raise IssueError(
-            f"{name}: the review's verdict is {result['verdict']}; only a passed review's leftovers are filed"
-        )
-    findings = result["findings"]
-    if not isinstance(findings, list):
-        raise IssueError(f"{name}: findings must be a list")
-    leftovers = [
-        finding
-        for finding in findings
-        if isinstance(finding, dict)
-        and finding.get("severity") == "non_blocking"
-        and finding.get("breaks_test_case") == "none"
-    ]
-    if not leftovers:
-        print(f"{name}: no leftover findings; nothing opened")
-        return 0
     match = re.search(r"-review-(\d+)\.md$", name)
     if match is None:
         raise IssueError(f"{name}: expected a -review-<round>.md file name")
+    final_round = int(match.group(1))
+    build = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", name[: match.start()])
+    rounds = {}
+    for candidate in Path(path).parent.iterdir():
+        candidate_match = re.search(r"-review-(\d+)\.md$", candidate.name)
+        if (
+            candidate.is_file()
+            and candidate_match is not None
+            and re.sub(
+                r"^\d{4}-\d{2}-\d{2}-", "", candidate.name[: candidate_match.start()]
+            )
+            == build
+        ):
+            rounds[int(candidate_match.group(1))] = candidate
+    highest = max(rounds)
+    if highest > final_round:
+        raise IssueError(
+            f"{name}: round {highest} exists in {rounds[highest].name}; run debt on the final round"
+        )
+    for round_number in range(1, final_round + 1):
+        if round_number not in rounds:
+            raise IssueError(f"{name}: round {round_number} is missing")
+    if result["verdict"] != "pass":
+        raise IssueError(
+            f"{name}: the final round's verdict is {result['verdict']}; leftovers are filed once the build passes"
+        )
+    reviews = []
+    for round_number in range(1, final_round + 1):
+        round_path = rounds[round_number]
+        round_result = (
+            result if round_number == final_round else review_result(round_path)
+        )
+        if round_number != final_round and any(
+            round_result[key] != result[key] for key in ("repo", "issue", "item")
+        ):
+            raise IssueError(
+                f"{name}: {round_path.name} names a different repository, issue or item"
+            )
+        reviews.append((round_number, round_path.name, round_result))
+    leftovers = []
+    for round_number, round_name, round_result in reviews:
+        findings = round_result["findings"]
+        if not isinstance(findings, list):
+            raise IssueError(f"{round_name}: findings must be a list")
+        leftovers.extend(
+            (round_number, finding)
+            for finding in findings
+            if isinstance(finding, dict)
+            and finding.get("severity") == "non_blocking"
+            and finding.get("breaks_test_case") == "none"
+        )
+    if not leftovers:
+        print(f"{name}: no leftover findings; nothing opened")
+        return 0
     repo, number, item = result["repo"], result["issue"], result["item"]
     if (
         not isinstance(repo, str)
@@ -607,6 +644,12 @@ def debt_issue(path, dry_run):
             raise IssueError(
                 f"{name}: #{child['number']} already files this review's leftovers"
             )
+    for _, round_name, _ in reviews[:-1]:
+        for child in children:
+            if isinstance(child, dict) and round_name in (child.get("body") or ""):
+                raise IssueError(
+                    f"{name}: #{child['number']} already files leftovers from {round_name}"
+                )
     issue = related(repo, number)
     scopes = [
         label["name"]
@@ -616,16 +659,25 @@ def debt_issue(path, dry_run):
     if len(scopes) != 1:
         raise IssueError(f"{name}: #{number} must have one scope label")
     changes = []
-    for finding in leftovers:
+    for round_number, finding in leftovers:
         summary = finding.get("summary")
         if not isinstance(summary, str) or not summary:
             raise IssueError(f"{name}: leftover finding has no summary")
         location = finding.get("file")
         if location:
             location = f"{location}:{finding['line']}"
-            changes.append(f"- {location}: {summary}")
+            changes.append(
+                f"- {f'Round {round_number}: ' if final_round > 1 else ''}{location}: {summary}"
+            )
         else:
-            changes.append(f"- {summary}")
+            changes.append(
+                f"- {f'Round {round_number}: ' if final_round > 1 else ''}{summary}"
+            )
+    sources = [f"05_Agents/handoffs/{round_name}" for _, round_name, _ in reviews]
+    if final_round == 1:
+        context = f"Non-blocking findings from {item}'s round 1 review of #{number}, in {sources[0]}."
+    else:
+        context = f"Non-blocking findings from {item}'s review rounds 1 to {final_round} of #{number}, in {', '.join(sources[:-1])} and {sources[-1]}."
     data = {
         "repo": repo,
         "kind": "chore",
@@ -634,7 +686,7 @@ def debt_issue(path, dry_run):
         "parent": number,
         "labels": ["tech-debt"],
         "body": {
-            "context": f"Non-blocking findings from {item}'s round {match.group(1)} review of #{number}, in 05_Agents/handoffs/{name}.",
+            "context": context,
             "changes": "\n".join(changes),
             "done": "Each finding above is fixed with a test, or closed in triage with the reason it stays.",
         },
@@ -798,7 +850,9 @@ def main(argv=None):
     opener = commands.add_parser("open", help="create a checked issue from a TOML file")
     opener.add_argument("file")
     opener.add_argument("--dry-run", action="store_true")
-    debt_parser = commands.add_parser("debt", help="file a passed review's leftovers")
+    debt_parser = commands.add_parser(
+        "debt", help="file a build's review leftovers from its final round"
+    )
     debt_parser.add_argument("review_handoff")
     debt_parser.add_argument("--dry-run", action="store_true")
     ready_parser = commands.add_parser(

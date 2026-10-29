@@ -602,7 +602,7 @@ class IssueReady(unittest.TestCase):
                 "positional arguments:\n"
                 "  {open,debt,ready}\n"
                 "    open             create a checked issue from a TOML file\n"
-                "    debt             file a passed review's leftovers\n"
+                "    debt             file a build's review leftovers from its final round\n"
                 "    ready            check an issue's Definition of Ready\n\n"
                 "options:\n"
                 "  -h, --help         show this help message and exit\n",

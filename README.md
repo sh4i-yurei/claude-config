@@ -182,7 +182,7 @@ links the parent and blockers, and puts the issue on its configured board with S
 Priority, Size, Estimate and Iteration stay empty for triage. It also adds any open issues from
 the same repository that are missing from that board, with Status Backlog.
 
-## Filing a passed review's leftovers
+## Filing a build's review leftovers from its final round
 
 Run these commands in the `dev` shell from the repository root, after a review handoff has one
 review-result `json` block in its Response. The first command shows the planned issue without
@@ -193,11 +193,12 @@ vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py debt review
 vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py debt review-handoff.md
 ```
 
-The command takes findings marked `non_blocking` whose `breaks_test_case` is `none` from a passed
-review. It uses the Chore form, the reviewed issue's scope label and the `tech-debt` label, then
-links that issue as its parent and puts the new issue in Backlog. It refuses a review already named
-in one of the parent's sub-issues, whether that sub-issue is open or closed. A review with no
-qualifying findings opens nothing. Exit 2 means the handoff was refused or a GitHub step failed.
+Run `debt` on the final review round. The command takes findings marked `non_blocking` whose
+`breaks_test_case` is `none` from every round of that build. It uses the Chore form, the reviewed
+issue's scope label and the `tech-debt` label, then links that issue as its parent and puts the new
+issue in Backlog. It refuses a build when any of its review rounds is already named in one of the
+parent's sub-issues, whether that sub-issue is open or closed. A build with no qualifying findings
+opens nothing. Exit 2 means the handoff was refused or a GitHub step failed.
 
 ## Checking whether an issue is Ready
 

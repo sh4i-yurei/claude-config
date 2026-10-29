@@ -21,6 +21,9 @@ import config as workflow_config
 G6C = "2026-10-27-codex-to-claude-workflow-g6c-board-add-race-review-2.md"
 G9A = "2026-10-26-codex-to-claude-workflow-g9a-issue-labels-review-2.md"
 ROUND1 = "2026-10-26-codex-to-claude-workflow-g6c-board-add-race-review-1.md"
+VAULT1 = "2026-10-29-codex-to-claude-ansible-vault-lookup-review-1.md"
+VAULT2 = "2026-10-29-codex-to-claude-ansible-vault-lookup-review-2.md"
+G6D = "2026-10-28-codex-to-claude-workflow-g6d-platform-board-review-1.md"
 OLD = "2026-10-17-codex-to-claude-dev-workflow-review-a-1.md"
 REPO = "sh4i-yurei/claude-config"
 
@@ -46,7 +49,7 @@ class IssueDebt(unittest.TestCase):
             FAKE_GH_DEBT_FIXTURES=str(FIXTURES),
             PYTHONDONTWRITEBYTECODE="1",
         )
-        self.state = {}
+        self.state = {"debt_current_infra_forms": True}
         self.save()
 
     def save(self):
@@ -73,9 +76,15 @@ class IssueDebt(unittest.TestCase):
     def run_debt(self, name, *options):
         return self.run_command("debt", FIXTURES / name, *options)
 
-    def derived(self, name, case, transform):
+    def rounds(self, case, *names):
         folder = self.root / case
         folder.mkdir()
+        for name in names:
+            shutil.copy(FIXTURES / name, folder / name)
+        return folder
+
+    def derived(self, name, case, transform):
+        folder = self.rounds(case, ROUND1)
         target = folder / name
         text = (FIXTURES / G6C).read_text()
         target.write_text(transform(text))
@@ -105,10 +114,37 @@ class IssueDebt(unittest.TestCase):
             )
         )
 
-    def planned(self, output):
-        prefix = f"Would call: POST repos/{REPO}/issues "
+    def planned(self, output, repo=REPO):
+        prefix = f"Would call: POST repos/{repo}/issues "
         line = next(line for line in output.splitlines() if line.startswith(prefix))
         return json.loads(line.removeprefix(prefix))
+
+    def changes(self, create):
+        return (
+            create["body"]
+            .split("### What changes\n\n", 1)[1]
+            .split("\n\n### Done when", 1)[0]
+            .splitlines()
+        )
+
+    def result(self, name):
+        return json.loads(
+            (FIXTURES / name)
+            .read_text()
+            .split("## Response\n", 1)[1]
+            .split("```json\n", 1)[1]
+            .split("\n```", 1)[0]
+        )
+
+    def replace_result(self, path, change):
+        text = path.read_text()
+        before, rest = text.split("## Response\n", 1)
+        block = rest.split("```json\n", 1)[1].split("\n```", 1)[0]
+        result = json.loads(block)
+        change(result)
+        path.write_text(
+            before + "## Response\n" + rest.replace(block, json.dumps(result), 1)
+        )
 
     def test_g6c_dry_run_plans_two_findings(self):
         self.state["empty_sub_issues"] = True
@@ -123,7 +159,9 @@ class IssueDebt(unittest.TestCase):
             "Each finding above is fixed with a test, or closed in triage with the reason it stays.\n",
         )
         self.assertIn(
-            "### Project, step, and reason\n\nNon-blocking findings from G6c's round 2 review of #28, in 05_Agents/handoffs/"
+            "### Project, step, and reason\n\nNon-blocking findings from G6c's review rounds 1 to 2 of #28, in 05_Agents/handoffs/"
+            + ROUND1
+            + " and 05_Agents/handoffs/"
             + G6C
             + ".",
             create["body"],
@@ -134,9 +172,19 @@ class IssueDebt(unittest.TestCase):
             .split("\n\n### Done when", 1)[0]
             .splitlines()
         )
-        self.assertEqual(len(changes), 2)
-        self.assertTrue(changes[0].startswith("- tools/workflow/issue.py:491: "))
-        self.assertTrue(changes[1].startswith("- tools/workflow/issue.py:272: "))
+        self.assertEqual(len(changes), 4)
+        self.assertTrue(
+            changes[0].startswith("- Round 1: tools/workflow/issue.py:262: ")
+        )
+        self.assertTrue(
+            changes[1].startswith("- Round 1: tests/test_issue_open.py:761: ")
+        )
+        self.assertTrue(
+            changes[2].startswith("- Round 2: tools/workflow/issue.py:491: ")
+        )
+        self.assertTrue(
+            changes[3].startswith("- Round 2: tools/workflow/issue.py:272: ")
+        )
         self.assertIn("/issues/28/sub_issues", output)
         self.no_writes()
 
@@ -198,7 +246,7 @@ class IssueDebt(unittest.TestCase):
             (code, output.strip()),
             (
                 2,
-                f"{ROUND1}: the review's verdict is changes_required; only a passed review's leftovers are filed",
+                f"{ROUND1}: round 2 exists in {G6C}; run debt on the final round",
             ),
         )
         self.assertEqual(self.calls(), [])
@@ -256,16 +304,37 @@ class IssueDebt(unittest.TestCase):
             .split("\n\n### Done when", 1)[0]
             .splitlines()
         )
-        self.assertEqual(len(changes), 1)
-        self.assertTrue(changes[0].startswith("- tools/workflow/issue.py:272: "))
+        self.assertEqual(len(changes), 3)
+        self.assertTrue(
+            changes[0].startswith("- Round 1: tools/workflow/issue.py:262: ")
+        )
+        self.assertTrue(
+            changes[1].startswith("- Round 1: tests/test_issue_open.py:761: ")
+        )
+        self.assertTrue(
+            changes[2].startswith("- Round 2: tools/workflow/issue.py:272: ")
+        )
 
     def test_no_findings_opens_nothing(self):
         path = self.changed_result(
             "empty-findings", lambda result: result.update(findings=[])
         )
-        code, output = self.run_command("debt", path)
-        self.assertEqual(
-            (code, output.strip()), (0, f"{G6C}: no leftover findings; nothing opened")
+        self.state["empty_sub_issues"] = True
+        self.save()
+        code, output = self.run_command("debt", path, "--dry-run")
+        self.assertEqual(code, 0, output)
+        changes = (
+            self.planned(output)["body"]
+            .split("### What changes\n\n", 1)[1]
+            .split("\n\n### Done when", 1)[0]
+            .splitlines()
+        )
+        self.assertEqual(len(changes), 2)
+        self.assertTrue(
+            changes[0].startswith("- Round 1: tools/workflow/issue.py:262: ")
+        )
+        self.assertTrue(
+            changes[1].startswith("- Round 1: tests/test_issue_open.py:761: ")
         )
         self.no_writes()
 
@@ -368,6 +437,7 @@ class IssueDebt(unittest.TestCase):
 
     def test_issue_one_is_a_valid_parent_number(self):
         path = self.changed_result("issue-one", lambda result: result.update(issue=1))
+        self.replace_result(path.parent / ROUND1, lambda result: result.update(issue=1))
         code, output = self.run_command("debt", path, "--dry-run")
         self.assertEqual(code, 0, output)
         self.assertIn("issues/1/sub_issues", output)
@@ -452,7 +522,224 @@ class IssueDebt(unittest.TestCase):
             .split("\n\n### Done when", 1)[0]
             .splitlines()
         )
-        self.assertEqual(changes[0], "- " + summary)
+        self.assertEqual(changes[2], "- Round 2: " + summary)
+
+    def test_vault_rounds_plan_six_findings(self):
+        folder = self.rounds("vault-plan", VAULT1, VAULT2)
+        self.state["empty_sub_issues"] = True
+        self.save()
+        code, output = self.run_command("debt", folder / VAULT2, "--dry-run")
+        self.assertEqual(code, 0, output)
+        create = self.planned(output, "sh4i-yurei/keepbreathing-infra")
+        self.assertEqual(
+            create["title"],
+            "Tech debt from the review of Agents can run the playbooks again",
+        )
+        self.assertEqual(create["labels"], ["type:chore", "scope:hub", "tech-debt"])
+        self.assertIn("issues/74/sub_issues with sub_issue_id NEW_ISSUE_ID", output)
+        prefixes = [
+            "- Round 1: ansible/playbooks/become-password.yml:20: ",
+            "- Round 1: ansible/tests/test_vault_secret.py:198: ",
+            "- Round 1: ansible/tests/test_vault_secret.py:519: ",
+            "- Round 1: ansible/tests/test_vault_secret.py:89: ",
+            "- Round 1: ARCHITECTURE.md:82: ",
+            "- Round 2: ansible/tests/test_vault_secret.py:221: ",
+        ]
+        changes = self.changes(create)
+        self.assertEqual(len(changes), 6)
+        self.assertEqual(
+            [line[: len(prefix)] for line, prefix in zip(changes, prefixes)], prefixes
+        )
+        self.assertNotIn(".mutation-survivors.yml:111", create["body"])
+        self.no_writes()
+
+    def test_vault_existing_final_round_refuses_before_writes(self):
+        folder = self.rounds("vault-existing", VAULT1, VAULT2)
+        code, output = self.run_command("debt", folder / VAULT2)
+        self.assertEqual(
+            (code, output.strip()),
+            (2, f"{VAULT2}: #76 already files this review's leftovers"),
+        )
+        self.no_writes()
+
+    def test_vault_earlier_round_refuses_before_gh(self):
+        folder = self.rounds("vault-earlier", VAULT1, VAULT2)
+        code, output = self.run_command("debt", folder / VAULT1)
+        self.assertEqual(
+            (code, output.strip()),
+            (2, f"{VAULT1}: round 2 exists in {VAULT2}; run debt on the final round"),
+        )
+        self.assertEqual(self.calls(), [])
+
+    def test_earlier_round_already_filed_refuses(self):
+        folder = self.rounds("earlier-filed", ROUND1, G6C)
+        children = json.loads((FIXTURES / "issue-28-sub-issues.json").read_text())
+        self.state["sub_issues_response"] = [
+            dict(child, body=child["body"].replace(G6C, ROUND1)) for child in children
+        ]
+        self.save()
+        code, output = self.run_command("debt", folder / G6C)
+        self.assertEqual(
+            (code, output.strip()),
+            (2, f"{G6C}: #29 already files leftovers from {ROUND1}"),
+        )
+        self.no_writes()
+
+    def test_missing_middle_round_refuses_before_gh(self):
+        folder = self.rounds("missing-middle", ROUND1)
+        name = G6C.replace("-review-2.md", "-review-3.md")
+        shutil.copy(FIXTURES / G6C, folder / name)
+        code, output = self.run_command("debt", folder / name)
+        self.assertEqual((code, output.strip()), (2, f"{name}: round 2 is missing"))
+        self.assertEqual(self.calls(), [])
+
+    def test_missing_first_round_refuses_before_gh(self):
+        folder = self.rounds("missing-first", G6C)
+        code, output = self.run_command("debt", folder / G6C)
+        self.assertEqual((code, output.strip()), (2, f"{G6C}: round 1 is missing"))
+        self.assertEqual(self.calls(), [])
+
+    def test_final_round_must_pass_before_gh(self):
+        folder = self.rounds("final-unpassed", ROUND1, G6C)
+        self.replace_result(
+            folder / G6C, lambda result: result.update(verdict="changes_required")
+        )
+        code, output = self.run_command("debt", folder / G6C)
+        self.assertEqual(
+            (code, output.strip()),
+            (
+                2,
+                f"{G6C}: the final round's verdict is changes_required; leftovers are filed once the build passes",
+            ),
+        )
+        self.assertEqual(self.calls(), [])
+
+    def test_round_metadata_must_agree_before_gh(self):
+        folder = self.rounds("different-issue", ROUND1, G6C)
+        self.replace_result(folder / ROUND1, lambda result: result.update(issue=23))
+        code, output = self.run_command("debt", folder / G6C)
+        self.assertEqual(
+            (code, output.strip()),
+            (2, f"{G6C}: {ROUND1} names a different repository, issue or item"),
+        )
+        self.assertEqual(self.calls(), [])
+
+    def test_repeated_finding_is_listed_in_each_round(self):
+        folder = self.rounds("repeated-finding", ROUND1, G6C)
+        repeated = self.result(ROUND1)["findings"][1]
+        self.replace_result(
+            folder / G6C, lambda result: result["findings"].__setitem__(0, repeated)
+        )
+        self.state["empty_sub_issues"] = True
+        self.save()
+        code, output = self.run_command("debt", folder / G6C, "--dry-run")
+        self.assertEqual(code, 0, output)
+        changes = self.changes(self.planned(output))
+        self.assertEqual(len(changes), 4)
+        self.assertEqual(
+            changes[0], f"- Round 1: tools/workflow/issue.py:262: {repeated['summary']}"
+        )
+        self.assertEqual(
+            changes[2], f"- Round 2: tools/workflow/issue.py:262: {repeated['summary']}"
+        )
+
+    def test_no_qualifying_findings_in_any_round_opens_nothing(self):
+        folder = self.rounds("no-leftovers", ROUND1, G6C)
+        self.replace_result(
+            folder / ROUND1,
+            lambda result: result.update(findings=[result["findings"][0]]),
+        )
+        self.replace_result(folder / G6C, lambda result: result.update(findings=[]))
+        code, output = self.run_command("debt", folder / G6C)
+        self.assertEqual(
+            (code, output.strip()), (0, f"{G6C}: no leftover findings; nothing opened")
+        )
+        self.no_writes()
+
+    def test_single_round_keeps_existing_issue_shape(self):
+        folder = self.rounds("one-round", G6D)
+        code, output = self.run_command("debt", folder / G6D, "--dry-run")
+        self.assertEqual(code, 0, output)
+        create = self.planned(output)
+        self.assertIn(
+            f"Non-blocking findings from G6d's round 1 review of #36, in 05_Agents/handoffs/{G6D}.",
+            create["body"],
+        )
+        changes = self.changes(create)
+        self.assertEqual(len(changes), 2)
+        self.assertTrue(
+            changes[0].startswith(
+                "- /var/home/sh4i_yurei/Documents/Second_Brain/20_Buildlogs/global-development-workflow/global-development-workflow-log.md:3588: "
+            )
+        )
+        self.assertTrue(changes[1].startswith("- tools/workflow/workflow.toml:7: "))
+
+    def test_three_rounds_name_each_source_and_check_middle_duplicate(self):
+        folder = self.rounds("three-rounds", ROUND1, G6C)
+        third = G6C.replace("-review-2.md", "-review-3.md")
+        shutil.copy(FIXTURES / G6C, folder / third)
+        self.state["empty_sub_issues"] = True
+        self.save()
+        code, output = self.run_command("debt", folder / third, "--dry-run")
+        self.assertEqual(code, 0, output)
+        create = self.planned(output)
+        self.assertIn(
+            f"Non-blocking findings from G6c's review rounds 1 to 3 of #28, in 05_Agents/handoffs/{ROUND1}, 05_Agents/handoffs/{G6C} and 05_Agents/handoffs/{third}.",
+            create["body"],
+        )
+        self.assertEqual(len(self.changes(create)), 6)
+        self.state["empty_sub_issues"] = False
+        self.state["sub_issues_response"] = [{"number": 29, "body": f"Review: {G6C}"}]
+        self.save()
+        code, output = self.run_command("debt", folder / third)
+        self.assertEqual(
+            (code, output.strip()),
+            (2, f"{third}: #29 already files leftovers from {G6C}"),
+        )
+        self.no_writes()
+
+    def test_single_round_finding_without_file_has_no_round_prefix(self):
+        folder = self.rounds("one-round-no-file", G6D)
+        summary = self.result(G6D)["findings"][0]["summary"]
+        self.replace_result(
+            folder / G6D,
+            lambda result: (
+                result["findings"][0].pop("file"),
+                result["findings"][0].pop("line"),
+            ),
+        )
+        code, output = self.run_command("debt", folder / G6D, "--dry-run")
+        self.assertEqual(code, 0, output)
+        self.assertEqual(self.changes(self.planned(output))[0], f"- {summary}")
+
+    def test_single_round_invalid_metadata_has_exact_refusal(self):
+        cases = (
+            ("bad-repo", {"repo": "broken"}),
+            ("null-repo", {"repo": None}),
+            ("zero-issue", {"issue": 0}),
+            ("text-issue", {"issue": "36"}),
+            ("nontext-item", {"item": 23}),
+            ("empty-item", {"item": ""}),
+        )
+        for case, changes in cases:
+            with self.subTest(case=case):
+                folder = self.rounds(f"metadata-{case}", G6D)
+                self.replace_result(folder / G6D, lambda result: result.update(changes))
+                code, output = self.run_command("debt", folder / G6D)
+                self.assertEqual(
+                    (code, output.strip()),
+                    (2, f"{G6D}: review result has invalid repo, issue or item"),
+                )
+                self.assertEqual(self.calls(), [])
+
+    def test_help_describes_final_round(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout), self.assertRaises(SystemExit) as raised:
+            issue_tool.main(["--help"])
+        self.assertEqual(raised.exception.code, 0)
+        self.assertIn(
+            "file a build's review leftovers from its final round", stdout.getvalue()
+        )
 
     def test_missing_command_exits_two(self):
         stderr = io.StringIO()

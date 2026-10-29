@@ -90,14 +90,33 @@ if args[:1] == ["api"]:
             result = json.loads(
                 (debt_fixtures / "issue-23-sub-issues.json").read_text()
             )
+        elif endpoint.endswith("/issues/74/sub_issues") and debt_fixtures:
+            result = json.loads(
+                (debt_fixtures / "issue-74-sub-issues.json").read_text()
+            )
+            if state.get("empty_sub_issues"):
+                result = []
+        elif endpoint.endswith("/issues/36/sub_issues") and debt_fixtures:
+            result = json.loads(
+                (debt_fixtures / "issue-36-sub-issues.json").read_text()
+            )
         elif endpoint.endswith("/issues/28") and debt_fixtures:
             result = json.loads((debt_fixtures / "issue-28.json").read_text())
             if state.get("remove_issue_labels"):
                 result.pop("labels")
+        elif endpoint.endswith("/issues/74") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-74.json").read_text())
+        elif endpoint.endswith("/issues/36") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-36.json").read_text())
         elif endpoint.endswith("/issues/1") and debt_fixtures:
             result = json.loads((debt_fixtures / "issue-28.json").read_text())
             result["number"] = 1
         elif endpoint.endswith("/contents/.github/ISSUE_TEMPLATE"):
+            if "keepbreathing-infra" in endpoint and state.get(
+                "debt_current_infra_forms"
+            ):
+                print("HTTP 404: Not Found", file=sys.stderr)
+                sys.exit(1)
             if endpoint.startswith("repos/missing-owner/.github/"):
                 print("HTTP 404: Not Found", file=sys.stderr)
                 sys.exit(1)
