@@ -4,6 +4,7 @@ exceptions = ["sh4i-yurei/second-brain"]
 [products]
 "keepbreath.ing" = { owner = "sh4i-yurei", number = 1 }
 "Tooling" = { owner = "sh4i-yurei", number = 2 }
+"Platform" = { owner = "sh4i-yurei", number = 3 }
 
 [boards]
 "sh4i-yurei/.github" = "Tooling"
@@ -12,4 +13,4 @@ exceptions = ["sh4i-yurei/second-brain"]
 "sh4i-yurei/codex-config" = "Tooling"
 "sh4i-yurei/keepbreath-contact-api" = "keepbreath.ing"
 "sh4i-yurei/keepbreathing" = "keepbreath.ing"
-"sh4i-yurei/keepbreathing-infra" = "keepbreath.ing"
+"sh4i-yurei/keepbreathing-infra" = "Platform"

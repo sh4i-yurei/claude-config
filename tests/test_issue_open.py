@@ -259,7 +259,7 @@ class IssueOpen(unittest.TestCase):
             [
                 "no board mapping for sh4i-yurei/new-repo; add to workflow.toml [boards], naming its product:",
                 '"sh4i-yurei/new-repo" = "<product>"',
-                "products: keepbreath.ing, Tooling",
+                "products: keepbreath.ing, Tooling, Platform",
             ],
         )
         self.assertFalse(self.calls())
@@ -267,14 +267,15 @@ class IssueOpen(unittest.TestCase):
     def test_unmapped_repo_advice_lists_new_product_in_order(self):
         self.change_workflow(
             "[boards]",
-            '"Pong" = { owner = "sh4i-yurei", number = 3 }\n\n[boards]',
+            '"Pong" = { owner = "sh4i-yurei", number = 99 }\n\n[boards]',
         )
         result = self.run_open(
             self.valid().replace(REPO, "sh4i-yurei/new-repo"), "--dry-run"
         )
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertEqual(
-            result.stdout.splitlines()[-1], "products: keepbreath.ing, Tooling, Pong"
+            result.stdout.splitlines()[-1],
+            "products: keepbreath.ing, Tooling, Platform, Pong",
         )
         self.assertFalse(self.calls())
 
@@ -345,7 +346,7 @@ class IssueOpen(unittest.TestCase):
                     "sh4i-yurei/codex-config": 2,
                     "sh4i-yurei/keepbreath-contact-api": 1,
                     "sh4i-yurei/keepbreathing": 1,
-                    "sh4i-yurei/keepbreathing-infra": 1,
+                    "sh4i-yurei/keepbreathing-infra": 3,
                 }.items()
             },
         )
@@ -418,7 +419,7 @@ class IssueOpen(unittest.TestCase):
                 "kind must be a nonempty string",
                 "no board mapping for sh4i-yurei/new-repo; add to workflow.toml [boards], naming its product:",
                 '"sh4i-yurei/new-repo" = "<product>"',
-                "products: keepbreath.ing, Tooling",
+                "products: keepbreath.ing, Tooling, Platform",
             ],
         )
         self.assertFalse(self.calls())
