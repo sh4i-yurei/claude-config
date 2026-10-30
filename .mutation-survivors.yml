@@ -13,14 +13,15 @@ survivors:
   tools.workflow.issue.x_review_result__mutmut_34: >-
     False and None are both false after a closing fence. Both states lead to the
     same next block selection and command result.
-  tools.workflow.issue.x_debt_issue__mutmut_83: >-
-    Re-reading the final file returns the same review result as the first read
-    when the handoff is stable during the command. Testing this difference would
-    require changing the input file between two internal reads.
-  tools.workflow.issue.x_debt_issue__mutmut_157: >-
+  tools.workflow.issue.x_debt_issue__mutmut_82: >-
+    Once duplicate round files are refused, the final round's file is always
+    the given file. Re-reading it returns the same review result as the first
+    read when the handoff is stable during the command. Testing the difference
+    would require changing the input file between two internal reads.
+  tools.workflow.issue.x_debt_issue__mutmut_156: >-
     A missing or empty sub-issue body becomes either an empty string or XXXX.
     Neither contains the given review file name, so the refusal and writes agree.
-  tools.workflow.issue.x_debt_issue__mutmut_169: >-
+  tools.workflow.issue.x_debt_issue__mutmut_168: >-
     A missing or empty sub-issue body becomes either an empty string or XXXX.
     Neither contains an earlier round's file name, so the refusal and writes agree.
   hooks.git-guard.x_command__mutmut_115: >-

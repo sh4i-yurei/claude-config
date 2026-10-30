@@ -566,26 +566,39 @@ def review_result(path):
     return blocks[0]
 
 
+def review_file_identity(name):
+    match = re.search(r"-review-(\d+)\.md$", name)
+    if match is None:
+        return None
+    build = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", name[: match.start()])
+    return build, int(match.group(1))
+
+
 def debt_issue(path, dry_run):
     result = review_result(path)
     name = Path(path).name
-    match = re.search(r"-review-(\d+)\.md$", name)
-    if match is None:
+    identity = review_file_identity(name)
+    if identity is None:
         raise IssueError(f"{name}: expected a -review-<round>.md file name")
-    final_round = int(match.group(1))
-    build = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", name[: match.start()])
+    build, final_round = identity
     rounds = {}
     for candidate in Path(path).parent.iterdir():
-        candidate_match = re.search(r"-review-(\d+)\.md$", candidate.name)
-        if (
-            candidate.is_file()
-            and candidate_match is not None
-            and re.sub(
-                r"^\d{4}-\d{2}-\d{2}-", "", candidate.name[: candidate_match.start()]
+        if not candidate.is_file():
+            continue
+        candidate_identity = review_file_identity(candidate.name)
+        if candidate_identity is not None and candidate_identity[0] == build:
+            rounds.setdefault(candidate_identity[1], []).append(candidate)
+    if 0 in rounds:
+        zero = min(candidate.name for candidate in rounds[0])
+        raise IssueError(f"{name}: {zero} is round 0; rounds start at 1")
+    for number in sorted(rounds):
+        if len(rounds[number]) > 1:
+            names = sorted(candidate.name for candidate in rounds[number])
+            files = ", ".join(names[:-1]) + " and " + names[-1]
+            raise IssueError(
+                f"{name}: round {number} appears in more than one file: {files}"
             )
-            == build
-        ):
-            rounds[int(candidate_match.group(1))] = candidate
+    rounds = {number: paths[0] for number, paths in rounds.items()}
     highest = max(rounds)
     if highest > final_round:
         raise IssueError(
@@ -663,16 +676,13 @@ def debt_issue(path, dry_run):
         summary = finding.get("summary")
         if not isinstance(summary, str) or not summary:
             raise IssueError(f"{name}: leftover finding has no summary")
+        prefix = f"Round {round_number}: " if final_round > 1 else ""
         location = finding.get("file")
         if location:
             location = f"{location}:{finding['line']}"
-            changes.append(
-                f"- {f'Round {round_number}: ' if final_round > 1 else ''}{location}: {summary}"
-            )
+            changes.append(f"- {prefix}{location}: {summary}")
         else:
-            changes.append(
-                f"- {f'Round {round_number}: ' if final_round > 1 else ''}{summary}"
-            )
+            changes.append(f"- {prefix}{summary}")
     sources = [f"05_Agents/handoffs/{round_name}" for _, round_name, _ in reviews]
     if final_round == 1:
         context = f"Non-blocking findings from {item}'s round 1 review of #{number}, in {sources[0]}."

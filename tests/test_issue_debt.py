@@ -83,6 +83,153 @@ class IssueDebt(unittest.TestCase):
             shutil.copy(FIXTURES / name, folder / name)
         return folder
 
+    def renamed_rounds(self, case, given, *copies):
+        folder = self.rounds(case, *({given, ROUND1} if given == G6C else {given}))
+        for source, name in copies:
+            shutil.copy(FIXTURES / source, folder / name)
+        return folder / given
+
+    def assert_refused_without_gh(self, path, message):
+        code, output = self.run_command("debt", path)
+        self.assertEqual((code, output), (2, f"{path.name}: {message}\n"))
+        self.assertEqual(self.calls(), [])
+
+    def test_duplicate_final_round_is_refused(self):
+        duplicate = "2026-10-28-codex-to-claude-workflow-g6c-board-add-race-review-2.md"
+        path = self.renamed_rounds("duplicate-final", G6C, (G6C, duplicate))
+        self.assert_refused_without_gh(
+            path, f"round 2 appears in more than one file: {G6C} and {duplicate}"
+        )
+
+    def test_duplicate_earlier_round_is_refused(self):
+        duplicate = "2026-10-25-codex-to-claude-workflow-g6c-board-add-race-review-1.md"
+        path = self.renamed_rounds("duplicate-earlier", G6C, (ROUND1, duplicate))
+        self.assert_refused_without_gh(
+            path, f"round 1 appears in more than one file: {duplicate} and {ROUND1}"
+        )
+
+    def test_zero_padded_round_is_duplicate(self):
+        duplicate = (
+            "2026-10-27-codex-to-claude-workflow-g6c-board-add-race-review-02.md"
+        )
+        path = self.renamed_rounds("duplicate-padded", G6C, (G6C, duplicate))
+        self.assert_refused_without_gh(
+            path, f"round 2 appears in more than one file: {duplicate} and {G6C}"
+        )
+
+    def test_lowest_duplicate_round_is_named(self):
+        first = "2026-10-25-codex-to-claude-workflow-g6c-board-add-race-review-1.md"
+        second = "2026-10-28-codex-to-claude-workflow-g6c-board-add-race-review-2.md"
+        third = "2026-10-29-codex-to-claude-workflow-g6c-board-add-race-review-2.md"
+        path = self.renamed_rounds(
+            "duplicate-lowest", G6C, (ROUND1, first), (G6C, second), (G6C, third)
+        )
+        self.assert_refused_without_gh(
+            path, f"round 1 appears in more than one file: {first} and {ROUND1}"
+        )
+
+    def test_three_duplicate_files_are_all_named(self):
+        second = "2026-10-28-codex-to-claude-workflow-g6c-board-add-race-review-2.md"
+        third = "2026-10-29-codex-to-claude-workflow-g6c-board-add-race-review-2.md"
+        path = self.renamed_rounds("duplicate-three", G6C, (G6C, second), (G6C, third))
+        self.assert_refused_without_gh(
+            path,
+            f"round 2 appears in more than one file: {G6C}, {second} and {third}",
+        )
+
+    def test_duplicate_later_round_precedes_nonfinal_refusal(self):
+        duplicate = "2026-10-28-codex-to-claude-workflow-g6c-board-add-race-review-2.md"
+        path = self.renamed_rounds(
+            "duplicate-later", ROUND1, (G6C, G6C), (G6C, duplicate)
+        )
+        self.assert_refused_without_gh(
+            path, f"round 2 appears in more than one file: {G6C} and {duplicate}"
+        )
+
+    def test_round_zero_candidate_is_refused(self):
+        zero = "2026-10-25-codex-to-claude-workflow-g6c-board-add-race-review-0.md"
+        path = self.renamed_rounds("zero-candidate", G6C, (ROUND1, zero))
+        self.assert_refused_without_gh(path, f"{zero} is round 0; rounds start at 1")
+
+    def test_round_zero_given_file_is_refused(self):
+        zero = "2026-10-27-codex-to-claude-workflow-g6c-board-add-race-review-0.md"
+        folder = self.rounds("zero-given")
+        shutil.copy(FIXTURES / G6C, folder / zero)
+        self.assert_refused_without_gh(
+            folder / zero, f"{zero} is round 0; rounds start at 1"
+        )
+
+    def test_round_zero_precedes_duplicate_refusal(self):
+        zero = "2026-10-25-codex-to-claude-workflow-g6c-board-add-race-review-0.md"
+        duplicate = "2026-10-28-codex-to-claude-workflow-g6c-board-add-race-review-2.md"
+        path = self.renamed_rounds(
+            "zero-and-duplicate", G6C, (ROUND1, zero), (G6C, duplicate)
+        )
+        self.assert_refused_without_gh(path, f"{zero} is round 0; rounds start at 1")
+
+    def test_other_build_rounds_do_not_duplicate_g6c(self):
+        path = self.renamed_rounds(
+            "other-build",
+            G6C,
+            (G9A, G9A),
+            (
+                "2026-10-26-codex-to-claude-workflow-g9a-issue-labels-review-1.md",
+                "2026-10-26-codex-to-claude-workflow-g9a-issue-labels-review-1.md",
+            ),
+        )
+        self.state["empty_sub_issues"] = True
+        self.save()
+        code, output = self.run_command("debt", path, "--dry-run")
+        self.assertEqual(code, 0, output)
+        create = self.planned(output)
+        expected = []
+        for number, name in ((1, ROUND1), (2, G6C)):
+            for finding in self.result(name)["findings"]:
+                if (
+                    finding["severity"] == "non_blocking"
+                    and finding["breaks_test_case"] == "none"
+                ):
+                    expected.append(
+                        f"- Round {number}: {finding['file']}:{finding['line']}: {finding['summary']}"
+                    )
+        self.assertEqual(
+            self.changes(create),
+            expected,
+        )
+
+    def test_dated_and_undated_names_identify_the_same_build(self):
+        folder = self.rounds("mixed-date-names", G6C)
+        undated = ROUND1.removeprefix("2026-10-26-")
+        shutil.copy(FIXTURES / ROUND1, folder / undated)
+        self.state["empty_sub_issues"] = True
+        self.save()
+        code, output = self.run_command("debt", folder / G6C, "--dry-run")
+        self.assertEqual(code, 0, output)
+        create = self.planned(output)
+        self.assertIn(f"05_Agents/handoffs/{undated}", create["body"])
+        self.assertEqual(len(self.changes(create)), 4)
+
+    def test_directory_entry_does_not_hide_later_round_files(self):
+        folder = self.root / "directory-before-reviews"
+        folder.mkdir()
+        (folder / "unrelated-directory").mkdir()
+        for name in (ROUND1, G6C):
+            shutil.copy(FIXTURES / name, folder / name)
+        self.state["empty_sub_issues"] = True
+        self.save()
+        original_iterdir = Path.iterdir
+
+        def directory_first(path):
+            entries = list(original_iterdir(path))
+            if path == folder:
+                entries.sort(key=lambda entry: entry.is_file())
+            return iter(entries)
+
+        with patch.object(Path, "iterdir", directory_first):
+            code, output = self.run_command("debt", folder / G6C, "--dry-run")
+        self.assertEqual(code, 0, output)
+        self.assertEqual(len(self.changes(self.planned(output))), 4)
+
     def derived(self, name, case, transform):
         folder = self.rounds(case, ROUND1)
         target = folder / name

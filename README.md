@@ -198,7 +198,9 @@ Run `debt` on the final review round. The command takes findings marked `non_blo
 issue's scope label and the `tech-debt` label, then links that issue as its parent and puts the new
 issue in Backlog. It refuses a build when any of its review rounds is already named in one of the
 parent's sub-issues, whether that sub-issue is open or closed. A build with no qualifying findings
-opens nothing. Exit 2 means the handoff was refused or a GitHub step failed.
+opens nothing. It also refuses a round 0 file or two files with the same round number in one
+build, including names such as `-review-02.md` and `-review-2.md`. Exit 2 means the handoff was
+refused or a GitHub step failed.
 
 ## Checking whether an issue is Ready
 
