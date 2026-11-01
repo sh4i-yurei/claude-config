@@ -203,69 +203,20 @@ class IssueOpen(unittest.TestCase):
 
     def test_scope_refused_when_repository_has_no_scope_labels(self):
         path = self.workflow / "labels.toml"
-        lines = path.read_text().splitlines(keepends=True)
-        prefix = '[repository."sh4i-yurei/claude-config".'
-        self.assertTrue(any(line.startswith(prefix) for line in lines))
-        kept = []
-        removing = False
-        for line in lines:
-            if line.startswith("["):
-                removing = line.startswith(prefix)
-            if not removing:
-                kept.append(line)
-        path.write_text("".join(kept))
+        content = path.read_text()
+        scope = (
+            '[repository."sh4i-yurei/claude-config"."scope:ci"]\n'
+            'color = "5319E7"\n'
+            'description = ""\n\n'
+        )
+        self.assertIn(scope, content)
+        path.write_text(content.replace(scope, "", 1))
         result = self.run_open(self.valid(), "--dry-run")
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertIn(
             "scope is not defined for this repository", result.stdout.splitlines()
         )
         self.assert_no_writes()
-
-    def test_invalid_scope_names_repository_choices_without_writes(self):
-        choices = {
-            REPO: "scope:ci, scope:hooks, scope:rules, scope:skills, scope:tools, scope:vale, scope:workflow",
-            "sh4i-yurei/codex-config": "scope:ci, scope:config, scope:hooks, scope:rules, scope:setup, scope:skills",
-            "sh4i-yurei/keepbreathing": "scope:ci, scope:deploy, scope:site",
-        }
-        for repo, names in choices.items():
-            for scope in (
-                ("scope:bad", "scope:workflow") if repo != REPO else ("scope:bad",)
-            ):
-                with self.subTest(repo=repo, scope=scope):
-                    data = self.valid().replace(REPO, repo).replace("scope:ci", scope)
-                    result = self.run_open(data, "--dry-run")
-                    self.assertEqual(result.returncode, 2, result.stdout)
-                    self.assertIn(f"scope must be one of: {names}", result.stdout)
-                    self.assert_no_writes()
-
-    def test_each_repository_scope_plans_its_exact_issue_labels(self):
-        scopes = {
-            REPO: ("ci", "hooks", "rules", "skills", "tools", "vale", "workflow"),
-            "sh4i-yurei/codex-config": (
-                "ci",
-                "config",
-                "hooks",
-                "rules",
-                "setup",
-                "skills",
-            ),
-            "sh4i-yurei/keepbreathing": ("ci", "deploy", "site"),
-        }
-        for repo, names in scopes.items():
-            for name in names:
-                scope = f"scope:{name}"
-                with self.subTest(repo=repo, scope=scope):
-                    data = self.valid().replace(REPO, repo).replace("scope:ci", scope)
-                    result = self.run_open(data, "--dry-run")
-                    self.assertEqual(result.returncode, 0, result.stdout)
-                    prefix = f"Would call: POST repos/{repo}/issues "
-                    request = next(
-                        json.loads(line.removeprefix(prefix))
-                        for line in result.stdout.splitlines()
-                        if line.startswith(prefix)
-                    )
-                    self.assertEqual(request["labels"], ["type:feature", scope])
-                    self.assert_no_writes()
 
     def test_form_without_labels_uses_scope_and_extra_labels(self):
         fixtures = self.root / "fixtures"

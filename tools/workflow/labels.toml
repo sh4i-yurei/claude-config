@@ -68,55 +68,11 @@ description = ""
 
 [repository."sh4i-yurei/claude-config"."scope:ci"]
 color = "5319E7"
-description = "Area: tests/, and CI once it exists"
-
-[repository."sh4i-yurei/claude-config"."scope:hooks"]
-color = "C5DEF5"
-description = "Area: hooks/, and vendor/, the bashlex copy the guard uses"
-
-[repository."sh4i-yurei/claude-config"."scope:rules"]
-color = "C5DEF5"
-description = "Area: rules/, loaded into every session"
-
-[repository."sh4i-yurei/claude-config"."scope:skills"]
-color = "C5DEF5"
-description = "Area: skills/"
-
-[repository."sh4i-yurei/claude-config"."scope:tools"]
-color = "C5DEF5"
-description = "Area: tools/ outside tools/workflow/, such as vault-run"
-
-[repository."sh4i-yurei/claude-config"."scope:vale"]
-color = "C5DEF5"
-description = "Area: vale/, the writing checks"
-
-[repository."sh4i-yurei/claude-config"."scope:workflow"]
-color = "C5DEF5"
-description = "Area: tools/workflow/, the issue tool, labels and boards"
+description = ""
 
 [repository."sh4i-yurei/codex-config"."scope:ci"]
 color = "5319E7"
-description = "Area: tests/, and CI once it exists"
-
-[repository."sh4i-yurei/codex-config"."scope:config"]
-color = "C5DEF5"
-description = "Area: mark.config.toml and scripts/merge_config.py"
-
-[repository."sh4i-yurei/codex-config"."scope:hooks"]
-color = "C5DEF5"
-description = "Area: hooks/ and hooks.json"
-
-[repository."sh4i-yurei/codex-config"."scope:rules"]
-color = "C5DEF5"
-description = "Area: global-rules.md"
-
-[repository."sh4i-yurei/codex-config"."scope:setup"]
-color = "C5DEF5"
-description = "Area: setup.sh and scripts/setup.py"
-
-[repository."sh4i-yurei/codex-config"."scope:skills"]
-color = "C5DEF5"
-description = "Area: skills/"
+description = ""
 
 [repository."sh4i-yurei/keepbreath-contact-api"."scope:ci"]
 color = "5319E7"
@@ -128,15 +84,7 @@ description = "Area: redis"
 
 [repository."sh4i-yurei/keepbreathing"."scope:ci"]
 color = "5319E7"
-description = "Area: tests/, scripts/ and .github/"
-
-[repository."sh4i-yurei/keepbreathing"."scope:deploy"]
-color = "C5DEF5"
-description = "Area: deploy/, the deploy script, nginx, Quadlet and the runner"
-
-[repository."sh4i-yurei/keepbreathing"."scope:site"]
-color = "C5DEF5"
-description = "Area: site/, the pages, styles and scripts"
+description = ""
 
 [repository."sh4i-yurei/keepbreathing-infra"."scope:access"]
 color = "C5DEF5"
