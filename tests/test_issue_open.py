@@ -199,6 +199,20 @@ class IssueOpen(unittest.TestCase):
             ],
         )
 
+    def test_malformed_second_repository_page_refuses_without_writes(self):
+        first = json.loads((FIXTURES / "repository-query.json").read_text())
+        first["data"]["repository"]["issues"]["pageInfo"]["hasNextPage"] = True
+        for second in ([], {"data": None}):
+            with self.subTest(second=second):
+                self.state["repository_pages"] = [first, second]
+                self.save()
+                result = self.run_open(self.valid())
+                self.assertEqual(
+                    (result.returncode, result.stdout),
+                    (2, "repository issues are missing\n"),
+                )
+                self.assert_no_writes()
+
     def test_missing_backlog_option_refuses_before_write(self):
         answer = json.loads((FIXTURES / "repository-query.json").read_text())
         options = answer["data"]["repositoryOwner"]["projectV2"]["field"]["options"]
