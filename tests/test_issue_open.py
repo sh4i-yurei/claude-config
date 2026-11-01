@@ -101,6 +101,218 @@ class IssueOpen(unittest.TestCase):
     def board_lookups(self):
         return [call for call in self.calls() if call["args"][:2] == ["api", "graphql"]]
 
+    def test_dry_run_reads_repository_and_keeps_stray_order(self):
+        result = self.run_open(self.valid(), "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        reads = self.board_lookups()
+        self.assertEqual(len(reads), 1)
+        self.assertIn("owner=sh4i-yurei", reads[0]["args"])
+        self.assertIn("name=claude-config", reads[0]["args"])
+        self.assertIn("number=2", reads[0]["args"])
+        self.assertEqual(
+            result.stdout.splitlines()[-4:],
+            [
+                "Would call: project item-add 2 --owner sh4i-yurei --url https://github.com/sh4i-yurei/claude-config/issues/18",
+                "Would call: project item-edit Status Backlog on stray #18",
+                "Would call: project item-add 2 --owner sh4i-yurei --url https://github.com/sh4i-yurei/claude-config/issues/12",
+                "Would call: project item-edit Status Backlog on stray #12",
+            ],
+        )
+        self.assertFalse(
+            any(
+                call["args"][:2]
+                in (
+                    ["project", "view"],
+                    ["project", "field-list"],
+                    ["project", "item-list"],
+                    ["issue", "list"],
+                )
+                for call in self.calls()
+            )
+        )
+
+    def test_graphql_rate_limit_prevents_all_writes(self):
+        self.state["graphql_error"] = (
+            "API rate limit already exceeded for user ID 232996764."
+        )
+        self.save()
+        result = self.run_open(self.valid())
+        self.assertEqual(
+            (result.returncode, result.stdout),
+            (2, "API rate limit already exceeded for user ID 232996764.\n"),
+        )
+        self.assert_no_writes()
+
+    def test_other_project_cards_leave_issues_stray(self):
+        base = json.loads((FIXTURES / "repository-query.json").read_text())
+        for change in ("number", "owner"):
+            with self.subTest(change=change):
+                answer = json.loads(json.dumps(base))
+                card = answer["data"]["repository"]["issues"]["nodes"][3][
+                    "projectItems"
+                ]["nodes"]
+                card.append(
+                    {
+                        "project": {
+                            "number": 1 if change == "number" else 2,
+                            "owner": {
+                                "login": "someone-else"
+                                if change == "owner"
+                                else "sh4i-yurei"
+                            },
+                        }
+                    }
+                )
+                self.state["repository_response"] = answer
+                self.save()
+                result = self.run_open(self.valid(), "--dry-run")
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn(
+                    "Would call: project item-edit Status Backlog on stray #18\n",
+                    result.stdout,
+                )
+
+    def test_repository_pages_preserve_order_and_pass_cursor(self):
+        first = json.loads((FIXTURES / "repository-query.json").read_text())
+        second = json.loads(json.dumps(first))
+        first_issues = first["data"]["repository"]["issues"]
+        second_issues = second["data"]["repository"]["issues"]
+        first_issues["nodes"] = first_issues["nodes"][:3]
+        first_issues["pageInfo"]["hasNextPage"] = True
+        second_issues["nodes"] = second_issues["nodes"][3:]
+        self.state["repository_pages"] = [first, second]
+        self.save()
+        result = self.run_open(self.valid(), "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(len(self.board_lookups()), 2)
+        self.assertIn(
+            "cursor=Y3Vyc29yOnYyOpK0MjAyNi0xMC0zMVQyMjoyMDo0NVrPAAAAAW3_kfw=",
+            self.board_lookups()[1]["args"],
+        )
+        self.assertEqual(
+            result.stdout.splitlines()[-4:],
+            [
+                "Would call: project item-add 2 --owner sh4i-yurei --url https://github.com/sh4i-yurei/claude-config/issues/18",
+                "Would call: project item-edit Status Backlog on stray #18",
+                "Would call: project item-add 2 --owner sh4i-yurei --url https://github.com/sh4i-yurei/claude-config/issues/12",
+                "Would call: project item-edit Status Backlog on stray #12",
+            ],
+        )
+
+    def test_missing_backlog_option_refuses_before_write(self):
+        answer = json.loads((FIXTURES / "repository-query.json").read_text())
+        options = answer["data"]["repositoryOwner"]["projectV2"]["field"]["options"]
+        options[:] = [option for option in options if option["name"] != "Backlog"]
+        self.state["repository_response"] = answer
+        self.save()
+        result = self.run_open(self.valid())
+        self.assertEqual(
+            (result.returncode, result.stdout),
+            (2, "project sh4i-yurei/2: no Status Backlog option\n"),
+        )
+        self.assert_no_writes()
+
+    def test_malformed_repository_responses_refuse_before_write(self):
+        base = json.loads((FIXTURES / "repository-query.json").read_text())
+        for change, expected in (
+            ("response", "project sh4i-yurei/2: no Status Backlog option"),
+            ("data", "project sh4i-yurei/2: no Status Backlog option"),
+            ("owner", "project sh4i-yurei/2: no Status Backlog option"),
+            ("project", "project sh4i-yurei/2: no Status Backlog option"),
+            ("field", "project sh4i-yurei/2: no Status Backlog option"),
+            ("issues", "repository issues are missing"),
+            ("repository", "repository issues are missing"),
+            ("repository_type", "repository issues are missing"),
+            ("nodes", "repository issues are missing"),
+            ("issue", "board cards are missing"),
+            ("cards", "board cards are missing"),
+            ("page", "repository issue page is missing"),
+            ("cursor", "repository issue cursor is missing"),
+            ("cursor_type", "repository issue cursor is missing"),
+        ):
+            with self.subTest(change=change):
+                answer = json.loads(json.dumps(base))
+                data = answer["data"]
+                if change == "response":
+                    answer = []
+                elif change == "data":
+                    answer["data"] = None
+                elif change == "owner":
+                    data["repositoryOwner"] = None
+                elif change == "project":
+                    data["repositoryOwner"]["projectV2"] = None
+                elif change == "field":
+                    data["repositoryOwner"]["projectV2"]["field"] = None
+                elif change == "issues":
+                    data["repository"]["issues"] = None
+                elif change == "repository":
+                    data["repository"] = None
+                elif change == "repository_type":
+                    data["repository"] = []
+                elif change == "nodes":
+                    data["repository"]["issues"]["nodes"] = None
+                elif change == "issue":
+                    data["repository"]["issues"]["nodes"][0] = None
+                elif change == "cards":
+                    data["repository"]["issues"]["nodes"][0]["projectItems"] = None
+                elif change == "page":
+                    data["repository"]["issues"]["pageInfo"] = None
+                else:
+                    page = data["repository"]["issues"]["pageInfo"]
+                    page["hasNextPage"] = True
+                    page["endCursor"] = 123 if change == "cursor_type" else None
+                self.state["repository_response"] = answer
+                self.save()
+                result = self.run_open(self.valid())
+                self.assertEqual(
+                    (result.returncode, result.stdout), (2, expected + "\n")
+                )
+                self.assert_no_writes()
+
+    def test_malformed_card_on_other_project_does_not_count_as_mapped(self):
+        base = json.loads((FIXTURES / "repository-query.json").read_text())
+        for card in (None, {"project": None}):
+            with self.subTest(card=card):
+                answer = json.loads(json.dumps(base))
+                answer["data"]["repository"]["issues"]["nodes"][0]["projectItems"][
+                    "nodes"
+                ] = [card]
+                self.state["repository_response"] = answer
+                self.save()
+                result = self.run_open(self.valid(), "--dry-run")
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn(
+                    "Would call: project item-edit Status Backlog on stray #22\n",
+                    result.stdout,
+                )
+
+    def test_rate_limit_after_failed_add_names_both_failures(self):
+        message = (
+            "GraphQL: Content already exists in this project (addProjectV2ItemById)"
+        )
+        self.fail_board_add(message)
+        self.state["lookup_graphql_error"] = (
+            "API rate limit already exceeded for user ID 232996764."
+        )
+        self.save()
+        result = self.run_open(self.valid())
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertEqual(
+            result.stdout.splitlines()[-1],
+            f"failed: {message}; checking the board also failed: API rate limit already exceeded for user ID 232996764.",
+        )
+
+    def test_non_graphql_failure_keeps_stderr_even_with_graphql_body(self):
+        self.state["failure"] = {
+            "prefix": ["api", f"repos/{REPO}/contents/.github/ISSUE_TEMPLATE"],
+            "message": "HTTP 502",
+            "body": {"errors": [{"message": "other JSON message"}]},
+        }
+        self.save()
+        result = self.run_open(self.valid())
+        self.assertEqual((result.returncode, result.stdout), (2, "HTTP 502\n"))
+        self.assert_no_writes()
+
     def assert_no_writes(self):
         self.assertFalse(
             any(
@@ -646,18 +858,14 @@ class IssueOpen(unittest.TestCase):
             "Would call: project item-add 2 --owner sh4i-yurei --url NEW_ISSUE_URL",
             result.stdout,
         )
-        project_calls = [
-            call["args"] for call in self.calls() if call["args"][:1] == ["project"]
+        reads = [
+            call["args"]
+            for call in self.calls()
+            if call["args"][:2] == ["api", "graphql"]
         ]
-        self.assertTrue(project_calls)
-        self.assertTrue(
-            all(
-                args[2:5] == ["2", "--owner", "sh4i-yurei"]
-                for args in project_calls
-                if args[1] != "item-edit"
-            ),
-            project_calls,
-        )
+        self.assertEqual(len(reads), 1)
+        self.assertIn("number=2", reads[0])
+        self.assertIn("owner=sh4i-yurei", reads[0])
 
     def test_required_field_empty_and_extra_field_both_named(self):
         result = self.run_open(
@@ -735,24 +943,17 @@ class IssueOpen(unittest.TestCase):
         self.assertIn("found new issue already on board\n", result.stdout)
         self.assertIn("set new issue Status Backlog\n", result.stdout)
         lookup = self.board_lookups()
-        self.assertEqual(len(lookup), 1)
-        self.assertEqual(
-            lookup[0]["args"][2:4],
-            [
-                "-f",
-                "query=query($url: URI!){ resource(url: $url){ ... on Issue { projectItems(first: 20){ nodes{ id project{ number owner{ ... on User { login } ... on Organization { login } } } } } } } }",
-            ],
-        )
-        self.assertEqual(
-            lookup[0]["args"][4:], ["-f", f"url=https://github.com/{REPO}/issues/99"]
-        )
+        self.assertEqual(len(lookup), 2)
+        self.assertIn(f"url=https://github.com/{REPO}/issues/99", lookup[1]["args"])
+        self.assertIn("owner=sh4i-yurei", lookup[1]["args"])
+        self.assertIn("number=2", lookup[1]["args"])
         edit = next(
             call
             for call in self.calls()
             if call["args"][:2] == ["project", "item-edit"]
         )
         self.assertEqual(
-            edit["args"][edit["args"].index("--id") + 1], "PVTI_lAHODeM_nM4Bo2B8zhDt9uk"
+            edit["args"][edit["args"].index("--id") + 1], "PVTI_lAHODeM_nM4Bo2B8zhE6DaM"
         )
 
     def test_stray_found_on_board_after_add_failure(self):
@@ -764,7 +965,7 @@ class IssueOpen(unittest.TestCase):
         for number in (18, 12):
             self.assertIn(f"found stray #{number} already on board\n", result.stdout)
             self.assertIn(f"set stray #{number} Status Backlog\n", result.stdout)
-        self.assertEqual(len(self.board_lookups()), 3)
+        self.assertEqual(len(self.board_lookups()), 4)
 
     def test_other_add_error_with_card_found_succeeds(self):
         self.fail_board_add("HTTP 502")
@@ -811,50 +1012,20 @@ class IssueOpen(unittest.TestCase):
     def test_successful_add_makes_no_board_lookup_and_keeps_calls(self):
         result = self.run_open(self.valid())
         self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertEqual(self.board_lookups(), [])
+        self.assertEqual(len(self.board_lookups()), 1)
+        self.assertIn("name=claude-config", self.board_lookups()[0]["args"])
         self.assertEqual(
-            [call["args"] for call in self.calls()],
+            [
+                call["args"]
+                for call in self.calls()
+                if call["args"][:2] != ["api", "graphql"]
+            ],
             [
                 ["api", f"repos/{REPO}/contents/.github/ISSUE_TEMPLATE"],
                 ["api", "repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE"],
                 [
                     "api",
                     "repos/sh4i-yurei/.github/contents/.github/ISSUE_TEMPLATE/feature.yml",
-                ],
-                ["project", "view", "2", "--owner", "sh4i-yurei", "--format", "json"],
-                [
-                    "project",
-                    "field-list",
-                    "2",
-                    "--owner",
-                    "sh4i-yurei",
-                    "--format",
-                    "json",
-                    "--limit",
-                    "100",
-                ],
-                [
-                    "project",
-                    "item-list",
-                    "2",
-                    "--owner",
-                    "sh4i-yurei",
-                    "--format",
-                    "json",
-                    "--limit",
-                    "10000",
-                ],
-                [
-                    "issue",
-                    "list",
-                    "--repo",
-                    REPO,
-                    "--state",
-                    "open",
-                    "--limit",
-                    "10000",
-                    "--json",
-                    "number,url",
                 ],
                 ["api", f"repos/{REPO}/issues", "--method", "POST", "--input", "-"],
                 [
@@ -874,9 +1045,9 @@ class IssueOpen(unittest.TestCase):
                     "--id",
                     "PVTI_NEW",
                     "--project-id",
-                    "PVT_kwHODeM_nM4Bnbqb",
+                    "PVT_kwHODeM_nM4Bo2B8",
                     "--field-id",
-                    "PVTSSF_lAHODeM_nM4BnbqbzhmAVQk",
+                    "PVTSSF_lAHODeM_nM4Bo2B8zhnUO3k",
                     "--single-select-option-id",
                     "f75ad846",
                     "--format",
@@ -899,9 +1070,9 @@ class IssueOpen(unittest.TestCase):
                     "--id",
                     "PVTI_NEW",
                     "--project-id",
-                    "PVT_kwHODeM_nM4Bnbqb",
+                    "PVT_kwHODeM_nM4Bo2B8",
                     "--field-id",
-                    "PVTSSF_lAHODeM_nM4BnbqbzhmAVQk",
+                    "PVTSSF_lAHODeM_nM4Bo2B8zhnUO3k",
                     "--single-select-option-id",
                     "f75ad846",
                     "--format",
@@ -924,9 +1095,9 @@ class IssueOpen(unittest.TestCase):
                     "--id",
                     "PVTI_NEW",
                     "--project-id",
-                    "PVT_kwHODeM_nM4Bnbqb",
+                    "PVT_kwHODeM_nM4Bo2B8",
                     "--field-id",
-                    "PVTSSF_lAHODeM_nM4BnbqbzhmAVQk",
+                    "PVTSSF_lAHODeM_nM4Bo2B8zhnUO3k",
                     "--single-select-option-id",
                     "f75ad846",
                     "--format",

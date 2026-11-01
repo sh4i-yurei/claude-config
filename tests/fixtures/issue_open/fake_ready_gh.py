@@ -20,7 +20,76 @@ def fixture(name):
 
 if args[:1] == ["api"]:
     endpoint = args[1]
-    if endpoint.startswith("repos/sh4i-yurei/claude-config/issues/"):
+    if endpoint == "graphql":
+        if any(
+            arg.startswith(("query=", "owner=", "name=", "url=", "number=", "cursor="))
+            and args[index - 1] not in ("-f", "-F")
+            for index, arg in enumerate(args)
+        ):
+            print("gh: invalid GraphQL field flag", file=sys.stderr)
+            sys.exit(1)
+        query = next(
+            (arg.removeprefix("query=") for arg in args if arg.startswith("query=")), ""
+        )
+        if (
+            not query.startswith("query(")
+            or "resource(" not in query
+            or "repositoryOwner(" not in query
+        ):
+            print("gh: invalid GraphQL query", file=sys.stderr)
+            sys.exit(1)
+        number = next(
+            (index for index, arg in enumerate(args) if arg.startswith("number=")), None
+        )
+        if number is None or args[number - 1] != "-F":
+            print("gh: number must be an integer", file=sys.stderr)
+            sys.exit(1)
+        if state.get("graphql_error"):
+            messages = state["graphql_error"]
+            if isinstance(messages, str):
+                messages = [messages]
+            print(
+                json.dumps({"errors": [{"message": message} for message in messages]})
+            )
+            print("gh: " + messages[0], file=sys.stderr)
+            sys.exit(1)
+        result = state.get("card_response", fixture("card-query"))
+        nodes = result["data"]["resource"]["projectItems"]["nodes"]
+        if (
+            state.get("number") == "1"
+            or state.get("missing_board_item")
+            or state.get("board_item_without_content")
+        ):
+            nodes.clear()
+        elif state.get("number") == "60":
+            nodes[0]["project"]["number"] = 3
+        if nodes:
+            field_values = nodes[0].get("fieldValues")
+            if field_values is not None and not state.get("preserve_nodes"):
+                values = field_values["nodes"]
+                values[:] = [
+                    node
+                    for node in values
+                    if isinstance(node, dict)
+                    and node.get("field", {}).get("name") == "Status"
+                ]
+                defaults = (
+                    {"priority": "P1", "size": "Feature", "estimate": 1.5}
+                    if state.get("number") == "22"
+                    else {}
+                )
+                for name, value in {
+                    **defaults,
+                    **state.get("board_fields", {}),
+                }.items():
+                    if value not in (None, ""):
+                        values.append(
+                            {
+                                "number" if name == "estimate" else "name": value,
+                                "field": {"name": name.title()},
+                            }
+                        )
+    elif endpoint.startswith("repos/sh4i-yurei/claude-config/issues/"):
         number = endpoint.split("/")[4]
         if endpoint.endswith("/parent"):
             if "parent_response" in state:
@@ -69,28 +138,6 @@ if args[:1] == ["api"]:
     else:
         print("unexpected API " + endpoint, file=sys.stderr)
         sys.exit(1)
-elif args[:2] == ["project", "view"]:
-    result = fixture("project-view")
-elif args[:2] == ["project", "field-list"]:
-    result = fixture("project-fields")
-elif args[:2] == ["project", "item-list"]:
-    result = fixture("ready-board-items")
-    for item in result["items"]:
-        if (
-            item.get("content", {})
-            .get("url", "")
-            .endswith("/issues/" + state.get("number", ""))
-        ):
-            item.update(state.get("board_fields", {}))
-            if state.get("board_item_without_content"):
-                item.pop("content")
-    if state.get("missing_board_item"):
-        result["items"] = [
-            item
-            for item in result["items"]
-            if item.get("content", {}).get("url", "")
-            != "https://github.com/sh4i-yurei/claude-config/issues/" + state["number"]
-        ]
 elif args[:2] == ["project", "item-edit"]:
     result = {}
 else:

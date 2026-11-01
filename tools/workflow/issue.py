@@ -15,7 +15,7 @@ class IssueError(Exception):
     """The input or a GitHub response cannot be used."""
 
 
-def gh(args, payload=None):
+def gh(args, payload=None, graphql_errors=False):
     result = subprocess.run(
         ["gh", *args],
         input=json.dumps(payload) if payload is not None else "",
@@ -23,6 +23,14 @@ def gh(args, payload=None):
         capture_output=True,
     )
     if result.returncode:
+        if graphql_errors:
+            try:
+                response = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                response = None
+            errors = response.get("errors") if isinstance(response, dict) else None
+            if isinstance(errors, list):
+                raise IssueError("\n".join(error["message"] for error in errors))
         raise IssueError(
             result.stderr.strip()
             or result.stdout.strip()
@@ -39,6 +47,18 @@ def api(endpoint, payload=None):
     if payload is not None:
         args += ["--method", "POST", "--input", "-"]
     return gh(args, payload)
+
+
+CARD_QUERY = """query($url: URI!, $owner: String!, $number: Int!) { resource(url: $url) { ... on Issue { projectItems(first: 20) { nodes { id project { id number owner { ... on User { login } ... on Organization { login } } } fieldValues(first: 20) { nodes { ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } } ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { name } } } } } } } } } repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
+REPOSITORY_QUERY = """query($owner: String!, $name: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issues(states: OPEN, first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { number url projectItems(first: 20) { nodes { project { number owner { ... on User { login } ... on Organization { login } } } } } } } } repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
+
+
+def graphql(query, **variables):
+    args = ["api", "graphql", "-f", f"query={query}"]
+    for name, value in variables.items():
+        if value is not None:
+            args.extend(["-F" if type(value) is int else "-f", f"{name}={value}"])
+    return gh(args, graphql_errors=True)
 
 
 def read_input(path):
@@ -220,12 +240,11 @@ def related(repo, number):
     return issue
 
 
-def board_data(board, status_name="Backlog"):
-    base = [str(board["number"]), "--owner", board["owner"], "--format", "json"]
-    project = gh(["project", "view", *base])
-    fields = gh(["project", "field-list", *base, "--limit", "100"])["fields"]
-    items = gh(["project", "item-list", *base, "--limit", "10000"])["items"]
-    status = next((field for field in fields if field.get("name") == "Status"), None)
+def board_data(response, board, status_name="Backlog"):
+    data = response.get("data") if isinstance(response, dict) else None
+    owner = data.get("repositoryOwner") if isinstance(data, dict) else None
+    project = owner.get("projectV2") if isinstance(owner, dict) else None
+    status = project.get("field") if isinstance(project, dict) else None
     option = next(
         (
             option
@@ -238,28 +257,21 @@ def board_data(board, status_name="Backlog"):
         raise IssueError(
             f"project {board['owner']}/{board['number']}: no Status {status_name} option"
         )
-    return project["id"], status["id"], option["id"], items
+    return project["id"], status["id"], option["id"]
 
 
-def board_add(board, url):
-    return gh(
-        [
-            "project",
-            "item-add",
-            str(board["number"]),
-            "--owner",
-            board["owner"],
-            "--url",
-            url,
-            "--format",
-            "json",
-        ]
+def on_board(card, board):
+    project = card.get("project") if isinstance(card, dict) else None
+    owner = project.get("owner") if isinstance(project, dict) else None
+    return (
+        isinstance(project, dict)
+        and project.get("number") == board["number"]
+        and isinstance(owner, dict)
+        and owner.get("login") == board["owner"]
     )
 
 
-def board_card(board, url):
-    query = "query($url: URI!){ resource(url: $url){ ... on Issue { projectItems(first: 20){ nodes{ id project{ number owner{ ... on User { login } ... on Organization { login } } } } } } } }"
-    response = gh(["api", "graphql", "-f", f"query={query}", "-f", f"url={url}"])
+def card_nodes(response):
     data = response.get("data") if isinstance(response, dict) else None
     resource = data.get("resource") if isinstance(data, dict) else None
     if not isinstance(resource, dict):
@@ -281,9 +293,74 @@ def board_card(board, url):
             or not isinstance(card.get("id"), str)
         ):
             raise IssueError("board card is incomplete")
-        if project["number"] == board["number"] and owner["login"] == board["owner"]:
-            return card["id"]
-    return None
+    return nodes
+
+
+def card_read(board, url):
+    response = graphql(
+        CARD_QUERY, url=url, owner=board["owner"], number=board["number"]
+    )
+    return response, next(
+        (card for card in card_nodes(response) if on_board(card, board)), None
+    )
+
+
+def repository_read(repo, board):
+    owner, name = repo.split("/", 1)
+    cursor = None
+    strays = []
+    board_ids = None
+    while True:
+        response = graphql(
+            REPOSITORY_QUERY,
+            owner=owner,
+            name=name,
+            number=board["number"],
+            cursor=cursor,
+        )
+        if board_ids is None:
+            board_ids = board_data(response, board)
+        data = response.get("data") if isinstance(response, dict) else None
+        repository = data.get("repository") if isinstance(data, dict) else None
+        issues = repository.get("issues") if isinstance(repository, dict) else None
+        if not isinstance(issues, dict) or not isinstance(issues.get("nodes"), list):
+            raise IssueError("repository issues are missing")
+        for issue in issues["nodes"]:
+            cards = issue.get("projectItems") if isinstance(issue, dict) else None
+            nodes = cards.get("nodes") if isinstance(cards, dict) else None
+            if not isinstance(nodes, list):
+                raise IssueError("board cards are missing")
+            if not any(on_board(card, board) for card in nodes):
+                strays.append(issue)
+        page = issues.get("pageInfo")
+        if not isinstance(page, dict):
+            raise IssueError("repository issue page is missing")
+        if not page.get("hasNextPage"):
+            return (*board_ids, strays)
+        cursor = page.get("endCursor")
+        if not isinstance(cursor, str) or not cursor:
+            raise IssueError("repository issue cursor is missing")
+
+
+def board_add(board, url):
+    return gh(
+        [
+            "project",
+            "item-add",
+            str(board["number"]),
+            "--owner",
+            board["owner"],
+            "--url",
+            url,
+            "--format",
+            "json",
+        ]
+    )
+
+
+def board_card(board, url):
+    _, card = card_read(board, url)
+    return card["id"] if card else None
 
 
 def board_status(project_id, field_id, backlog_id, item_id):
@@ -393,23 +470,7 @@ def open_data(data, dry_run):
         print("\n".join(problems))
         return 2
     board = boards[repo]
-    project_id, field_id, backlog_id, board_items = board_data(board)
-    open_issues = gh(
-        [
-            "issue",
-            "list",
-            "--repo",
-            repo,
-            "--state",
-            "open",
-            "--limit",
-            "10000",
-            "--json",
-            "number,url",
-        ]
-    )
-    existing = {item.get("content", {}).get("url") for item in board_items}
-    strays = [item for item in open_issues if item["url"] not in existing]
+    project_id, field_id, backlog_id, strays = repository_read(repo, board)
     body = render_body(form, data["body"])
     issue_labels = list(
         dict.fromkeys(
@@ -738,12 +799,9 @@ def ready_issue(reference, check):
         raise IssueError(f"no board mapping for {repo}")
     issue = related(repo, number)
     board = boards[repo]
-    project_id, status_id, ready_id, items = board_data(board, "Ready")
     issue_url = issue["html_url"]
-    item = next(
-        (item for item in items if item.get("content", {}).get("url") == issue_url),
-        None,
-    )
+    response, item = card_read(board, issue_url)
+    project_id, status_id, ready_id = board_data(response, board, "Ready")
     if item is None:
         raise IssueError(f"{reference} is not on its repository's board")
 
@@ -807,8 +865,14 @@ def ready_issue(reference, check):
     else:
         report(True, "required form sections")
 
+    field_values = item.get("fieldValues", {}).get("nodes", [])
+    values = {
+        node["field"]["name"]: node.get("name", node.get("number"))
+        for node in field_values
+        if isinstance(node, dict) and isinstance(node.get("field"), dict)
+    }
     for field in ("Priority", "Size", "Estimate"):
-        report(item.get(field.lower()) not in (None, ""), field)
+        report(values.get(field) not in (None, ""), field)
     try:
         parent = api(f"repos/{repo}/issues/{number}/parent")
     except IssueError as error:
@@ -830,7 +894,7 @@ def ready_issue(reference, check):
             )
     else:
         report(True, "no open blocking issues")
-    architecture = item.get("size") == "Architecture"
+    architecture = values.get("Size") == "Architecture"
     design = any(
         line.startswith("Design: ") for line in (issue.get("body") or "").splitlines()
     )
