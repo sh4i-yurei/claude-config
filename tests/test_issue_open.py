@@ -970,6 +970,31 @@ class IssueOpen(unittest.TestCase):
             edit["args"][edit["args"].index("--id") + 1], "PVTI_lAHODeM_nM4Bo2B8zhE6DaM"
         )
 
+    def test_other_board_card_before_mapped_card_after_add_failure(self):
+        self.fail_board_add(
+            "GraphQL: Content already exists in this project (addProjectV2ItemById)",
+            url=f"https://github.com/{REPO}/issues/99",
+        )
+        answer = json.loads((FIXTURES / "card-query.json").read_text())
+        answer["data"]["resource"]["projectItems"]["nodes"].insert(
+            0, {"id": "PVTI_other", "project": None}
+        )
+        self.state["card_response"] = answer
+        self.save()
+        result = self.run_open(self.valid())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("found new issue already on board\n", result.stdout)
+        self.assertIn("set new issue Status Backlog\n", result.stdout)
+        edit = next(
+            call
+            for call in self.calls()
+            if call["args"][:2] == ["project", "item-edit"]
+        )
+        self.assertEqual(
+            edit["args"][edit["args"].index("--id") + 1],
+            "PVTI_lAHODeM_nM4Bo2B8zhE6DaM",
+        )
+
     def test_stray_found_on_board_after_add_failure(self):
         self.fail_board_add(
             "GraphQL: Content already exists in this project (addProjectV2ItemById)"
@@ -1145,11 +1170,11 @@ class IssueOpen(unittest.TestCase):
             ("null_resource", "resource is not an issue"),
             ("missing_project_items", "projectItems is missing"),
             ("missing_nodes", "board cards are missing"),
-            ("bad_card", "board card is incomplete"),
-            ("bad_project", "board card is incomplete"),
-            ("bad_number", "board card is incomplete"),
-            ("bad_owner", "board card is incomplete"),
-            ("bad_login", "board card is incomplete"),
+            ("bad_card", None),
+            ("bad_project", None),
+            ("bad_number", None),
+            ("bad_owner", None),
+            ("bad_login", None),
             ("bad_id", "board card is incomplete"),
         ):
             with self.subTest(shape=shape):
@@ -1164,7 +1189,9 @@ class IssueOpen(unittest.TestCase):
                         f"https://github.com/{REPO}/issues/99",
                         f"completed: created https://github.com/{REPO}/issues/99 with labels type:feature, scope:ci",
                         "not completed: added new issue to board; set new issue Status Backlog; added stray #18 to board; set stray #18 Status Backlog; added stray #12 to board; set stray #12 Status Backlog",
-                        f"failed: HTTP 502; checking the board also failed: {detail}",
+                        f"failed: HTTP 502; checking the board also failed: {detail}"
+                        if detail
+                        else "failed: HTTP 502",
                     ],
                 )
 

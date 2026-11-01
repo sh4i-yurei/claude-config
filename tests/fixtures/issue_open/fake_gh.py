@@ -119,7 +119,7 @@ if args[:1] == ["api"]:
                     nodes[0]["project"]["owner"]["login"] = None
                 else:
                     nodes[0]["id"] = None
-            else:
+            elif "card_response" not in state:
                 nodes = result["data"]["resource"]["projectItems"]["nodes"]
                 if state.get("lookup_board") is None:
                     nodes.clear()

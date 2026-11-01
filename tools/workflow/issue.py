@@ -282,17 +282,6 @@ def card_nodes(response):
     nodes = items.get("nodes")
     if not isinstance(nodes, list):
         raise IssueError("board cards are missing")
-    for card in nodes:
-        project = card.get("project") if isinstance(card, dict) else None
-        owner = project.get("owner") if isinstance(project, dict) else None
-        if (
-            not isinstance(project, dict)
-            or not isinstance(project.get("number"), int)
-            or not isinstance(owner, dict)
-            or not isinstance(owner.get("login"), str)
-            or not isinstance(card.get("id"), str)
-        ):
-            raise IssueError("board card is incomplete")
     return nodes
 
 
@@ -300,9 +289,10 @@ def card_read(board, url):
     response = graphql(
         CARD_QUERY, url=url, owner=board["owner"], number=board["number"]
     )
-    return response, next(
-        (card for card in card_nodes(response) if on_board(card, board)), None
-    )
+    card = next((card for card in card_nodes(response) if on_board(card, board)), None)
+    if card is not None and not isinstance(card.get("id"), str):
+        raise IssueError("board card is incomplete")
+    return response, card
 
 
 def repository_read(repo, board):

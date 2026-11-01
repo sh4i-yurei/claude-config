@@ -193,6 +193,51 @@ class IssueReady(unittest.TestCase):
                     )
                 )
 
+    def test_other_board_cards_do_not_block_ready_check(self):
+        base = json.loads((FIXTURES / "card-query.json").read_text())
+        for other_card in (
+            {"id": "PVTI_other", "project": None},
+            {"project": {"number": 1, "owner": {"login": "sh4i-yurei"}}},
+        ):
+            with self.subTest(other_card=other_card):
+                answer = json.loads(json.dumps(base))
+                answer["data"]["resource"]["projectItems"]["nodes"].insert(
+                    0, other_card
+                )
+                self.state["card_response"] = answer
+                self.state["preserve_nodes"] = True
+                result = self.run_ready("23", "--check")
+                self.assertEqual(
+                    (result.returncode, result.stdout.splitlines()),
+                    (
+                        0,
+                        [
+                            "met: one type: label",
+                            "met: a scope: label",
+                            "met: required form sections",
+                            "met: Priority",
+                            "met: Size",
+                            "met: Estimate",
+                            "met: milestone or parent",
+                            "met: no open blocking issues",
+                            "met: Architecture design link not required",
+                            f"ready: {REPO}#23",
+                        ],
+                    ),
+                )
+
+    def test_mapped_card_without_id_refuses_before_write(self):
+        answer = json.loads((FIXTURES / "card-query.json").read_text())
+        answer["data"]["resource"]["projectItems"]["nodes"][0].pop("id")
+        self.state["card_response"] = answer
+        result = self.run_ready("23")
+        self.assertEqual(
+            (result.returncode, result.stdout), (2, "board card is incomplete\n")
+        )
+        self.assertFalse(
+            any(call["args"][:2] == ["project", "item-edit"] for call in self.calls())
+        )
+
     def test_missing_ready_option_refuses_before_write(self):
         answer = json.loads((FIXTURES / "card-query.json").read_text())
         options = answer["data"]["repositoryOwner"]["projectV2"]["field"]["options"]
