@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "vendor"))
 
-DIRECT_PUSH_REPOS = {"claude-config", "codex-config", "second-brain"}
+DIRECT_PUSH_REPOS = {"second-brain"}
 PROTECTED_BRANCHES = {"main", "master"}
 BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
 GUARDED_PROGRAMS = ("git", "gh", "bw", "vault-env")
