@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tomllib
 
 
 args = sys.argv[1:]
@@ -37,7 +38,17 @@ if args[:1] == ["api"]:
     method = args[args.index("--method") + 1] if "--method" in args else "GET"
     if endpoint == "graphql":
         if any(
-            arg.startswith(("query=", "owner=", "name=", "url=", "number=", "cursor="))
+            arg.startswith(
+                (
+                    "query=",
+                    "owner=",
+                    "boardOwner=",
+                    "name=",
+                    "url=",
+                    "number=",
+                    "cursor=",
+                )
+            )
             and args[index - 1] not in ("-f", "-F")
             for index, arg in enumerate(args)
         ):
@@ -125,6 +136,22 @@ if args[:1] == ["api"]:
                     nodes.clear()
                 else:
                     nodes[0]["project"]["number"] = state["lookup_board"]
+        board_owner = tomllib.loads(Path(os.environ["FAKE_GH_WORKFLOW"]).read_text())[
+            "products"
+        ]["Tooling"]["owner"]
+        variable = (
+            "boardOwner=" if any(arg.startswith("name=") for arg in args) else "owner="
+        )
+        selected_owner = next(
+            (arg.removeprefix(variable) for arg in args if arg.startswith(variable)),
+            None,
+        )
+        if (
+            selected_owner != board_owner
+            and isinstance(result, dict)
+            and isinstance(result.get("data"), dict)
+        ):
+            result["data"]["repositoryOwner"] = None
     elif method == "GET":
         if endpoint.endswith("/issues/28/sub_issues") and debt_fixtures:
             result = (

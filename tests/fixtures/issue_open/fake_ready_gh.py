@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tomllib
 
 
 args = sys.argv[1:]
@@ -22,7 +23,17 @@ if args[:1] == ["api"]:
     endpoint = args[1]
     if endpoint == "graphql":
         if any(
-            arg.startswith(("query=", "owner=", "name=", "url=", "number=", "cursor="))
+            arg.startswith(
+                (
+                    "query=",
+                    "owner=",
+                    "boardOwner=",
+                    "name=",
+                    "url=",
+                    "number=",
+                    "cursor=",
+                )
+            )
             and args[index - 1] not in ("-f", "-F")
             for index, arg in enumerate(args)
         ):
@@ -54,6 +65,19 @@ if args[:1] == ["api"]:
             print("gh: " + messages[0], file=sys.stderr)
             sys.exit(1)
         result = state.get("card_response", fixture("card-query"))
+        owner = next(
+            arg.removeprefix("owner=") for arg in args if arg.startswith("owner=")
+        )
+        products = tomllib.loads(Path(os.environ["FAKE_GH_WORKFLOW"]).read_text())[
+            "products"
+        ]
+        board_owner = next(
+            product["owner"]
+            for product in products.values()
+            if product["number"] == int(args[number].removeprefix("number="))
+        )
+        if owner != board_owner:
+            result["data"]["repositoryOwner"] = None
         nodes = result["data"]["resource"]["projectItems"]["nodes"]
         if (
             state.get("number") == "1"
@@ -63,32 +87,24 @@ if args[:1] == ["api"]:
             nodes.clear()
         elif state.get("number") == "60":
             nodes[0]["project"]["number"] = 3
-        if nodes:
-            field_values = nodes[0].get("fieldValues")
-            if field_values is not None and not state.get("preserve_nodes"):
-                values = field_values["nodes"]
-                values[:] = [
-                    node
-                    for node in values
-                    if isinstance(node, dict)
-                    and node.get("field", {}).get("name") == "Status"
-                ]
-                defaults = (
-                    {"priority": "P1", "size": "Feature", "estimate": 1.5}
-                    if state.get("number") == "22"
-                    else {}
+        if nodes and not state.get("preserve_nodes"):
+            defaults = (
+                {"priority": "P1", "size": "Feature", "estimate": 1.5}
+                if state.get("number") == "22"
+                else {}
+            )
+            for name, value in {
+                **defaults,
+                **state.get("board_fields", {}),
+            }.items():
+                nodes[0][name] = (
+                    {"number" if name == "estimate" else "name": value}
+                    if value not in (None, "")
+                    else None
                 )
-                for name, value in {
-                    **defaults,
-                    **state.get("board_fields", {}),
-                }.items():
-                    if value not in (None, ""):
-                        values.append(
-                            {
-                                "number" if name == "estimate" else "name": value,
-                                "field": {"name": name.title()},
-                            }
-                        )
+            for name in ("priority", "size", "estimate"):
+                if name not in state.get("board_fields", {}) and name not in defaults:
+                    nodes[0][name] = None
     elif endpoint.startswith("repos/sh4i-yurei/claude-config/issues/"):
         number = endpoint.split("/")[4]
         if endpoint.endswith("/parent"):

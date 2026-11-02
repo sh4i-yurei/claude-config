@@ -27,6 +27,11 @@ class IssueReady(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        self.workflow = self.root / "workflow"
+        shutil.copytree(ROOT / "tools/workflow", self.workflow)
+        directory = patch.object(workflow_config, "DIRECTORY", self.workflow)
+        directory.start()
+        self.addCleanup(directory.stop)
         bin_dir = self.root / "bin"
         bin_dir.mkdir()
         fake = bin_dir / "gh"
@@ -38,6 +43,7 @@ class IssueReady(unittest.TestCase):
             FAKE_GH_FIXTURES=str(FIXTURES),
             FAKE_GH_CALLS=str(self.root / "calls.jsonl"),
             FAKE_GH_STATE=str(self.root / "state.json"),
+            FAKE_GH_WORKFLOW=str(self.workflow / "workflow.toml"),
             PYTHONDONTWRITEBYTECODE="1",
         )
         self.state = {"number": "23"}
@@ -50,7 +56,10 @@ class IssueReady(unittest.TestCase):
         self.state["number"] = number
         self.save()
         output = io.StringIO()
-        with patch.dict(os.environ, self.env), redirect_stdout(output):
+        with (
+            patch.dict(os.environ, self.env),
+            redirect_stdout(output),
+        ):
             code = issue_tool.main(["ready", f"{repo}#{number}", *options])
         return SimpleNamespace(returncode=code, stdout=output.getvalue(), stderr="")
 
@@ -127,46 +136,97 @@ class IssueReady(unittest.TestCase):
         result = self.run_ready("23", "--check")
         self.assertIn("unmet: Priority\nunmet: Size\nunmet: Estimate\n", result.stdout)
 
-    def test_missing_field_values_are_unset(self):
-        for change in ("missing", "untyped"):
-            with self.subTest(change=change):
-                answer = json.loads((FIXTURES / "card-query.json").read_text())
-                card = answer["data"]["resource"]["projectItems"]["nodes"][0]
-                if change == "missing":
-                    card.pop("fieldValues")
-                else:
-                    card["fieldValues"]["nodes"].append(None)
-                self.state["card_response"] = answer
-                result = self.run_ready("23", "--check")
-                self.assertEqual(result.returncode, 1, result.stdout)
-                self.assertIn(
-                    "unmet: Priority\nunmet: Size\nunmet: Estimate\n", result.stdout
-                )
-
-    def test_card_ignores_nodes_without_a_named_field(self):
+    def test_null_named_fields_are_unset(self):
         answer = json.loads((FIXTURES / "card-query.json").read_text())
-        answer["data"]["resource"]["projectItems"]["nodes"][0]["fieldValues"][
-            "nodes"
-        ].append(None)
-        self.state["card_response"] = answer
-        self.state["preserve_nodes"] = True
-        result = self.run_ready("23", "--check")
-        self.assertEqual(result.returncode, 0, result.stdout)
-        self.assertIn("met: Priority\nmet: Size\nmet: Estimate\n", result.stdout)
-
-    def test_empty_named_field_is_unset(self):
-        answer = json.loads((FIXTURES / "card-query.json").read_text())
-        values = answer["data"]["resource"]["projectItems"]["nodes"][0]["fieldValues"][
-            "nodes"
-        ]
-        for node in values:
-            if node.get("field", {}).get("name") == "Priority":
-                node["name"] = ""
+        card = answer["data"]["resource"]["projectItems"]["nodes"][0]
+        card.update(priority=None, size=None, estimate=None)
         self.state["card_response"] = answer
         self.state["preserve_nodes"] = True
         result = self.run_ready("23", "--check")
         self.assertEqual(result.returncode, 1, result.stdout)
-        self.assertIn("unmet: Priority\nmet: Size\nmet: Estimate\n", result.stdout)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [
+                "met: one type: label",
+                "met: a scope: label",
+                "met: required form sections",
+                "unmet: Priority",
+                "unmet: Size",
+                "unmet: Estimate",
+                "met: milestone or parent",
+                "met: no open blocking issues",
+                "met: Architecture design link not required",
+            ],
+        )
+
+    def test_null_estimate_keeps_priority_and_size_met(self):
+        self.state["board_fields"] = {
+            "priority": "P1",
+            "size": "Feature",
+            "estimate": None,
+        }
+        result = self.run_ready("23", "--check")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [
+                "met: one type: label",
+                "met: a scope: label",
+                "met: required form sections",
+                "met: Priority",
+                "met: Size",
+                "unmet: Estimate",
+                "met: milestone or parent",
+                "met: no open blocking issues",
+                "met: Architecture design link not required",
+            ],
+        )
+
+    def test_untyped_named_field_is_unset(self):
+        answer = json.loads((FIXTURES / "card-query.json").read_text())
+        answer["data"]["resource"]["projectItems"]["nodes"][0]["priority"] = {}
+        self.state["card_response"] = answer
+        self.state["preserve_nodes"] = True
+        result = self.run_ready("23", "--check")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [
+                "met: one type: label",
+                "met: a scope: label",
+                "met: required form sections",
+                "unmet: Priority",
+                "met: Size",
+                "met: Estimate",
+                "met: milestone or parent",
+                "met: no open blocking issues",
+                "met: Architecture design link not required",
+            ],
+        )
+
+    def test_empty_named_field_is_unset(self):
+        answer = json.loads((FIXTURES / "card-query.json").read_text())
+        answer["data"]["resource"]["projectItems"]["nodes"][0]["priority"] = {
+            "name": ""
+        }
+        self.state["card_response"] = answer
+        self.state["preserve_nodes"] = True
+        result = self.run_ready("23", "--check")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [
+                "met: one type: label",
+                "met: a scope: label",
+                "met: required form sections",
+                "unmet: Priority",
+                "met: Size",
+                "met: Estimate",
+                "met: milestone or parent",
+                "met: no open blocking issues",
+                "met: Architecture design link not required",
+            ],
+        )
 
     def test_card_must_match_mapped_project_and_owner(self):
         base = json.loads((FIXTURES / "card-query.json").read_text())
@@ -336,6 +396,38 @@ class IssueReady(unittest.TestCase):
         )
         self.assertFalse(
             any(c["args"][:2] == ["project", "item-edit"] for c in self.calls())
+        )
+
+    def test_ready_uses_board_owner_from_mapping(self):
+        path = self.workflow / "workflow.toml"
+        path.write_text(
+            path.read_text().replace(
+                '"Tooling" = { owner = "sh4i-yurei", number = 2 }',
+                '"Tooling" = { owner = "other-owner", number = 2 }',
+            )
+        )
+        answer = json.loads((FIXTURES / "card-query.json").read_text())
+        answer["data"]["resource"]["projectItems"]["nodes"][0]["project"]["owner"][
+            "login"
+        ] = "other-owner"
+        self.state["card_response"] = answer
+        self.state["preserve_nodes"] = True
+        result = self.run_ready("23", "--check")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertEqual(
+            result.stdout.splitlines(),
+            [
+                "met: one type: label",
+                "met: a scope: label",
+                "met: required form sections",
+                "met: Priority",
+                "met: Size",
+                "met: Estimate",
+                "met: milestone or parent",
+                "met: no open blocking issues",
+                "met: Architecture design link not required",
+                f"ready: {REPO}#23",
+            ],
         )
 
     def test_missing_fields_and_sections_are_all_named(self):

@@ -49,9 +49,8 @@ def api(endpoint, payload=None):
     return gh(args, payload)
 
 
-CARD_QUERY = """query($url: URI!, $owner: String!, $number: Int!) { resource(url: $url) { ... on Issue { projectItems(first: 20) { nodes { id project { id number owner { ... on User { login } ... on Organization { login } } } fieldValues(first: 20) { nodes { ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } } ... on ProjectV2ItemFieldNumberValue { number field { ... on ProjectV2FieldCommon { name } } } } } } } } } repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
-REPOSITORY_QUERY = """query($owner: String!, $name: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issues(states: OPEN, first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { number url projectItems(first: 20) { nodes { project { number owner { ... on User { login } ... on Organization { login } } } } } } } } repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
-
+CARD_QUERY = """query($url: URI!, $owner: String!, $number: Int!) { resource(url: $url) { ... on Issue { projectItems(first: 20) { nodes { id project { id number owner { ... on User { login } ... on Organization { login } } } priority: fieldValueByName(name: "Priority") { ... on ProjectV2ItemFieldSingleSelectValue { name } } size: fieldValueByName(name: "Size") { ... on ProjectV2ItemFieldSingleSelectValue { name } } estimate: fieldValueByName(name: "Estimate") { ... on ProjectV2ItemFieldNumberValue { number } } } } } } repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
+REPOSITORY_QUERY = """query($owner: String!, $name: String!, $boardOwner: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issues(states: OPEN, first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { number url projectItems(first: 20) { nodes { project { number owner { ... on User { login } ... on Organization { login } } } } } } } } repositoryOwner(login: $boardOwner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
 
 def graphql(query, **variables):
     args = ["api", "graphql", "-f", f"query={query}"]
@@ -305,6 +304,7 @@ def repository_read(repo, board):
             REPOSITORY_QUERY,
             owner=owner,
             name=name,
+            boardOwner=board["owner"],
             number=board["number"],
             cursor=cursor,
         )
@@ -855,11 +855,10 @@ def ready_issue(reference, check):
     else:
         report(True, "required form sections")
 
-    field_values = item.get("fieldValues", {}).get("nodes", [])
     values = {
-        node["field"]["name"]: node.get("name", node.get("number"))
-        for node in field_values
-        if isinstance(node, dict) and isinstance(node.get("field"), dict)
+        "Priority": item["priority"].get("name") if isinstance(item.get("priority"), dict) else None,
+        "Size": item["size"].get("name") if isinstance(item.get("size"), dict) else None,
+        "Estimate": item["estimate"].get("number") if isinstance(item.get("estimate"), dict) else None,
     }
     for field in ("Priority", "Size", "Estimate"):
         report(values.get(field) not in (None, ""), field)

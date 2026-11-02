@@ -42,6 +42,7 @@ class IssueOpen(unittest.TestCase):
             PATH=f"{bin_dir}:{os.environ['PATH']}",
             FAKE_GH_CALLS=str(self.root / "calls.jsonl"),
             FAKE_GH_STATE=str(self.root / "state.json"),
+            FAKE_GH_WORKFLOW=str(self.workflow / "workflow.toml"),
             FAKE_GH_FIXTURES=str(FIXTURES),
             PYTHONDONTWRITEBYTECODE="1",
         )
@@ -100,6 +101,49 @@ class IssueOpen(unittest.TestCase):
 
     def board_lookups(self):
         return [call for call in self.calls() if call["args"][:2] == ["api", "graphql"]]
+
+    def map_tooling_to_other_owner(self):
+        path = self.workflow / "workflow.toml"
+        path.write_text(
+            path.read_text().replace(
+                '"Tooling" = { owner = "sh4i-yurei", number = 2 }',
+                '"Tooling" = { owner = "other-owner", number = 2 }',
+            )
+        )
+        answer = json.loads((FIXTURES / "repository-query.json").read_text())
+        for issue in answer["data"]["repository"]["issues"]["nodes"]:
+            for card in issue["projectItems"]["nodes"]:
+                card["project"]["owner"]["login"] = "other-owner"
+        self.state["repository_response"] = answer
+        self.save()
+
+    def test_other_board_owner_dry_run_uses_board_owner(self):
+        self.map_tooling_to_other_owner()
+        result = self.run_open(self.valid(), "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            "Would call: project item-add 2 --owner other-owner --url NEW_ISSUE_URL\n",
+            result.stdout,
+        )
+
+    def test_other_board_owner_write_calls_keep_order(self):
+        self.map_tooling_to_other_owner()
+        result = self.run_open(self.valid())
+        self.assertEqual(result.returncode, 0, result.stdout)
+        calls = [call["args"] for call in self.calls()]
+        adds = [call for call in calls if call[:2] == ["project", "item-add"]]
+        self.assertEqual([call[4] for call in adds], ["other-owner"] * 3)
+        self.assertEqual(
+            [call[:2] for call in calls if call[:1] == ["project"]],
+            [
+                ["project", "item-add"],
+                ["project", "item-edit"],
+                ["project", "item-add"],
+                ["project", "item-edit"],
+                ["project", "item-add"],
+                ["project", "item-edit"],
+            ],
+        )
 
     def test_dry_run_reads_repository_and_keeps_stray_order(self):
         result = self.run_open(self.valid(), "--dry-run")
