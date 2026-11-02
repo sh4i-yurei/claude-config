@@ -45,6 +45,7 @@ class IssueDebt(unittest.TestCase):
             PATH=f"{bin_dir}:{os.environ['PATH']}",
             FAKE_GH_CALLS=str(self.root / "calls.jsonl"),
             FAKE_GH_STATE=str(self.root / "state.json"),
+            FAKE_GH_WORKFLOW=str(self.workflow / "workflow.toml"),
             FAKE_GH_FIXTURES=str(OPEN_FIXTURES),
             FAKE_GH_DEBT_FIXTURES=str(FIXTURES),
             PYTHONDONTWRITEBYTECODE="1",
