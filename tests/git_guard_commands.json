@@ -44,7 +44,7 @@
   {
     "name": "Claude direct push",
     "cwd": "config",
-    "claude": "allow",
+    "claude": "deny",
     "codex": "deny",
     "command": "git push -q origin main"
   },

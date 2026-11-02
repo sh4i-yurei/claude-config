@@ -307,6 +307,67 @@ class VaultGuardTests(unittest.TestCase):
 class VaultGuardInProcessTests(VaultGuardTests):
     decision = staticmethod(in_process_decision)
 
+    def test_config_repository_push_policy(self):
+        refusal = "Pushing to main or an unknown branch is refused in this repository."
+        with tempfile.TemporaryDirectory() as root:
+            repositories = {}
+            for name in ("claude-config", "codex-config", "second-brain"):
+                path = Path(root) / name
+                subprocess.run(
+                    ["git", "init", "-q", "--initial-branch=main", str(path)],
+                    check=True,
+                )
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(path),
+                        "remote",
+                        "add",
+                        "origin",
+                        f"https://github.com/sh4i-yurei/{name}.git",
+                    ],
+                    check=True,
+                )
+                repositories[name] = str(path)
+
+            cases = (
+                ("claude-config", "claude", "git push -q origin main", refusal),
+                ("codex-config", "claude", "git push -q origin main", refusal),
+                ("claude-config", "claude", "git push", refusal),
+                ("second-brain", "claude", "git push -q origin main", None),
+                (
+                    "claude-config",
+                    "claude",
+                    "git push -u origin fix/guard-config-direct-push",
+                    None,
+                ),
+                (
+                    "second-brain",
+                    "strict",
+                    "git push -q origin main",
+                    "Name the branch: git push [-u] origin <branch> or <source>:<destination>.",
+                ),
+            )
+            for name, agent, command, expected in cases:
+                with self.subTest(repository=name, agent=agent, command=command):
+                    self.assertEqual(
+                        in_process_decision(command, agent, repositories[name]),
+                        expected,
+                    )
+
+            codex_config = repositories["codex-config"]
+            subprocess.run(
+                ["git", "-C", codex_config, "symbolic-ref", "HEAD", "refs/heads/fix/x"],
+                check=True,
+            )
+            self.assertEqual(
+                in_process_decision(
+                    "git push origin HEAD:main", "claude", codex_config
+                ),
+                refusal,
+            )
+
     def test_wrappers_reach_the_command(self):
         prefixes = (
             "distrobox enter --",
