@@ -18,4 +18,4 @@ jobs:
         tar -xzf "$archive" -C "$RUNNER_TEMP"
         echo "$RUNNER_TEMP/gh_2.97.0_linux_amd64/bin" >> "$GITHUB_PATH"
         "$RUNNER_TEMP/gh_2.97.0_linux_amd64/bin/gh" --version
-        python -m pip install PyYAML==6.0.3
+        python -m pip install PyYAML==6.0.3 pytest==9.1.1 pytest-cov==7.1.0

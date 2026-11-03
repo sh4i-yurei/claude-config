@@ -29,6 +29,8 @@ def test_python_workflow_caller():
     assert "a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112" in install
     assert '"$GITHUB_PATH"' in install
     assert "PyYAML==6.0.3" in install
+    assert "pytest==9.1.1" in install
+    assert "pytest-cov==7.1.0" in install
 
 
 def test_python_source_and_collection_settings():
