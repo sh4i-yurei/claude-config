@@ -49,3 +49,20 @@ def test_python_source_and_collection_settings():
         "vendor/**/*.py",
     ]
     assert config["tool"]["pytest"]["ini_options"]["testpaths"] == ["tests"]
+
+
+def test_mutation_survivors_use_shared_check_schema():
+    entries = yaml.safe_load((ROOT / ".mutation-survivors.yml").read_text())
+    assert isinstance(entries, list)
+    assert all(set(entry) == {"mutant", "reason"} for entry in entries)
+    assert len({entry["mutant"] for entry in entries}) == len(entries)
+    assert {
+        entry["mutant"]
+        for entry in entries
+        if entry["mutant"].startswith(
+            "skills.research.scripts.research.x_append_round__"
+        )
+    } == {
+        "skills.research.scripts.research.x_append_round__mutmut_4",
+        "skills.research.scripts.research.x_append_round__mutmut_64",
+    }
