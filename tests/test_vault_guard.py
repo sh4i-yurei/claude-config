@@ -2,6 +2,7 @@
 
 import json
 import importlib.util
+import os
 import signal
 import subprocess
 import sys
@@ -626,7 +627,7 @@ class VaultGuardInProcessTests(VaultGuardTests):
                 with self.subTest(command=command):
                     self.assertEqual(
                         in_process_decision(command, "claude", str(feature)),
-                        "git merge is refused on main, master, or an unknown branch.",
+                        "git merge and git pull are refused on main, master, or an unknown branch, except a fast-forward to the branch's own upstream with --ff-only.",
                     )
             self.assertIsNone(
                 in_process_decision("cd ../feature; git merge x", "claude", str(main))
@@ -647,6 +648,170 @@ class VaultGuardInProcessTests(VaultGuardTests):
             self.assertIsNone(
                 in_process_decision("bash <<< 'git merge x'", "claude", str(feature))
             )
+
+    def test_main_merge_and_pull_require_own_upstream_fast_forward(self):
+        refused = (
+            "git merge and git pull are refused on main, master, or an unknown "
+            "branch, except a fast-forward to the branch's own upstream with --ff-only."
+        )
+        environment = {key: os.environ[key] for key in ("PATH", "HOME")}
+        environment.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+        with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
+            paths = {
+                name: Path(root) / name.lower()
+                for name in (
+                    "TRACKED",
+                    "OTHER",
+                    "UNTRACKED",
+                    "FEATURE",
+                    "CLASH_BRANCH",
+                    "CLASH_TAG",
+                )
+            }
+
+            def git(path, *args):
+                subprocess.run(
+                    ["git", "-C", str(path), *args],
+                    check=True,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                )
+
+            for name, path in paths.items():
+                subprocess.run(
+                    ["git", "init", "-q", "--initial-branch=main", str(path)],
+                    check=True,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                )
+                git(
+                    path,
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://github.com/example/keepbreathing-infra.git",
+                )
+                git(
+                    path,
+                    "-c",
+                    "user.name=test",
+                    "-c",
+                    "user.email=test@example.invalid",
+                    "commit",
+                    "-q",
+                    "--allow-empty",
+                    "-m",
+                    "base",
+                )
+                if name != "UNTRACKED":
+                    upstream = "other" if name == "OTHER" else "main"
+                    git(path, "update-ref", "refs/remotes/origin/" + upstream, "HEAD")
+                    git(path, "branch", "-q", "--set-upstream-to=origin/" + upstream)
+                if name == "FEATURE":
+                    git(path, "switch", "-q", "-c", "feature/test")
+                if name == "CLASH_BRANCH":
+                    git(path, "branch", "-q", "origin/main", "HEAD")
+                if name == "CLASH_TAG":
+                    git(path, "tag", "origin/main", "HEAD")
+
+            allowed = [
+                ("TRACKED", "git merge --ff-only", "claude"),
+                ("TRACKED", "git merge --ff-only", "codex"),
+                ("TRACKED", "git merge -q --ff-only origin/main", "claude"),
+                ("TRACKED", "git merge --ff-only @{u}", "claude"),
+                ("TRACKED", "git merge --ff-only @{upstream}", "claude"),
+                ("TRACKED", "git pull --ff-only", "claude"),
+                ("TRACKED", "git pull --ff-only", "codex"),
+                ("TRACKED", "git pull -q --ff-only origin main", "claude"),
+                ("TRACKED", "git pull --quiet --ff-only", "claude"),
+                ("TRACKED", "git pull -v --ff-only", "claude"),
+                ("TRACKED", "git pull --verbose --ff-only", "claude"),
+                ("TRACKED", "git pull --stat --ff-only", "claude"),
+                ("TRACKED", "git pull -n --ff-only", "claude"),
+                ("TRACKED", "git pull --no-stat --ff-only", "claude"),
+                ("FEATURE", f"git -C {paths['TRACKED']} pull --ff-only", "claude"),
+                (
+                    "FEATURE",
+                    f"git --git-dir={paths['TRACKED'] / '.git'} "
+                    f"--work-tree={paths['TRACKED']} pull --ff-only",
+                    "claude",
+                ),
+                ("FEATURE", "git pull", "claude"),
+                ("FEATURE", "git pull --rebase origin main", "claude"),
+                ("FEATURE", "git merge x", "claude"),
+                ("FEATURE", "git -c core.pager=cat pull", "claude"),
+                ("FEATURE", "git -c core.pager=cat merge x", "claude"),
+            ]
+            for name, command, agent in allowed:
+                with self.subTest(name=name, command=command, agent=agent):
+                    self.assertIsNone(
+                        in_process_decision(command, agent, str(paths[name]))
+                    )
+
+            denied = [
+                ("TRACKED", "git merge origin/main"),
+                ("TRACKED", "git pull"),
+                ("TRACKED", "git pull --rebase --ff-only"),
+                ("TRACKED", "git pull --ff-only --autostash"),
+                ("TRACKED", "git pull --ff-only origin feature/x"),
+                ("TRACKED", "git pull --ff-only upstream main"),
+                ("TRACKED", "git merge --ff-only feature/x"),
+                ("TRACKED", "git merge --ff-only origin/main feature/x"),
+                ("TRACKED", "bash -lc 'git pull --ff-only origin feature/x'"),
+                (
+                    "FEATURE",
+                    f"git --git-dir={paths['TRACKED'] / '.git'} "
+                    f"--work-tree={paths['TRACKED']} pull",
+                ),
+                ("OTHER", "git pull --ff-only"),
+                ("OTHER", "git merge --ff-only origin/other"),
+                ("UNTRACKED", "git pull --ff-only"),
+                ("UNTRACKED", "git merge --ff-only"),
+                (
+                    "TRACKED",
+                    "git -c branch.main.merge=refs/heads/feature/x merge --ff-only",
+                ),
+                (
+                    "TRACKED",
+                    "git -c remote.origin.url=https://github.com/example/other.git pull --ff-only",
+                ),
+                (
+                    "TRACKED",
+                    "git --config-env branch.main.merge=GUARD_TEST_MERGE merge --ff-only",
+                ),
+                (
+                    "TRACKED",
+                    "git --config-env=branch.main.merge=GUARD_TEST_MERGE pull --ff-only",
+                ),
+                ("CLASH_BRANCH", "git merge --ff-only origin/main"),
+                ("CLASH_BRANCH", "git merge --ff-only"),
+                ("CLASH_TAG", "git merge --ff-only origin/main"),
+                ("CLASH_TAG", "git merge --ff-only"),
+            ]
+            for name, command in denied:
+                with self.subTest(name=name, command=command):
+                    self.assertEqual(
+                        in_process_decision(command, "claude", str(paths[name])),
+                        refused,
+                    )
+            self.assertEqual(
+                in_process_decision(
+                    "git --frobnicate pull --ff-only", "claude", str(paths["TRACKED"])
+                ),
+                "Unknown git global option for pull: --frobnicate",
+            )
+            for action in ("merge", "push"):
+                with self.subTest(action=action):
+                    self.assertEqual(
+                        in_process_decision(
+                            "git --frobnicate " + action,
+                            "claude",
+                            str(paths["TRACKED"]),
+                        ),
+                        "Unknown git global option for " + action + ": --frobnicate",
+                    )
 
     def test_existing_fixture_decisions(self):
         cases = json.loads(
