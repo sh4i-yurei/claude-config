@@ -337,12 +337,48 @@ def git_problem(args, cwd, agent):
     if not args:
         return None
     action = args[0]
-    if unknown and action in ("push", "merge"):
+    if unknown and action in ("push", "merge", "pull"):
         return "Unknown git global option for " + action + ": " + unknown
-    if action == "merge":
+    if action in ("merge", "pull"):
         branch = run_git(directory, *lookup, "branch", "--show-current")
         if branch in PROTECTED_BRANCHES or not branch:
-            return "git merge is refused on main, master, or an unknown branch."
+            refusal = (
+                "git merge and git pull are refused on main, master, or an unknown "
+                "branch, except a fast-forward to the branch's own upstream with --ff-only."
+            )
+            upstream = run_git(
+                directory,
+                *lookup,
+                "rev-parse",
+                "--abbrev-ref",
+                "--symbolic-full-name",
+                "@{upstream}",
+            )
+            if upstream != "origin/" + branch:
+                return refusal
+            allowed_options = {
+                "--ff-only",
+                "-q",
+                "--quiet",
+                "-v",
+                "--verbose",
+                "--stat",
+                "-n",
+                "--no-stat",
+            }
+            command_args = args[1:]
+            options = [arg for arg in command_args if arg.startswith("-")]
+            targets = [arg for arg in command_args if not arg.startswith("-")]
+            if "--ff-only" not in options or any(
+                option not in allowed_options for option in options
+            ):
+                return refusal
+            if action == "merge":
+                allowed_targets = ([], [upstream], ["@{u}"], ["@{upstream}"])
+            else:
+                allowed_targets = ([], ["origin", branch])
+            if targets not in allowed_targets:
+                return refusal
     elif action == "push":
         return push_problem(args[1:], directory, lookup, agent)
     return None
