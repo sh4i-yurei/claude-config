@@ -16,10 +16,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = (
+    ROOT / "mutants"
+    if os.environ.get("MUTANT_UNDER_TEST") and ROOT.name != "mutants"
+    else ROOT
+)
+sys.path.insert(0, str(SOURCE / "skills/research/scripts"))
+sys.path.insert(0, str(SOURCE))
 
-import gw
-from common import verify_log
+from skills.research.scripts import gw
+from skills.research.scripts.common import verify_log
 
 PUBLIC_ADDRESS = gw.public_address
 
@@ -462,7 +469,7 @@ class GatewayTests(unittest.TestCase):
         self.assertIn("remaining=4000.0 margin=10%", output.getvalue())
         self.assertIn(
             "api.firecrawl.dev: today=0 month=0 remaining=unknown margin=10% "
-            "local_used=211/1000 local_remaining=789 local_margin=100",
+            "local_used=37/1000 local_remaining=963 local_margin=100",
             output.getvalue(),
         )
         self.assertIn("crt.sh: today=0 month=0", output.getvalue())

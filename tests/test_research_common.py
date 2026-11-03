@@ -2,15 +2,22 @@
 
 import json
 import multiprocessing
+import os
 import sys
 import tempfile
 import time
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = (
+    ROOT / "mutants"
+    if os.environ.get("MUTANT_UNDER_TEST") and ROOT.name != "mutants"
+    else ROOT
+)
+sys.path.insert(0, str(SOURCE))
 
-from common import (
+from skills.research.scripts.common import (
     append_log,
     gateway_lock,
     load_config,

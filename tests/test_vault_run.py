@@ -133,7 +133,7 @@ print(json.dumps(items[sys.argv[3]]))
         link = self.root / "vault-run"
         link.symlink_to(ROOT / "tools" / "vault_run.py")
         return subprocess.run(
-            ["/usr/bin/bash", "-c", '"$0" "$@"', str(link), *args],
+            [sys.executable, str(link), *args],
             cwd=ROOT,
             env=self.environment,
             capture_output=True,
@@ -159,7 +159,15 @@ print(json.dumps(items[sys.argv[3]]))
             "-c",
             "import os,sys; sys.exit(0 if os.environ.get('GH_TOKEN')=='dummy-gh' else 3)",
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        if Path("/run/.containerenv").is_file():
+            self.assertEqual(result.returncode, 0, result.stderr)
+        else:
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(
+                result.stderr,
+                "vault-run: bw runs only inside the dev container (distrobox enter dev)\n",
+            )
+            self.assertEqual(self.calls(), [])
         self.assertEqual(result.stdout, "")
 
     def test_one_environment_field(self):

@@ -1513,7 +1513,9 @@ def append_round(
     next_heading = text.index("\n## ", start + len(heading))
     block = text[start:next_heading].rstrip()
     cost_cell = f"{cost:.6f}" if cost is not None else "unreported"
-    stop_cell = " ".join(stop.split())[:240].replace("|", "&#124;")
+    repository_prefix = str(Path(__file__).resolve().parents[3]) + "/"
+    stop_cell = " ".join(stop.split()).replace(repository_prefix, "")[:240]
+    stop_cell = stop_cell.replace("|", "&#124;")
     row = (
         f"| {round_number} | {calls} | {new_archives} | {claims_moved} | "
         f"{cost_cell} | {stop_cell} |"

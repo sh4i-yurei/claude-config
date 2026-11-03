@@ -1,111 +1,164 @@
 # G3b Ready mutants left by the completed scoped mutmut run.
 # The command parser's remaining mutants alter unchanged G3a Open behavior.
-survivors:
-  tools.workflow.issue.x_review_result__mutmut_5: >-
+- mutant: tools.workflow.issue.x_review_result__mutmut_5
+  reason: >-
     False and None are both false in the only condition that reads in_response
     before the Response heading. No block selection or command output changes.
-  tools.workflow.issue.x_review_result__mutmut_20: >-
+- mutant: tools.workflow.issue.x_review_result__mutmut_20
+  reason: >-
     False and None are both false when the parser tests whether it is inside a
     fenced block. The state is set to True before any block content is read.
-  tools.workflow.issue.x_review_result__mutmut_22: >-
+- mutant: tools.workflow.issue.x_review_result__mutmut_22
+  reason: >-
     The content list is reset to an empty list at the start of every json block.
     Its initial value is never read through the command.
-  tools.workflow.issue.x_review_result__mutmut_34: >-
+- mutant: tools.workflow.issue.x_review_result__mutmut_34
+  reason: >-
     False and None are both false after a closing fence. Both states lead to the
     same next block selection and command result.
-  tools.workflow.issue.x_debt_issue__mutmut_82: >-
+- mutant: tools.workflow.issue.x_debt_issue__mutmut_82
+  reason: >-
     Once duplicate round files are refused, the final round's file is always
     the given file. Re-reading it returns the same review result as the first
     read when the handoff is stable during the command. Testing the difference
     would require changing the input file between two internal reads.
-  tools.workflow.issue.x_debt_issue__mutmut_156: >-
+- mutant: tools.workflow.issue.x_debt_issue__mutmut_156
+  reason: >-
     A missing or empty sub-issue body becomes either an empty string or XXXX.
     Neither contains the given review file name, so the refusal and writes agree.
-  tools.workflow.issue.x_debt_issue__mutmut_168: >-
+- mutant: tools.workflow.issue.x_debt_issue__mutmut_168
+  reason: >-
     A missing or empty sub-issue body becomes either an empty string or XXXX.
     Neither contains an earlier round's file name, so the refusal and writes agree.
-  hooks.git-guard.x_command__mutmut_115: >-
+- mutant: hooks.git-guard.x_command__mutmut_115
+  reason: >-
     bashlex redirect nodes always expose the heredoc attribute; removing getattr's fallback leaves every parsed command decision unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_11: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_11
+  reason: >-
     False and None are both false in the parser's only checks of this state, so command paths, flags, and decisions are unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_47: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_47
+  reason: >-
     Once a positional closes a command group, later tokens cannot extend its path or set flags; skipping another token or stopping produces the same decision.
-  hooks.git-guard.x_parse_gh__mutmut_48: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_48
+  reason: >-
     Once a positional closes a command group, later tokens cannot extend its path or set flags; skipping another token or stopping produces the same decision.
-  hooks.git-guard.x_parse_gh__mutmut_53: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_53
+  reason: >-
     This command path has no flag table; later tokens cannot set flags or affect any guard decision.
-  hooks.git-guard.x_parse_gh__mutmut_54: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_54
+  reason: >-
     This command path has no flag table; later tokens cannot set flags or affect any guard decision.
-  hooks.git-guard.x_parse_gh__mutmut_80: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_80
+  reason: >-
     The guard reads valued flags from _ordered, not their per-flag value lists; changing the unused list leaves decisions unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_81: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_81
+  reason: >-
     The guard reads valued flags from _ordered, not their per-flag value lists; changing the unused list leaves decisions unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_129: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_129
+  reason: >-
     The guard reads valued flags from _ordered, not their per-flag value lists; changing the unused list leaves decisions unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_130: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_130
+  reason: >-
     The guard reads valued flags from _ordered, not their per-flag value lists; changing the unused list leaves decisions unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_92: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_92
+  reason: >-
     The guard checks presence of this boolean flag; its stored attached value is never used by a decision.
-  hooks.git-guard.x_parse_gh__mutmut_97: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_97
+  reason: >-
     The guard checks presence of this boolean flag; its stored attached value is never used by a decision.
-  hooks.git-guard.x_parse_gh__mutmut_98: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_98
+  reason: >-
     The guard checks presence of this boolean flag; its stored attached value is never used by a decision.
-  hooks.git-guard.x_parse_gh__mutmut_100: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_100
+  reason: >-
     The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_104: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_104
+  reason: >-
     The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_105: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_105
+  reason: >-
     The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_106: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_106
+  reason: >-
     The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_107: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_107
+  reason: >-
     The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_154: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_154
+  reason: >-
     The guard checks presence of this shorthand boolean flag; its stored attached value is never used by a decision.
-  hooks.git-guard.x_parse_gh__mutmut_160: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_160
+  reason: >-
     The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_164: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_164
+  reason: >-
     The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_165: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_165
+  reason: >-
     The guard reads _ordered entries only for value-taking flags; changing a boolean flag's entry leaves every decision unchanged.
-  hooks.git-guard.x_parse_gh__mutmut_177: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_177
+  reason: >-
     When path_open is false and children exist, an earlier branch skips child lookup; without children, child lookup cannot find a command. The changed condition cannot change a path.
-  hooks.git-guard.x_parse_gh__mutmut_200: >-
+- mutant: hooks.git-guard.x_parse_gh__mutmut_200
+  reason: >-
     False and None both close the command path, so later words are positional and every decision stays the same.
-  hooks.git-guard.x_session_path__mutmut_7: >-
+- mutant: hooks.git-guard.x_session_path__mutmut_7
+  reason: >-
     Every split variant selects the final path component after the last slash, so the bw-session decision is identical for every input.
-  hooks.git-guard.x_session_path__mutmut_10: >-
+- mutant: hooks.git-guard.x_session_path__mutmut_10
+  reason: >-
     Every split variant selects the final path component after the last slash, so the bw-session decision is identical for every input.
-  hooks.git-guard.x_session_path__mutmut_11: >-
+- mutant: hooks.git-guard.x_session_path__mutmut_11
+  reason: >-
     Every split variant selects the final path component after the last slash, so the bw-session decision is identical for every input.
-  hooks.git-guard.x_unwrap__mutmut_79: >-
+- mutant: hooks.git-guard.x_unwrap__mutmut_79
+  reason: >-
     The changed length threshold affects only the two-word distrobox enter form, which contains no inner command and is allowed in either branch.
-  hooks.git-guard.x_unwrap__mutmut_80: >-
+- mutant: hooks.git-guard.x_unwrap__mutmut_80
+  reason: >-
     The changed length threshold affects only the two-word distrobox enter form, which contains no inner command and is allowed in either branch.
-  hooks.git-guard.x_unwrap__mutmut_108: >-
+- mutant: hooks.git-guard.x_unwrap__mutmut_108
+  reason: >-
     At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
-  hooks.git-guard.x_unwrap__mutmut_111: >-
+- mutant: hooks.git-guard.x_unwrap__mutmut_111
+  reason: >-
     At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
-  hooks.git-guard.x_unwrap__mutmut_235: >-
+- mutant: hooks.git-guard.x_unwrap__mutmut_235
+  reason: >-
     At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
-  hooks.git-guard.x_unwrap__mutmut_238: >-
+- mutant: hooks.git-guard.x_unwrap__mutmut_238
+  reason: >-
     At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
-  tools.workflow.issue.x_ready_issue__mutmut_219: >-
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_219
+  reason: >-
     form_files refuses a repository with no forms before ready_issue reaches
     this expression. The changed condition only changes the empty-forms path,
     which cannot be reached through the command without replacing that helper.
-  tools.workflow.issue.x_ready_issue__mutmut_227: >-
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_227
+  reason: >-
     A missing or null issue body becomes either an empty string or XXXX. Both
     contain no GitHub form headings, so they produce the same section report.
-  tools.workflow.issue.x_ready_issue__mutmut_237: >-
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_237
+  reason: >-
     report treats False and None identically: each prints unmet and sets the
     unmet flag. No exit code, message or board write changes.
-  tools.workflow.issue.x_ready_issue__mutmut_277: >-
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_277
+  reason: >-
     A missing parent represented by None or an empty string is false in the
     milestone-or-parent check. Both produce the same report and exit code.
-  tools.workflow.issue.x_ready_issue__mutmut_305: >-
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_305
+  reason: >-
     For an open blocker, report treats False and None identically: each prints
     unmet, sets the unmet flag and prevents the Status write.
-  tools.workflow.issue.x_ready_issue__mutmut_337: >-
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_337
+  reason: >-
     A missing or null body becomes an empty string or XXXX. Neither has a
     Design: line, so both produce the same Architecture report and exit code.
+- mutant: skills.research.scripts.research.x_append_round__mutmut_4
+  reason: >-
+    Python's encoding lookup treats UTF-8 and utf-8 identically for reading.
+    The source text and every written Rounds row are the same.
+- mutant: skills.research.scripts.research.x_append_round__mutmut_64
+  reason: >-
+    Python's encoding lookup treats UTF-8 and utf-8 identically for writing.
+    The output file bytes are the same for every input.

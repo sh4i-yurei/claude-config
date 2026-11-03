@@ -10,9 +10,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = (
+    ROOT / "mutants"
+    if os.environ.get("MUTANT_UNDER_TEST") and ROOT.name != "mutants"
+    else ROOT
+)
+sys.path.insert(0, str(SOURCE / "skills/research/scripts"))
+sys.path.insert(0, str(SOURCE))
 
-import lookup
+from skills.research.scripts import lookup
 
 
 class LookupTests(unittest.TestCase):

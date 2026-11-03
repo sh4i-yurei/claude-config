@@ -3,13 +3,23 @@
 import importlib.util
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-HOOK = Path(__file__).resolve().parents[4] / "hooks" / "research-log.py"
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = (
+    ROOT / "mutants"
+    if os.environ.get("MUTANT_UNDER_TEST") and ROOT.name != "mutants"
+    else ROOT
+)
+sys.path.insert(0, str(SOURCE))
+HOOK = SOURCE / "hooks" / "research-log.py"
+from hooks.research_log_shared import registered_domain
+
 SPEC = importlib.util.spec_from_file_location("research_log_hook", HOOK)
 research_log = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader
@@ -17,6 +27,16 @@ SPEC.loader.exec_module(research_log)
 
 
 class ResearchLogHookTests(unittest.TestCase):
+    def test_registered_domain_groups_hosts(self):
+        for host, expected in (
+            ("docs.github.com", "github.com"),
+            ("a.b.co.uk", "b.co.uk"),
+            ("EXAMPLE.COM.", "example.com"),
+            ("", ""),
+        ):
+            with self.subTest(host=host):
+                self.assertEqual(registered_domain(host), expected)
+
     def test_webfetch_appends_to_shared_log(self):
         with tempfile.TemporaryDirectory() as directory:
             state = Path(directory) / "state.json"
