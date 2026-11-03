@@ -48,6 +48,7 @@ def test_python_source_and_collection_settings():
         "tests/**/*.py",
         "vendor/**/*.py",
     ]
+    assert ".mutation-survivors.yml" in mutation["also_copy"]
     assert config["tool"]["pytest"]["ini_options"]["testpaths"] == ["tests"]
 
 
