@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import locale
 import os
 import subprocess
 import sys
@@ -11,10 +12,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+SOURCE = (
+    ROOT / "mutants"
+    if os.environ.get("MUTANT_UNDER_TEST") and ROOT.name != "mutants"
+    else ROOT
+)
+sys.path.insert(0, str(SOURCE / "skills/research/scripts"))
+sys.path.insert(0, str(SOURCE))
 
-import lookup
-import research
+from skills.research.scripts import lookup, research
 
 
 class ResearchLogTests(unittest.TestCase):
@@ -947,7 +954,7 @@ I found the test result.
 
     def test_stream_adapter_uses_observed_format_and_gather_boundaries(self):
         fixture = (
-            Path(__file__).parent / "fixtures" / "claude-gather-stream.jsonl"
+            Path(__file__).parent / "fixtures/research" / "claude-gather-stream.jsonl"
         ).read_text()
         events = research.stream_events(fixture)
         topic = Path("/tmp/test-root/70_Research/test-b13")
@@ -1139,7 +1146,7 @@ I found the test result.
 
     def test_run_agent_builds_stream_command_and_sets_research_run(self):
         fixture = (
-            Path(__file__).parent / "fixtures" / "claude-gather-stream.jsonl"
+            Path(__file__).parent / "fixtures/research" / "claude-gather-stream.jsonl"
         ).read_text()
         completed = subprocess.CompletedProcess([], 0, stdout=fixture, stderr="")
         config = {
@@ -1371,7 +1378,9 @@ I found the test result.
         path = self.make_runnable_topic(self.root, "test-b20")
         before = path.read_text()
         fixture = (
-            Path(__file__).parent / "fixtures" / "claude-gather-outside-grep.jsonl"
+            Path(__file__).parent
+            / "fixtures/research"
+            / "claude-gather-outside-grep.jsonl"
         ).read_text()
         events = research.stream_events(fixture)
         log = self.root / "70_Research" / "_log" / "test.jsonl"
@@ -1479,11 +1488,50 @@ I found the test result.
         self.assertEqual(long_reason, "x" * 239 + "&#124;")
         self.assertNotIn("tail", long_reason)
 
+    def test_round_uses_utf8_with_an_ascii_locale(self):
+        path = self.make_runnable_topic(self.root, "test-b20-utf8")
+        path.write_text("café\n" + path.read_text(), encoding="utf-8")
+        previous_locale = locale.setlocale(locale.LC_CTYPE)
+        try:
+            locale.setlocale(locale.LC_CTYPE, "C")
+            research.append_round(
+                path,
+                round_number=1,
+                calls=0,
+                new_archives=0,
+                claims_moved=0,
+                cost=0.0,
+                stop="café",
+            )
+        finally:
+            locale.setlocale(locale.LC_CTYPE, previous_locale)
+        self.assertIn("| 1 | 0 | 0 | 0 | 0.000000 | café |", path.read_text())
+
+    def test_round_appends_to_first_rounds_section(self):
+        path = self.make_runnable_topic(self.root, "test-b20-two-rounds")
+        original = path.read_text()
+        self.assertEqual(original.count("## Rounds"), 1)
+        path.write_text(original.replace("## Rounds", "## Rounds\n## Rounds", 1))
+        research.append_round(
+            path,
+            round_number=1,
+            calls=0,
+            new_archives=0,
+            claims_moved=0,
+            cost=0.0,
+            stop="first",
+        )
+        first, second = path.read_text().split("## Rounds", 2)[1:]
+        self.assertIn("| 1 | 0 | 0 | 0 | 0.000000 | first |", first)
+        self.assertNotIn("| 1 | 0 | 0 | 0 | 0.000000 | first |", second)
+
     def test_recorded_redirected_lookup_gets_terminal_round_row(self):
         path = self.make_runnable_topic(self.root, "test-b21")
         before = path.read_text()
         fixture = (
-            Path(__file__).parent / "fixtures" / "claude-gather-redirected-lookup.jsonl"
+            Path(__file__).parent
+            / "fixtures/research"
+            / "claude-gather-redirected-lookup.jsonl"
         ).read_text()
         events = research.stream_events(fixture)
         recorded_script = (
@@ -1554,7 +1602,13 @@ I found the test result.
         self.assertIn("Bash is not the lookup command:", rounds)
         row = next(line for line in rounds.splitlines() if line.startswith("| 1 |"))
         self.assertEqual(path.read_text().replace(row + "\n", "", 1), before)
-        self.assertIn("> /dev/null; echo done", row)
+        self.assertEqual(
+            row,
+            "| 1 | 1 | 1 | 0 | 0.675017 | tool violation: Bash is not the lookup "
+            "command: python3 skills/research/scripts/lookup.py page "
+            "https://forum.restic.net/t/backblaze-object-lock-ransomware-protection/6651 "
+            "> /dev/null; echo done |",
+        )
 
     def test_malformed_claim_cell_cannot_count_as_supported(self):
         text = """## Required claims

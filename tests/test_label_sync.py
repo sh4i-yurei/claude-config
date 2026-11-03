@@ -10,7 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests/fixtures/label_sync"
-WORKFLOW = ROOT / "tools/workflow"
+WORKFLOW = (ROOT.parent if ROOT.name == "mutants" else ROOT) / "tools/workflow"
 OWNER = "sh4i-yurei"
 INFRA = f"{OWNER}/keepbreathing-infra"
 CLAUDE = f"{OWNER}/claude-config"

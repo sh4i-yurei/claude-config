@@ -23,10 +23,10 @@ class VaultEnvTests(unittest.TestCase):
         fake = self.path / "bw"
         fake.write_text('#!/bin/sh\nprintf ran > "$BW_MARKER"\n')
         fake.chmod(0o755)
-        self.environment = os.environ.copy()
-        self.environment.update(
-            PATH=f"{self.path}:/usr/bin", BW_MARKER=str(self.marker)
-        )
+        self.environment = {
+            "PATH": f"{self.path}:/usr/bin",
+            "BW_MARKER": str(self.marker),
+        }
 
     def test_arguments_never_read_vault(self):
         for argument in ("--help", "-h", "GH_TOKEN"):
@@ -70,15 +70,24 @@ class VaultEnvTests(unittest.TestCase):
                 os.close(slave)
 
     def test_outside_container_preserves_error(self):
-        result = subprocess.run(
-            [
+        command = [str(SCRIPT)]
+        environment = dict(self.environment)
+        if Path("/run/.containerenv").exists():
+            command = [
                 "flatpak-spawn",
                 "--host",
                 "--clear-env",
                 f"--env=PATH={self.path}:/usr/bin",
                 f"--env=BW_MARKER={self.marker}",
                 str(SCRIPT),
-            ],
+            ]
+            if "DBUS_SESSION_BUS_ADDRESS" in os.environ:
+                environment["DBUS_SESSION_BUS_ADDRESS"] = os.environ[
+                    "DBUS_SESSION_BUS_ADDRESS"
+                ]
+        result = subprocess.run(
+            command,
+            env=environment,
             capture_output=True,
             text=True,
         )

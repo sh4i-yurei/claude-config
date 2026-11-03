@@ -1,5 +1,6 @@
 import importlib.util, json, os, re, subprocess, sys, tempfile, time
 from pathlib import Path
+import pytest
 
 HOOK = os.path.join(os.path.dirname(__file__), "..", "hooks", "git-guard.py")
 
@@ -75,7 +76,8 @@ TEMP = tempfile.TemporaryDirectory(
 )
 INFRA, CC = f"{TEMP.name}/feature", str(Path(__file__).resolve().parents[1])
 MAIN = f"{TEMP.name}/main"
-for directory, branch in ((INFRA, "feature/test"), (MAIN, "main")):
+VAULT = f"{TEMP.name}/vault"
+for directory, branch in ((INFRA, "feature/test"), (MAIN, "main"), (VAULT, "main")):
     subprocess.run(
         ["git", "init", "-q", "--initial-branch=main", directory], check=True
     )
@@ -95,6 +97,18 @@ for directory, branch in ((INFRA, "feature/test"), (MAIN, "main")):
         ["git", "-C", directory, "symbolic-ref", "HEAD", "refs/heads/" + branch],
         check=True,
     )
+subprocess.run(
+    [
+        "git",
+        "-C",
+        VAULT,
+        "remote",
+        "set-url",
+        "origin",
+        "https://github.com/sh4i-yurei/second-brain.git",
+    ],
+    check=True,
+)
 WRAP = "distrobox enter dev -- bash -lc 'cd " + INFRA + " && {}'"
 cases = [
     # (expected, cwd, command, tool_input shape)
@@ -130,7 +144,7 @@ cases = [
     ("allow", INFRA, "git push -u origin chore/ci-checks", "claude"),
     ("allow", INFRA, "git push origin HEAD:refs/heads/chore/x", "claude"),
     ("deny", CC, "git push origin main", "claude"),
-    ("allow", f"{D}/Second_Brain", "git push", "claude"),
+    ("allow", VAULT, "git push", "claude"),
     ("allow", INFRA, "git status && git log --oneline -3", "claude"),
     ("allow", INFRA, "ls -la", "claude"),
     # Text that mentions the commands without running them must pass.
@@ -285,8 +299,9 @@ for item in json.loads(Path(__file__).with_name("git_guard_commands.json").read_
         if item.get("reason") and item[agent] == "deny":
             issue_tool_reason_cases.append((cwd, command, agent, item["reason"]))
 
-fails = 0
-for want, cwd, cmd, who in cases:
+
+@pytest.mark.parametrize(("want", "cwd", "cmd", "who"), cases)
+def test_guard_decision(want, cwd, cmd, who):
     event = {
         "hook_event_name": "PreToolUse",
         "cwd": cwd,
@@ -307,12 +322,9 @@ for want, cwd, cmd, who in cases:
         if out and json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
         else "allow"
     )
-    ok = got == want
-    fails += not ok
-    shown = cmd if isinstance(cmd, str) else " ".join(cmd)
-    print(
-        f"{'ok  ' if ok else 'FAIL'} {want:5} {os.path.basename(cwd):20} {shown[:90]}"
-    )
+    assert got == want, (cwd, cmd, who, run.stdout)
+
+
 for cwd, cmd, who, reason in issue_tool_reason_cases:
     event = {"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": cmd}}
     run = subprocess.run(
@@ -425,11 +437,19 @@ with tempfile.TemporaryDirectory(
     assert decision["permissionDecision"] == "deny", decision
     assert "error" in decision["permissionDecisionReason"].lower(), decision
 
+PERFORMANCE_HOOK = (
+    str(Path(HOOK).resolve().parents[1].parent / "hooks/git-guard.py")
+    if Path(__file__).resolve().parents[1].name == "mutants"
+    else HOOK
+)
 command = "echo '" + "x" * 51200 + "'"
 event = {"tool_name": "Bash", "cwd": INFRA, "tool_input": {"command": command}}
 start = time.monotonic()
 run = subprocess.run(
-    ["/usr/bin/python3", HOOK], input=json.dumps(event), capture_output=True, text=True
+    ["/usr/bin/python3", PERFORMANCE_HOOK],
+    input=json.dumps(event),
+    capture_output=True,
+    text=True,
 )
 assert run.returncode == 0 and run.stdout == "" and not run.stderr, run
 assert time.monotonic() - start < 2, "50 KB command exceeded two seconds"
@@ -438,7 +458,10 @@ command = "git merge x; " * 3900
 event = {"tool_name": "Bash", "cwd": INFRA, "tool_input": {"command": command}}
 start = time.monotonic()
 run = subprocess.run(
-    ["/usr/bin/python3", HOOK], input=json.dumps(event), capture_output=True, text=True
+    ["/usr/bin/python3", PERFORMANCE_HOOK],
+    input=json.dumps(event),
+    capture_output=True,
+    text=True,
 )
 assert run.returncode == 0 and run.stdout == "" and not run.stderr, run
 assert time.monotonic() - start < 2, "git-heavy 50 KB command exceeded two seconds"
@@ -458,9 +481,6 @@ for cmd, phrase in (
     decision = json.loads(run.stdout)["hookSpecificOutput"]
     assert decision["permissionDecision"] == "deny", decision
     assert phrase in decision["permissionDecisionReason"], decision
-
-print(f"\n{len(cases) - fails}/{len(cases)} passed")
-assert fails == 0, f"{fails} behavior assertions failed"
 
 spec = importlib.util.spec_from_file_location("git_guard_under_test", HOOK)
 guard = importlib.util.module_from_spec(spec)

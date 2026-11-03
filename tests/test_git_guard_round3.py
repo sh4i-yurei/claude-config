@@ -10,6 +10,7 @@ import time
 from io import StringIO
 from pathlib import Path
 from unittest import mock
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -172,5 +173,15 @@ VENDOR_SHA256 = {
 }
 
 
-if __name__ == "__main__":
+def test_round3_regressions(tmp_path, monkeypatch):
+    feature = tmp_path / "feature"
+    subprocess.run(
+        ["git", "init", "-q", "--initial-branch=feature/test", str(feature)],
+        check=True,
+    )
+    monkeypatch.setattr(sys.modules[__name__], "FEATURE", str(feature))
     main()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

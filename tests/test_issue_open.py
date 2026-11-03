@@ -935,7 +935,10 @@ class IssueOpen(unittest.TestCase):
         self.assertFalse(any("--method" in call["args"] for call in self.calls()))
 
     def test_missing_pyyaml_names_dependency(self):
-        self.env["PYTHONNOUSERSITE"] = "1"
+        shadow = self.root / "missing-yaml"
+        shadow.mkdir()
+        (shadow / "yaml.py").write_text("raise ImportError('PyYAML unavailable')\n")
+        self.env["PYTHONPATH"] = str(shadow)
         path = self.root / "issue.toml"
         path.write_text(self.valid())
         source_root = ROOT.parent if ROOT.name == "mutants" else ROOT
@@ -952,7 +955,11 @@ class IssueOpen(unittest.TestCase):
             capture_output=True,
         )
         self.assertEqual(result.returncode, 2)
-        self.assertIn("PyYAML is required", result.stdout)
+        self.assertEqual(
+            result.stdout,
+            "PyYAML is required; install it in dev with "
+            "/usr/bin/python3 -m pip install --user PyYAML\n",
+        )
         self.assertFalse(any("--method" in call["args"] for call in self.calls()))
 
     def test_whitespace_required_field_is_empty(self):

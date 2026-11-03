@@ -109,3 +109,9 @@ survivors:
   tools.workflow.issue.x_ready_issue__mutmut_337: >-
     A missing or null body becomes an empty string or XXXX. Neither has a
     Design: line, so both produce the same Architecture report and exit code.
+  skills.research.scripts.research.x_append_round__mutmut_4: >-
+    Python's encoding lookup treats UTF-8 and utf-8 identically for reading.
+    The source text and every written Rounds row are the same.
+  skills.research.scripts.research.x_append_round__mutmut_64: >-
+    Python's encoding lookup treats UTF-8 and utf-8 identically for writing.
+    The output file bytes are the same for every input.

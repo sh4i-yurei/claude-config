@@ -14,8 +14,8 @@ import pytest
     [
         ("tests/test_sample.py", "# Test-only edit.\n", True),
         ("tests/fixtures/issue_open/fake_gh.py", "VALUE = 2\n", True),
-        ("tools/workflow/config.py", "VALUE = 2\n", True),
-        ("hooks/bashlex_compat.py", "VALUE = 2\n", True),
+        ("tools/workflow/config.py", "def config_value():\n    return 40 + 2\n", False),
+        ("hooks/bashlex_compat.py", "def compat_value():\n    return 40 + 2\n", False),
         ("vendor/bashlex/parser.py", "VALUE = 2\n", True),
         (None, None, False),
         ("sample/__init__.py", "def answer():\n    return 40 + 2\n", False),
@@ -32,14 +32,22 @@ def test_mutmut_cache_invalidation(tmp_path, changed_file, replacement, reruns):
     files = {
         "sample/__init__.py": "def answer():\n    return 42\n",
         "tests/__init__.py": "",
-        "tests/test_sample.py": "from sample import answer\n\ndef test_answer():\n    assert answer() == 42\n",
+        "tests/test_sample.py": (
+            "from sample import answer\n"
+            "from tools.workflow.config import config_value\n"
+            "from hooks.bashlex_compat import compat_value\n\n"
+            "def test_answer():\n"
+            "    assert answer() == 42\n"
+            "    assert config_value() == 42\n"
+            "    assert compat_value() == 42\n"
+        ),
         "tests/fixtures/issue_open/fake_gh.py": "VALUE = 1\n",
-        "tools/workflow/config.py": "VALUE = 1\n",
-        "hooks/bashlex_compat.py": "VALUE = 1\n",
+        "tools/workflow/config.py": "def config_value():\n    return 42\n",
+        "hooks/bashlex_compat.py": "def compat_value():\n    return 42\n",
         "vendor/bashlex/parser.py": "VALUE = 1\n",
         ".gitignore": "mutants/\n__pycache__/\n",
         "pyproject.toml": (
-            '[tool.mutmut]\nsource_paths = ["sample"]\n'
+            '[tool.mutmut]\nsource_paths = ["sample", "tools", "hooks"]\n'
             'pytest_add_cli_args_test_selection = ["tests/test_sample.py"]\n'
             f"cache_invalidation_files = {watched!r}\n"
             f'on_dependency_change = "{policy}"\n'
