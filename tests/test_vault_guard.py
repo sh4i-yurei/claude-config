@@ -659,7 +659,14 @@ class VaultGuardInProcessTests(VaultGuardTests):
         with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
             paths = {
                 name: Path(root) / name.lower()
-                for name in ("TRACKED", "OTHER", "UNTRACKED", "FEATURE")
+                for name in (
+                    "TRACKED",
+                    "OTHER",
+                    "UNTRACKED",
+                    "FEATURE",
+                    "CLASH_BRANCH",
+                    "CLASH_TAG",
+                )
             }
 
             def git(path, *args):
@@ -704,6 +711,10 @@ class VaultGuardInProcessTests(VaultGuardTests):
                     git(path, "branch", "-q", "--set-upstream-to=origin/" + upstream)
                 if name == "FEATURE":
                     git(path, "switch", "-q", "-c", "feature/test")
+                if name == "CLASH_BRANCH":
+                    git(path, "branch", "-q", "origin/main", "HEAD")
+                if name == "CLASH_TAG":
+                    git(path, "tag", "origin/main", "HEAD")
 
             allowed = [
                 ("TRACKED", "git merge --ff-only", "claude"),
@@ -730,6 +741,8 @@ class VaultGuardInProcessTests(VaultGuardTests):
                 ("FEATURE", "git pull", "claude"),
                 ("FEATURE", "git pull --rebase origin main", "claude"),
                 ("FEATURE", "git merge x", "claude"),
+                ("FEATURE", "git -c core.pager=cat pull", "claude"),
+                ("FEATURE", "git -c core.pager=cat merge x", "claude"),
             ]
             for name, command, agent in allowed:
                 with self.subTest(name=name, command=command, agent=agent):
@@ -756,6 +769,26 @@ class VaultGuardInProcessTests(VaultGuardTests):
                 ("OTHER", "git merge --ff-only origin/other"),
                 ("UNTRACKED", "git pull --ff-only"),
                 ("UNTRACKED", "git merge --ff-only"),
+                (
+                    "TRACKED",
+                    "git -c branch.main.merge=refs/heads/feature/x merge --ff-only",
+                ),
+                (
+                    "TRACKED",
+                    "git -c remote.origin.url=https://github.com/example/other.git pull --ff-only",
+                ),
+                (
+                    "TRACKED",
+                    "git --config-env branch.main.merge=GUARD_TEST_MERGE merge --ff-only",
+                ),
+                (
+                    "TRACKED",
+                    "git --config-env=branch.main.merge=GUARD_TEST_MERGE pull --ff-only",
+                ),
+                ("CLASH_BRANCH", "git merge --ff-only origin/main"),
+                ("CLASH_BRANCH", "git merge --ff-only"),
+                ("CLASH_TAG", "git merge --ff-only origin/main"),
+                ("CLASH_TAG", "git merge --ff-only"),
             ]
             for name, command in denied:
                 with self.subTest(name=name, command=command):

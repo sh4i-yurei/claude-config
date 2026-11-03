@@ -203,6 +203,7 @@ def directory_for(args, cwd):
     git_dir = None
     work_tree = None
     unknown = None
+    config_override = False
     index = 0
     while index < len(args) and args[index].startswith("-"):
         flag = args[index]
@@ -223,6 +224,8 @@ def directory_for(args, cwd):
                 git_dir = args[index + 1]
             elif flag == "--work-tree":
                 work_tree = args[index + 1]
+            elif flag in ("-c", "--config-env"):
+                config_override = True
             index += 2
         elif flag.startswith("-C") and len(flag) > 2:
             directory = os.path.abspath(
@@ -256,6 +259,8 @@ def directory_for(args, cwd):
         ):
             index += 1
         elif flag.startswith(("-c", "--namespace=", "--config-env=", "--exec-path=")):
+            if flag.startswith(("-c", "--config-env=")):
+                config_override = True
             index += 1
         else:
             unknown = flag
@@ -265,7 +270,7 @@ def directory_for(args, cwd):
         lookup.append("--git-dir=" + git_dir)
     if work_tree is not None:
         lookup.append("--work-tree=" + work_tree)
-    return directory, args[index:], lookup, unknown
+    return directory, args[index:], lookup, unknown, config_override
 
 
 def repository_name(directory, lookup):
@@ -333,7 +338,7 @@ def push_problem(args, directory, lookup, agent):
 
 
 def git_problem(args, cwd, agent):
-    directory, args, lookup, unknown = directory_for(args, cwd)
+    directory, args, lookup, unknown, config_override = directory_for(args, cwd)
     if not args:
         return None
     action = args[0]
@@ -346,6 +351,8 @@ def git_problem(args, cwd, agent):
                 "git merge and git pull are refused on main, master, or an unknown "
                 "branch, except a fast-forward to the branch's own upstream with --ff-only."
             )
+            if config_override:
+                return refusal
             upstream = run_git(
                 directory,
                 *lookup,
