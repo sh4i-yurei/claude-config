@@ -59,7 +59,8 @@ def deadline_case():
     assert "too complex" in payload["permissionDecisionReason"].lower(), payload
 
 
-def decision(command, cwd=FEATURE, agent="claude"):
+def decision(command, cwd=None, agent="claude"):
+    cwd = FEATURE if cwd is None else cwd
     event = {"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": command}}
     result = subprocess.run(
         [sys.executable, str(HOOK), "--agent", agent],
@@ -75,7 +76,7 @@ def decision(command, cwd=FEATURE, agent="claude"):
     return payload["permissionDecision"], payload["permissionDecisionReason"]
 
 
-def check(expected, command, cwd=FEATURE, agent="claude"):
+def check(expected, command, cwd=None, agent="claude"):
     actual, reason = decision(command, cwd, agent)
     assert actual == expected, (command, expected, actual, reason)
 
