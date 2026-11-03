@@ -29,7 +29,7 @@ ISSUE = "Use tools/workflow/issue.py open; see README.md, Opening an issue from 
 
 def decision(command, agent):
     event = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": "/tmp"}
-    argv = ["/usr/bin/python3", str(HOOK)]
+    argv = [sys.executable, str(HOOK)]
     if agent == "claude":
         argv += ["--agent", "claude"]
     result = subprocess.run(

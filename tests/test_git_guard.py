@@ -358,7 +358,7 @@ for cwd, cmd, who, reason in issue_tool_reason_cases:
 # Failures in the hook must be valid deny decisions, including an import failure.
 for raw in ("{}", "[]", "not-json", json.dumps({"cwd": INFRA, "tool_input": {}})):
     run = subprocess.run(
-        ["/usr/bin/python3", HOOK], input=raw, capture_output=True, text=True
+        [sys.executable, HOOK], input=raw, capture_output=True, text=True
     )
     assert run.returncode == 0 and not run.stderr, (run.returncode, run.stderr)
     decision = json.loads(run.stdout)["hookSpecificOutput"]
@@ -405,7 +405,7 @@ codex_events = [
 for expected, event in codex_events:
     event = {**codex_envelope, **event}
     run = subprocess.run(
-        ["/usr/bin/python3", HOOK],
+        [sys.executable, HOOK],
         input=json.dumps(event),
         capture_output=True,
         text=True,
@@ -421,7 +421,7 @@ with tempfile.TemporaryDirectory(
     copy.parent.mkdir()
     copy.write_text(Path(HOOK).read_text())
     run = subprocess.run(
-        ["/usr/bin/python3", str(copy)],
+        [sys.executable, str(copy)],
         input=json.dumps(
             {
                 "tool_name": "Bash",
@@ -446,7 +446,7 @@ command = "echo '" + "x" * 51200 + "'"
 event = {"tool_name": "Bash", "cwd": INFRA, "tool_input": {"command": command}}
 start = time.monotonic()
 run = subprocess.run(
-    ["/usr/bin/python3", PERFORMANCE_HOOK],
+    [sys.executable, PERFORMANCE_HOOK],
     input=json.dumps(event),
     capture_output=True,
     text=True,
@@ -458,7 +458,7 @@ command = "git merge x; " * 3900
 event = {"tool_name": "Bash", "cwd": INFRA, "tool_input": {"command": command}}
 start = time.monotonic()
 run = subprocess.run(
-    ["/usr/bin/python3", PERFORMANCE_HOOK],
+    [sys.executable, PERFORMANCE_HOOK],
     input=json.dumps(event),
     capture_output=True,
     text=True,
@@ -472,7 +472,7 @@ for cmd, phrase in (
 ):
     event = {"tool_name": "Bash", "cwd": INFRA, "tool_input": {"command": cmd}}
     run = subprocess.run(
-        ["/usr/bin/python3", HOOK],
+        [sys.executable, HOOK],
         input=json.dumps(event),
         capture_output=True,
         text=True,

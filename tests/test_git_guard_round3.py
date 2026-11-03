@@ -62,7 +62,7 @@ def deadline_case():
 def decision(command, cwd=FEATURE, agent="claude"):
     event = {"tool_name": "Bash", "cwd": cwd, "tool_input": {"command": command}}
     result = subprocess.run(
-        ["/usr/bin/python3", str(HOOK), "--agent", agent],
+        [sys.executable, str(HOOK), "--agent", agent],
         input=json.dumps(event),
         text=True,
         capture_output=True,

@@ -23,7 +23,7 @@ def test_python_workflow_caller():
     )
     assert job["with"]["caller_workflow"] == ".github/workflows/ci.yml"
     assert job["with"]["caller_job"] == "python"
-    assert job["with"]["coverage_floor"] == "0"
+    assert job["with"]["coverage_floor"] == "69"
     install = job["with"]["install_command"]
     assert "gh_2.97.0_linux_amd64.tar.gz" in install
     assert "a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112" in install
