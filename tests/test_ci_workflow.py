@@ -41,7 +41,7 @@ def test_python_workflow_caller():
         "caller_job": "shell",
         "source_paths": '["hooks", "skills/buildlog/scripts", "tools"]',
         "tests_path": "tests/shell",
-        "coverage_floor": "0",
+        "coverage_floor": "73",
     }
 
 
