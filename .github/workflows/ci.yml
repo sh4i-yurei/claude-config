@@ -19,3 +19,11 @@ jobs:
         echo "$RUNNER_TEMP/gh_2.97.0_linux_amd64/bin" >> "$GITHUB_PATH"
         "$RUNNER_TEMP/gh_2.97.0_linux_amd64/bin/gh" --version
         python -m pip install PyYAML==6.0.3 pytest==9.1.1 pytest-cov==7.1.0
+  shell:
+    uses: sh4i-yurei/ci-workflows/.github/workflows/shell.yml@58da91c02d82b0632d2a31fa9ee81bbb34dfe717
+    with:
+      caller_workflow: .github/workflows/ci.yml
+      caller_job: shell
+      source_paths: '["hooks", "skills/buildlog/scripts", "tools"]'
+      tests_path: tests/shell
+      coverage_floor: 0

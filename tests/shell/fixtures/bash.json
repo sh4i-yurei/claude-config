@@ -1,0 +1,1 @@
+{"session_id":"abc123","transcript_path":"/tmp/claude-transcript.jsonl","cwd":"/tmp","permission_mode":"default","hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"printf done"},"tool_response":{"stdout":"done","stderr":"","exitCode":0},"tool_use_id":"toolu_01ABC123","duration_ms":12}
