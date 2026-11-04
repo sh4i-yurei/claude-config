@@ -23,7 +23,7 @@ setup() {
 }
 
 @test "terminal stdout refuses vault access without output" {
-  capture_case "$path" "BW_MARKER=$marker" -- script -qec "$script_path 2>$BATS_TEST_TMPDIR/terminal-stderr" /dev/null
+  capture_case "$path" "BW_MARKER=$marker" -- script -qec "$script_path 2>$BATS_TEST_TMPDIR/terminal-stderr" /dev/null </dev/null
   [ "$CASE_STATUS" -eq 2 ]
   [ ! -s "$BATS_TEST_TMPDIR/stdout" ]
   [ ! -s "$BATS_TEST_TMPDIR/stderr" ]
