@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 import subprocess
 import tomllib
+from urllib.parse import urlencode
 
 from config import ConfigError, load, load_board_config, load_boards
 
@@ -51,6 +52,8 @@ def api(endpoint, payload=None):
 
 CARD_QUERY = """query($url: URI!, $owner: String!, $number: Int!) { resource(url: $url) { ... on Issue { projectItems(first: 20) { nodes { id project { id number owner { ... on User { login } ... on Organization { login } } } priority: fieldValueByName(name: "Priority") { ... on ProjectV2ItemFieldSingleSelectValue { name } } size: fieldValueByName(name: "Size") { ... on ProjectV2ItemFieldSingleSelectValue { name } } estimate: fieldValueByName(name: "Estimate") { ... on ProjectV2ItemFieldNumberValue { number } } } } } } repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
 REPOSITORY_QUERY = """query($owner: String!, $name: String!, $boardOwner: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issues(states: OPEN, first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { number url projectItems(first: 20) { nodes { project { number owner { ... on User { login } ... on Organization { login } } } } } } } } repositoryOwner(login: $boardOwner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
+LINKED_BRANCHES_QUERY = "query($owner: String!, $name: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issue(number: $number) { linkedBranches(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { ref { name } } } } } }"
+
 
 def graphql(query, **variables):
     args = ["api", "graphql", "-f", f"query={query}"]
@@ -768,7 +771,34 @@ def form_sections(body):
     return {name: "\n".join(lines).strip() for name, lines in sections.items()}
 
 
-def ready_issue(reference, check):
+def stacked_branch(repo, number):
+    owner, name = repo.split("/")
+    cursor = None
+    while True:
+        response = graphql(
+            LINKED_BRANCHES_QUERY, owner=owner, name=name, number=number, cursor=cursor
+        )
+        branches = response["data"]["repository"]["issue"]["linkedBranches"]
+        for node in branches["nodes"]:
+            ref = node.get("ref") if node else None
+            branch = ref.get("name") if ref else None
+            if branch and branch.startswith("agent/"):
+                endpoint = f"repos/{repo}/pulls?" + urlencode(
+                    {"state": "open", "head": f"{owner}:{branch}"}
+                )
+                if api(endpoint):
+                    return branch
+        if not branches["pageInfo"]["hasNextPage"]:
+            return None
+        cursor = branches["pageInfo"]["endCursor"]
+
+
+def ready_issue(reference, check, stacked_on=()):
+    if stacked_on and not check:
+        raise IssueError("--stacked-on needs --check")
+    for stacked in stacked_on:
+        if not re.fullmatch(r"[^/#]+/[^/#]+#[1-9][0-9]*", stacked):
+            raise IssueError("--stacked-on must be owner/repo#number")
     if reference.count("#") != 1:
         raise IssueError("issue must be owner/repo#number")
     repo, number_text = reference.split("#")
@@ -856,9 +886,15 @@ def ready_issue(reference, check):
         report(True, "required form sections")
 
     values = {
-        "Priority": item["priority"].get("name") if isinstance(item.get("priority"), dict) else None,
-        "Size": item["size"].get("name") if isinstance(item.get("size"), dict) else None,
-        "Estimate": item["estimate"].get("number") if isinstance(item.get("estimate"), dict) else None,
+        "Priority": item["priority"].get("name")
+        if isinstance(item.get("priority"), dict)
+        else None,
+        "Size": item["size"].get("name")
+        if isinstance(item.get("size"), dict)
+        else None,
+        "Estimate": item["estimate"].get("number")
+        if isinstance(item.get("estimate"), dict)
+        else None,
     }
     for field in ("Priority", "Size", "Estimate"):
         report(values.get(field) not in (None, ""), field)
@@ -874,15 +910,35 @@ def ready_issue(reference, check):
     if not isinstance(blockers, list):
         raise IssueError(f"{reference}: blocked_by response is not a list")
     open_blockers = [blocker for blocker in blockers if blocker.get("state") == "open"]
+    named_open = set(stacked_on)
     if open_blockers:
         for blocker in open_blockers:
             blocker_repo = blocker["repository"]["full_name"]
-            report(
-                False,
-                f"open blocker {blocker_repo}#{blocker['number']}",
-            )
+            blocker_ref = f"{blocker_repo}#{blocker['number']}"
+            if blocker_ref not in named_open:
+                report(False, f"open blocker {blocker_ref}")
+                continue
+            named_open.remove(blocker_ref)
+            if blocker_repo != repo:
+                report(False, f"open blocker {blocker_ref} is in another repository")
+                continue
+            branch = stacked_branch(blocker_repo, blocker["number"])
+            if branch:
+                report(
+                    True,
+                    f"open blocker {blocker_ref} sits lower in this stack on {branch}",
+                )
+            else:
+                report(
+                    False,
+                    f"open blocker {blocker_ref} has no open pull request from a linked agent/ branch",
+                )
     else:
         report(True, "no open blocking issues")
+    for stacked in stacked_on:
+        if stacked in named_open:
+            report(False, f"stacked-on {stacked} is not an open blocker of this issue")
+            named_open.remove(stacked)
     architecture = values.get("Size") == "Architecture"
     design = any(
         line.startswith("Design: ") for line in (issue.get("body") or "").splitlines()
@@ -923,10 +979,16 @@ def main(argv=None):
     )
     ready_parser.add_argument("issue")
     ready_parser.add_argument("--check", action="store_true")
+    ready_parser.add_argument(
+        "--stacked-on",
+        action="append",
+        default=[],
+        help="an open blocker that sits lower in this stack; needs --check",
+    )
     arguments = parser.parse_args(argv)
     try:
         if arguments.command == "ready":
-            return ready_issue(arguments.issue, arguments.check)
+            return ready_issue(arguments.issue, arguments.check, arguments.stacked_on)
         if arguments.command == "debt":
             return debt_issue(arguments.review_handoff, arguments.dry_run)
         return open_issue(arguments.file, arguments.dry_run)
