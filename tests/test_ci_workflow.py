@@ -15,7 +15,7 @@ def test_python_workflow_caller():
     )
     assert workflow["on"] == {"push": {}, "pull_request": {}}
     assert workflow["permissions"] == {"contents": "read"}
-    assert set(workflow["jobs"]) == {"python"}
+    assert set(workflow["jobs"]) == {"python", "shell"}
     job = workflow["jobs"]["python"]
     assert job["uses"] == (
         "sh4i-yurei/ci-workflows/.github/workflows/python.yml@"
@@ -31,6 +31,18 @@ def test_python_workflow_caller():
     assert "PyYAML==6.0.3" in install
     assert "pytest==9.1.1" in install
     assert "pytest-cov==7.1.0" in install
+    shell = workflow["jobs"]["shell"]
+    assert shell["uses"] == (
+        "sh4i-yurei/ci-workflows/.github/workflows/shell.yml@"
+        "58da91c02d82b0632d2a31fa9ee81bbb34dfe717"
+    )
+    assert shell["with"] == {
+        "caller_workflow": ".github/workflows/ci.yml",
+        "caller_job": "shell",
+        "source_paths": '["hooks", "skills/buildlog/scripts", "tools"]',
+        "tests_path": "tests/shell",
+        "coverage_floor": "73",
+    }
 
 
 def test_python_source_and_collection_settings():

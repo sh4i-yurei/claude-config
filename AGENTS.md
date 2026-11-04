@@ -12,4 +12,4 @@ Research tooling unless the spec names it.
 
 Read `ARCHITECTURE.md` before changing anything. This checkout is live: `~/.claude` links into
 it, so build in the worktree the handoff names, never by switching branches here. Run the tests
-with `python3 -m pytest -q -p no:cacheprovider && git diff --check`.
+with `python3 -m pytest -q -p no:cacheprovider && bats tests/shell && git diff --check`.
