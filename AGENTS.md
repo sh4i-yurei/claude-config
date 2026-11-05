@@ -6,7 +6,7 @@ Buildlog: [[research-tooling-log]], [[vault-system-log]]
 Read the active project's note and open buildlog before editing. Stay within
 the selected specification; ask before changing Claude's other tools or
 rules. Use the Research tooling tests once that project provides them.
-`.github/workflows/ci.yml` runs CI on every push and pull request. The nested
+`.github/workflows/ci.yml` runs CI on every push. The nested
 `skills/humanizer` package has its own validation workflow and is outside
 Research tooling unless the spec names it.
 
