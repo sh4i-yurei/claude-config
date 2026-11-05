@@ -666,6 +666,7 @@ class IssueOpen(unittest.TestCase):
                     "sh4i-yurei/keepbreath-contact-api": 1,
                     "sh4i-yurei/keepbreathing": 1,
                     "sh4i-yurei/keepbreathing-infra": 3,
+                    "sh4i-yurei/platform-tickets": 3,
                 }.items()
             },
         )

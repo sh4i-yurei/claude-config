@@ -44,6 +44,8 @@ class LabelSync(unittest.TestCase):
             },
             "issues": {},
         }
+        for repo in self.state["repos"]:
+            self.state["labels"].setdefault(repo["nameWithOwner"], [])
         self.save()
 
     def save(self):
