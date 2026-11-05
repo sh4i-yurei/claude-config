@@ -92,6 +92,32 @@ class IssueReady(unittest.TestCase):
         pull["head"]["label"] = f"sh4i-yurei:{branch}"
         self.state.setdefault("pulls_by_head", {})[f"sh4i-yurei:{branch}"] = [pull]
 
+    def closing_pull(self, state="OPEN", repo=REPO):
+        answer = json.loads((FIXTURES / "closing-pulls-105.json").read_text())
+        node = answer["data"]["repository"]["issue"]["closedByPullRequestsReferences"][
+            "nodes"
+        ][0]
+        node["state"] = state
+        node["repository"]["nameWithOwner"] = repo
+        self.state.setdefault("closing_pulls", {})["22"] = answer
+        return answer
+
+    def closing_calls(self):
+        return [
+            call["args"]
+            for call in self.calls()
+            if call["args"][:2] == ["api", "graphql"]
+            and any("closedByPullRequestsReferences" in arg for arg in call["args"])
+        ]
+
+    def closing_setup(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.ready_fields()
+        self.linked(22, "feat/ready-stacked-on")
+
+    def closing_result(self):
+        return self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+
     def ready_fields(self):
         self.state["board_fields"] = {
             "priority": "P2",
@@ -418,6 +444,189 @@ class IssueReady(unittest.TestCase):
             any(call["args"][:2] == ["project", "item-edit"] for call in self.calls())
         )
 
+    def test_stacked_accepts_open_closing_pull_in_repository(self):
+        self.closing_setup()
+        self.closing_pull()
+        result = self.closing_result()
+        self.assertEqual(
+            (result.returncode, result.stdout.splitlines()),
+            (
+                0,
+                [
+                    "met: one type: label",
+                    "met: a scope: label",
+                    "met: required form sections",
+                    "met: Priority",
+                    "met: Size",
+                    "met: Estimate",
+                    "met: milestone or parent",
+                    f"met: open blocker {REPO}#22 sits lower in this stack in pull request #114 from feature/openbao-core",
+                    "met: Architecture design link not required",
+                    f"ready: {REPO}#23",
+                ],
+            ),
+        )
+        self.assertFalse(
+            any(call["args"][:2] == ["project", "item-edit"] for call in self.calls())
+        )
+
+    def test_stacked_rejects_merged_closing_pull(self):
+        self.closing_setup()
+        self.state["closing_pulls"] = {
+            "22": json.loads((FIXTURES / "closing-pulls-105.json").read_text())
+        }
+        result = self.closing_result()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"unmet: open blocker {REPO}#22 has no open pull request in this repository from a linked agent/ branch or with a closing reference\n",
+            result.stdout,
+        )
+
+    def test_stacked_rejects_foreign_closing_pull(self):
+        self.closing_setup()
+        self.closing_pull(repo="sh4i-yurei/keepbreathing-infra")
+        result = self.closing_result()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"unmet: open blocker {REPO}#22 has no open pull request in this repository from a linked agent/ branch or with a closing reference\n",
+            result.stdout,
+        )
+
+    def test_stacked_rejects_closed_closing_pull(self):
+        self.closing_setup()
+        self.closing_pull(state="CLOSED")
+        result = self.closing_result()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"unmet: open blocker {REPO}#22 has no open pull request in this repository from a linked agent/ branch or with a closing reference\n",
+            result.stdout,
+        )
+
+    def test_stacked_uses_default_empty_closing_answer(self):
+        self.closing_setup()
+        result = self.closing_result()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"unmet: open blocker {REPO}#22 has no open pull request in this repository from a linked agent/ branch or with a closing reference\n",
+            result.stdout,
+        )
+        calls = self.closing_calls()
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][calls[0].index("number=22") - 1], "-F")
+
+    def test_stacked_prefers_linked_agent_pull_over_closing_pull(self):
+        self.closing_setup()
+        self.linked()
+        self.open_pull()
+        self.closing_pull()
+        result = self.closing_result()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            self.blocker_lines(result),
+            [
+                f"met: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check"
+            ],
+        )
+        self.assertEqual(self.closing_calls(), [])
+
+    def test_stacked_uses_first_open_closing_pull(self):
+        self.closing_setup()
+        answer = self.closing_pull()
+        nodes = answer["data"]["repository"]["issue"]["closedByPullRequestsReferences"][
+            "nodes"
+        ]
+        nodes.append(
+            dict(nodes[0], number=115, headRefName="feature/openbao-tailscale")
+        )
+        result = self.closing_result()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            self.blocker_lines(result),
+            [
+                f"met: open blocker {REPO}#22 sits lower in this stack in pull request #114 from feature/openbao-core"
+            ],
+        )
+
+    def test_stacked_paginates_closing_pulls(self):
+        self.closing_setup()
+        answer = self.closing_pull()
+        nodes = answer["data"]["repository"]["issue"]["closedByPullRequestsReferences"][
+            "nodes"
+        ]
+        merged = json.loads((FIXTURES / "closing-pulls-105.json").read_text())["data"][
+            "repository"
+        ]["issue"]["closedByPullRequestsReferences"]["nodes"][0]
+        nodes[:] = [dict(merged) for _ in range(100)] + [
+            dict(nodes[0], number=115, headRefName="feature/openbao-tailscale")
+        ]
+        result = self.closing_result()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            self.blocker_lines(result),
+            [
+                f"met: open blocker {REPO}#22 sits lower in this stack in pull request #115 from feature/openbao-tailscale"
+            ],
+        )
+        calls = self.closing_calls()
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1][calls[1].index("cursor=100") - 1], "-f")
+
+    def test_stacked_skips_null_closing_node(self):
+        self.closing_setup()
+        answer = self.closing_pull()
+        nodes = answer["data"]["repository"]["issue"]["closedByPullRequestsReferences"][
+            "nodes"
+        ]
+        nodes.insert(0, None)
+        result = self.closing_result()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            self.blocker_lines(result),
+            [
+                f"met: open blocker {REPO}#22 sits lower in this stack in pull request #114 from feature/openbao-core"
+            ],
+        )
+
+    def test_stacked_skips_closing_node_without_repository(self):
+        self.closing_setup()
+        answer = self.closing_pull()
+        answer["data"]["repository"]["issue"]["closedByPullRequestsReferences"][
+            "nodes"
+        ][0]["repository"] = None
+        result = self.closing_result()
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            self.blocker_lines(result),
+            [
+                f"unmet: open blocker {REPO}#22 has no open pull request in this repository from a linked agent/ branch or with a closing reference"
+            ],
+        )
+
+    def test_stacked_reports_closing_graphql_error_without_edit(self):
+        self.closing_setup()
+        self.state["closing_graphql_error"] = (
+            "API rate limit already exceeded for user ID 232996764."
+        )
+        result = self.closing_result()
+        self.assertEqual(
+            (result.returncode, result.stdout),
+            (2, "API rate limit already exceeded for user ID 232996764.\n"),
+        )
+        self.assertFalse(
+            any(call["args"][:2] == ["project", "item-edit"] for call in self.calls())
+        )
+
+    def test_proposed_with_does_not_read_closing_pulls(self):
+        self.proposed_setup()
+        self.closing_pull()
+        result = self.run_ready("23", "--check", "--proposed-with", f"{REPO}#22")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            self.blocker_lines(result),
+            [f"met: open blocker {REPO}#22 is in Proposed beside this issue"],
+        )
+        self.assertEqual(self.closing_calls(), [])
+
     def test_stacked_non_agent_branch_does_not_read_pulls(self):
         self.state["blocked_by"] = [self.stacked_blocker()]
         self.ready_fields()
@@ -427,7 +636,7 @@ class IssueReady(unittest.TestCase):
         result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
         self.assertEqual(result.returncode, 1)
         self.assertIn(
-            f"unmet: open blocker {REPO}#22 has no open pull request from a linked agent/ branch\n",
+            f"unmet: open blocker {REPO}#22 has no open pull request in this repository from a linked agent/ branch or with a closing reference\n",
             result.stdout,
         )
         self.assertFalse(
@@ -450,7 +659,7 @@ class IssueReady(unittest.TestCase):
         result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
         self.assertEqual(result.returncode, 1)
         self.assertIn(
-            f"unmet: open blocker {REPO}#22 has no open pull request from a linked agent/ branch\n",
+            f"unmet: open blocker {REPO}#22 has no open pull request in this repository from a linked agent/ branch or with a closing reference\n",
             result.stdout,
         )
 
@@ -463,7 +672,7 @@ class IssueReady(unittest.TestCase):
         result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
         self.assertEqual(result.returncode, 1)
         self.assertIn(
-            f"unmet: open blocker {REPO}#22 has no open pull request from a linked agent/ branch\n",
+            f"unmet: open blocker {REPO}#22 has no open pull request in this repository from a linked agent/ branch or with a closing reference\n",
             result.stdout,
         )
         self.assertFalse(

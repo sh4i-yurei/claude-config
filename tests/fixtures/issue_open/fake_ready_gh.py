@@ -77,6 +77,43 @@ if args[:1] == ["api"]:
             }
             print(json.dumps(answer))
             sys.exit(0)
+        closing_query = "query($owner: String!, $name: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issue(number: $number) { closedByPullRequestsReferences(first: 100, after: $cursor, includeClosedPrs: false) { pageInfo { hasNextPage endCursor } nodes { number state headRefName repository { nameWithOwner } } } } } }"
+        if query == closing_query:
+            fields = {
+                arg.split("=", 1)[0]: (arg.split("=", 1)[1], args[index - 1])
+                for index, arg in enumerate(args)
+                if "=" in arg
+            }
+            if (
+                set(fields) - {"query", "owner", "name", "number", "cursor"}
+                or fields.get("owner") != ("sh4i-yurei", "-f")
+                or fields.get("name") != ("claude-config", "-f")
+                or fields.get("number", (None, None))[1] != "-F"
+                or ("cursor" in fields and fields["cursor"][1] != "-f")
+            ):
+                print("gh: invalid closing pull variables", file=sys.stderr)
+                sys.exit(1)
+            if state.get("closing_graphql_error"):
+                message = state["closing_graphql_error"]
+                print(json.dumps({"errors": [{"message": message}]}))
+                print("gh: " + message, file=sys.stderr)
+                sys.exit(1)
+            issue_number = fields["number"][0]
+            answer = state.get("closing_pulls", {}).get(
+                issue_number, fixture("closing-pulls-108")
+            )
+            page = answer["data"]["repository"]["issue"][
+                "closedByPullRequestsReferences"
+            ]
+            nodes = page["nodes"]
+            start = int(fields["cursor"][0]) if "cursor" in fields else 0
+            page["nodes"] = nodes[start : start + 100]
+            page["pageInfo"] = {
+                "hasNextPage": start + 100 < len(nodes),
+                "endCursor": str(min(start + 100, len(nodes))) if nodes else None,
+            }
+            print(json.dumps(answer))
+            sys.exit(0)
         if (
             not query.startswith("query(")
             or "resource(" not in query
