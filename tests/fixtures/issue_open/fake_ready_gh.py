@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import tomllib
+from urllib.parse import parse_qs, urlsplit
 
 
 args = sys.argv[1:]
@@ -42,6 +43,40 @@ if args[:1] == ["api"]:
         query = next(
             (arg.removeprefix("query=") for arg in args if arg.startswith("query=")), ""
         )
+        linked_query = "query($owner: String!, $name: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issue(number: $number) { linkedBranches(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { ref { name } } } } } }"
+        if query == linked_query:
+            fields = {
+                arg.split("=", 1)[0]: (arg.split("=", 1)[1], args[index - 1])
+                for index, arg in enumerate(args)
+                if "=" in arg
+            }
+            if (
+                fields.get("owner") != ("sh4i-yurei", "-f")
+                or fields.get("name") != ("claude-config", "-f")
+                or fields.get("number", (None, None))[1] != "-F"
+                or ("cursor" in fields and fields["cursor"][1] != "-f")
+            ):
+                print("gh: invalid linked branches variables", file=sys.stderr)
+                sys.exit(1)
+            if state.get("linked_graphql_error"):
+                message = state["linked_graphql_error"]
+                print(json.dumps({"errors": [{"message": message}]}))
+                print("gh: " + message, file=sys.stderr)
+                sys.exit(1)
+            issue_number = fields["number"][0]
+            answer = state.get("linked_branches", {}).get(
+                issue_number, fixture("linked-branches-63")
+            )
+            nodes = answer["data"]["repository"]["issue"]["linkedBranches"]["nodes"]
+            start = int(fields["cursor"][0]) if "cursor" in fields else 0
+            page = answer["data"]["repository"]["issue"]["linkedBranches"]
+            page["nodes"] = nodes[start : start + 100]
+            page["pageInfo"] = {
+                "hasNextPage": start + 100 < len(nodes),
+                "endCursor": str(min(start + 100, len(nodes))) if nodes else None,
+            }
+            print(json.dumps(answer))
+            sys.exit(0)
         if (
             not query.startswith("query(")
             or "resource(" not in query
@@ -105,6 +140,16 @@ if args[:1] == ["api"]:
             for name in ("priority", "size", "estimate"):
                 if name not in state.get("board_fields", {}) and name not in defaults:
                     nodes[0][name] = None
+    elif endpoint.startswith("repos/sh4i-yurei/claude-config/pulls?"):
+        query = parse_qs(urlsplit(endpoint).query)
+        if query.get("state") != ["open"] or len(query.get("head", [])) != 1:
+            print("unexpected API " + endpoint, file=sys.stderr)
+            sys.exit(1)
+        result = [
+            pull
+            for pull in state.get("pulls_by_head", {}).get(query["head"][0], [])
+            if pull["state"] == "open" and pull["head"]["label"] == query["head"][0]
+        ][:30]
     elif endpoint.startswith("repos/sh4i-yurei/claude-config/issues/"):
         number = endpoint.split("/")[4]
         if endpoint.endswith("/parent"):

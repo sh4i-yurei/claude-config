@@ -129,31 +129,44 @@
 - mutant: hooks.git-guard.x_unwrap__mutmut_238
   reason: >-
     At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_219
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_226
   reason: >-
     form_files refuses a repository with no forms before ready_issue reaches
     this expression. The changed condition only changes the empty-forms path,
     which cannot be reached through the command without replacing that helper.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_227
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_234
   reason: >-
     A missing or null issue body becomes either an empty string or XXXX. Both
     contain no GitHub form headings, so they produce the same section report.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_237
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_244
   reason: >-
     report treats False and None identically: each prints unmet and sets the
     unmet flag. No exit code, message or board write changes.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_277
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_314
   reason: >-
     A missing parent represented by None or an empty string is false in the
     milestone-or-parent check. Both produce the same report and exit code.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_305
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_348
   reason: >-
     For an open blocker, report treats False and None identically: each prints
     unmet, sets the unmet flag and prevents the Status write.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_337
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_412
   reason: >-
     A missing or null body becomes an empty string or XXXX. Neither has a
     Design: line, so both produce the same Architecture report and exit code.
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_356
+  reason: >-
+    For a named blocker in another repository, report treats False and None
+    identically: each prints unmet and sets the unmet flag. The following
+    blocker checks and every public result are the same.
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_374
+  reason: >-
+    When a linked agent branch has no open pull request, report treats False
+    and None identically: each prints unmet and prevents the Status write.
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_387
+  reason: >-
+    For a named issue that is not an open blocker, report treats False and
+    None identically: each prints unmet and prevents the Status write.
 - mutant: skills.research.scripts.research.x_append_round__mutmut_4
   reason: >-
     Python's encoding lookup treats UTF-8 and utf-8 identically for reading.

@@ -71,6 +71,342 @@ class IssueReady(unittest.TestCase):
             else []
         )
 
+    def stacked_blocker(self, number=22, repo=REPO, state="open"):
+        name = "issue-20.json" if number == 20 else f"ready-issue-{number}.json"
+        blocker = json.loads((FIXTURES / name).read_text())
+        blocker["repository"] = {"full_name": repo}
+        blocker["state"] = state
+        return blocker
+
+    def linked(self, number=22, branch="agent/22-ready-check"):
+        response = json.loads((FIXTURES / "linked-branches-64.json").read_text())
+        response["data"]["repository"]["issue"]["linkedBranches"]["nodes"][0]["ref"][
+            "name"
+        ] = branch
+        self.state.setdefault("linked_branches", {})[str(number)] = response
+
+    def open_pull(self, branch="agent/22-ready-check"):
+        pull = json.loads((FIXTURES / "pulls-chore-shell-ci.json").read_text())[0]
+        pull["state"] = "open"
+        pull["head"]["ref"] = branch
+        pull["head"]["label"] = f"sh4i-yurei:{branch}"
+        self.state.setdefault("pulls_by_head", {})[f"sh4i-yurei:{branch}"] = [pull]
+
+    def ready_fields(self):
+        self.state["board_fields"] = {
+            "priority": "P2",
+            "size": "Feature",
+            "estimate": 2,
+        }
+
+    def test_stacked_on_requires_check_before_any_github_call(self):
+        result = self.run_ready("23", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(
+            (result.returncode, result.stdout), (2, "--stacked-on needs --check\n")
+        )
+        self.assertEqual(self.calls(), [])
+
+    def test_stacked_on_requires_full_issue_reference_before_any_github_call(self):
+        result = self.run_ready("23", "--check", "--stacked-on", "claude-config#22")
+        self.assertEqual(
+            (result.returncode, result.stdout),
+            (2, "--stacked-on must be owner/repo#number\n"),
+        )
+        self.assertEqual(self.calls(), [])
+
+    def test_stacked_open_blocker_is_ready_with_linked_agent_pull(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.ready_fields()
+        self.linked()
+        self.open_pull()
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(
+            (result.returncode, result.stdout.splitlines()),
+            (
+                0,
+                [
+                    "met: one type: label",
+                    "met: a scope: label",
+                    "met: required form sections",
+                    "met: Priority",
+                    "met: Size",
+                    "met: Estimate",
+                    "met: milestone or parent",
+                    f"met: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check",
+                    "met: Architecture design link not required",
+                    f"ready: {REPO}#23",
+                ],
+            ),
+        )
+        self.assertEqual(
+            [
+                call["args"][1]
+                for call in self.calls()
+                if call["args"][:1] == ["api"] and "/pulls?" in call["args"][1]
+            ],
+            [
+                "repos/sh4i-yurei/claude-config/pulls?state=open&head=sh4i-yurei%3Aagent%2F22-ready-check"
+            ],
+        )
+        self.assertFalse(
+            any(call["args"][:2] == ["project", "item-edit"] for call in self.calls())
+        )
+
+    def test_stacked_non_agent_branch_does_not_read_pulls(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.ready_fields()
+        self.state["linked_branches"] = {
+            "22": json.loads((FIXTURES / "linked-branches-64.json").read_text())
+        }
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"unmet: open blocker {REPO}#22 has no open pull request from a linked agent/ branch\n",
+            result.stdout,
+        )
+        self.assertFalse(
+            any(
+                "/pulls?" in call["args"][1]
+                for call in self.calls()
+                if call["args"][:1] == ["api"]
+            )
+        )
+
+    def test_stacked_agent_branch_without_open_pull_is_unmet(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.ready_fields()
+        self.linked()
+        self.state["pulls_by_head"] = {
+            "sh4i-yurei:agent/22-ready-check": json.loads(
+                (FIXTURES / "pulls-open-none.json").read_text()
+            )
+        }
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"unmet: open blocker {REPO}#22 has no open pull request from a linked agent/ branch\n",
+            result.stdout,
+        )
+
+    def test_stacked_no_linked_branches_is_unmet_without_pull_read(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.ready_fields()
+        self.state["linked_branches"] = {
+            "22": json.loads((FIXTURES / "linked-branches-63.json").read_text())
+        }
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"unmet: open blocker {REPO}#22 has no open pull request from a linked agent/ branch\n",
+            result.stdout,
+        )
+        self.assertFalse(
+            any(
+                "/pulls?" in call["args"][1]
+                for call in self.calls()
+                if call["args"][:1] == ["api"]
+            )
+        )
+
+    def test_stacked_null_ref_is_skipped(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.ready_fields()
+        self.linked()
+        nodes = self.state["linked_branches"]["22"]["data"]["repository"]["issue"][
+            "linkedBranches"
+        ]["nodes"]
+        nodes.insert(0, {"ref": None})
+        self.open_pull()
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            f"met: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check\n",
+            result.stdout,
+        )
+
+    def test_stacked_null_linked_branch_node_is_skipped(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.ready_fields()
+        self.linked()
+        nodes = self.state["linked_branches"]["22"]["data"]["repository"]["issue"][
+            "linkedBranches"
+        ]["nodes"]
+        nodes.insert(0, None)
+        self.open_pull()
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            f"met: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check\n",
+            result.stdout,
+        )
+
+    def test_stacked_uses_first_linked_agent_branch_with_open_pull(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.ready_fields()
+        self.linked()
+        nodes = self.state["linked_branches"]["22"]["data"]["repository"]["issue"][
+            "linkedBranches"
+        ]["nodes"]
+        nodes.insert(0, {"ref": {"name": "agent/22-no-pull"}})
+        self.open_pull()
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            f"met: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check\n",
+            result.stdout,
+        )
+        self.assertEqual(
+            [
+                call["args"][1]
+                for call in self.calls()
+                if call["args"][:1] == ["api"] and "/pulls?" in call["args"][1]
+            ],
+            [
+                "repos/sh4i-yurei/claude-config/pulls?state=open&head=sh4i-yurei%3Aagent%2F22-no-pull",
+                "repos/sh4i-yurei/claude-config/pulls?state=open&head=sh4i-yurei%3Aagent%2F22-ready-check",
+            ],
+        )
+
+    def test_stacked_paginates_linked_branches(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.ready_fields()
+        self.linked()
+        nodes = self.state["linked_branches"]["22"]["data"]["repository"]["issue"][
+            "linkedBranches"
+        ]["nodes"]
+        nodes[:] = [{"ref": {"name": f"feat/other-{n}"}} for n in range(100)] + nodes
+        self.open_pull()
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn(
+            f"met: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check\n",
+            result.stdout,
+        )
+        calls = [
+            call["args"]
+            for call in self.calls()
+            if call["args"][:2] == ["api", "graphql"]
+            and "linkedBranches" in " ".join(call["args"])
+        ]
+        self.assertEqual(len(calls), 2)
+        self.assertIn("cursor=100", calls[1])
+        self.assertEqual(calls[1][calls[1].index("cursor=100") - 1], "-f")
+
+    def test_stacked_name_without_open_blocker_is_unmet(self):
+        self.ready_fields()
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"met: no open blocking issues\nunmet: stacked-on {REPO}#22 is not an open blocker of this issue\n",
+            result.stdout,
+        )
+        self.assertFalse(
+            any("linkedBranches" in " ".join(call["args"]) for call in self.calls())
+        )
+
+    def test_stacked_closed_blocker_is_unmet(self):
+        self.state["blocked_by"] = [self.stacked_blocker(state="closed")]
+        self.ready_fields()
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"unmet: stacked-on {REPO}#22 is not an open blocker of this issue\n",
+            result.stdout,
+        )
+        self.assertFalse(
+            any("linkedBranches" in " ".join(call["args"]) for call in self.calls())
+        )
+
+    def test_stacked_blocker_in_other_repository_is_unmet(self):
+        blocker = json.loads((FIXTURES / "ready-infra-60-blocked.json").read_text())[0]
+        blocker["state"] = "open"
+        self.state["blocked_by"] = [blocker]
+        self.ready_fields()
+        result = self.run_ready(
+            "23", "--check", "--stacked-on", "sh4i-yurei/ci-workflows#4"
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            "unmet: open blocker sh4i-yurei/ci-workflows#4 is in another repository\n",
+            result.stdout,
+        )
+        self.assertFalse(
+            any("linkedBranches" in " ".join(call["args"]) for call in self.calls())
+        )
+
+    def test_stacked_unlisted_open_blocker_still_fails(self):
+        other = json.loads((FIXTURES / "ready-infra-60-blocked.json").read_text())[0]
+        other["state"] = "open"
+        self.state["blocked_by"] = [self.stacked_blocker(), other]
+        self.ready_fields()
+        self.linked()
+        self.open_pull()
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"met: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check\nunmet: open blocker sh4i-yurei/ci-workflows#4\n",
+            result.stdout,
+        )
+
+    def test_stacked_named_blocker_after_unlisted_blocker_is_checked(self):
+        self.state["blocked_by"] = [self.stacked_blocker(), self.stacked_blocker(20)]
+        self.linked(20, "agent/20-open")
+        self.open_pull("agent/20-open")
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#20")
+        self.assertIn(
+            f"unmet: open blocker {REPO}#22\nmet: open blocker {REPO}#20 sits lower in this stack on agent/20-open\n",
+            result.stdout,
+        )
+
+    def test_stacked_named_blocker_after_cross_repository_blocker_is_checked(self):
+        other = json.loads((FIXTURES / "ready-infra-60-blocked.json").read_text())[0]
+        other["state"] = "open"
+        self.state["blocked_by"] = [other, self.stacked_blocker()]
+        self.linked()
+        self.open_pull()
+        result = self.run_ready(
+            "23",
+            "--check",
+            "--stacked-on",
+            "sh4i-yurei/ci-workflows#4",
+            "--stacked-on",
+            f"{REPO}#22",
+        )
+        self.assertIn(
+            f"unmet: open blocker sh4i-yurei/ci-workflows#4 is in another repository\nmet: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check\n",
+            result.stdout,
+        )
+
+    def test_stacked_multiple_blockers_preserve_github_order(self):
+        self.state["blocked_by"] = [self.stacked_blocker(), self.stacked_blocker(20)]
+        self.ready_fields()
+        self.linked()
+        self.linked(20, "agent/20-open")
+        self.open_pull()
+        self.open_pull("agent/20-open")
+        result = self.run_ready(
+            "23", "--check", "--stacked-on", f"{REPO}#22", "--stacked-on", f"{REPO}#20"
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertIn(
+            f"met: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check\nmet: open blocker {REPO}#20 sits lower in this stack on agent/20-open\n",
+            result.stdout,
+        )
+
+    def test_stacked_linked_branches_graphql_error_is_reported(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.state["linked_graphql_error"] = (
+            "API rate limit already exceeded for user ID 232996764."
+        )
+        result = self.run_ready("23", "--check", "--stacked-on", f"{REPO}#22")
+        self.assertEqual(
+            (result.returncode, result.stdout),
+            (2, "API rate limit already exceeded for user ID 232996764.\n"),
+        )
+        self.assertFalse(
+            any(call["args"][:2] == ["project", "item-edit"] for call in self.calls())
+        )
+
     def test_board_read_uses_one_graphql_request_with_mapped_variables(self):
         result = self.run_ready("23", "--check")
         self.assertEqual(result.returncode, 1, result.stdout)
@@ -891,12 +1227,15 @@ class IssueReady(unittest.TestCase):
             ),
             (
                 ["ready", "--help"],
-                "usage: issue.py ready [-h] [--check] issue\n\n"
+                "usage: issue.py ready [-h] [--check] [--stacked-on STACKED_ON] issue\n\n"
                 "positional arguments:\n"
                 "  issue\n\n"
                 "options:\n"
-                "  -h, --help  show this help message and exit\n"
-                "  --check\n",
+                "  -h, --help            show this help message and exit\n"
+                "  --check\n"
+                "  --stacked-on STACKED_ON\n"
+                "                        an open blocker that sits lower in this stack; needs\n"
+                "                        --check\n",
             ),
         ):
             with self.subTest(args=args):
