@@ -1,0 +1,1 @@
+{"data":{"repository":{"issue":{"closedByPullRequestsReferences":{"pageInfo":{"hasNextPage":false,"endCursor":"MQ"},"nodes":[{"number":114,"state":"MERGED","headRefName":"feature/openbao-core","repository":{"nameWithOwner":"sh4i-yurei/keepbreathing-infra"}}]}}}}}

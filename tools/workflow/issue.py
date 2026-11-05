@@ -54,6 +54,7 @@ def api(endpoint, payload=None):
 CARD_QUERY = """query($url: URI!, $owner: String!, $number: Int!) { resource(url: $url) { ... on Issue { projectItems(first: 20) { nodes { id project { id number owner { ... on User { login } ... on Organization { login } } } priority: fieldValueByName(name: "Priority") { ... on ProjectV2ItemFieldSingleSelectValue { name } } size: fieldValueByName(name: "Size") { ... on ProjectV2ItemFieldSingleSelectValue { name } } estimate: fieldValueByName(name: "Estimate") { ... on ProjectV2ItemFieldNumberValue { number } } status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
 REPOSITORY_QUERY = """query($owner: String!, $name: String!, $boardOwner: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issues(states: OPEN, first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { number url projectItems(first: 20) { nodes { project { number owner { ... on User { login } ... on Organization { login } } } } } } } } repositoryOwner(login: $boardOwner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
 LINKED_BRANCHES_QUERY = "query($owner: String!, $name: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issue(number: $number) { linkedBranches(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { ref { name } } } } } }"
+CLOSING_PULLS_QUERY = "query($owner: String!, $name: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issue(number: $number) { closedByPullRequestsReferences(first: 100, after: $cursor, includeClosedPrs: false) { pageInfo { hasNextPage endCursor } nodes { number state headRefName repository { nameWithOwner } } } } } }"
 
 
 def graphql(query, **variables):
@@ -888,6 +889,30 @@ def stacked_branch(repo, number):
         cursor = branches["pageInfo"]["endCursor"]
 
 
+def closing_pull(repo, number):
+    owner, name = repo.split("/")
+    cursor = None
+    while True:
+        response = graphql(
+            CLOSING_PULLS_QUERY, owner=owner, name=name, number=number, cursor=cursor
+        )
+        pulls = response["data"]["repository"]["issue"][
+            "closedByPullRequestsReferences"
+        ]
+        for node in pulls["nodes"]:
+            repository = node.get("repository") if node else None
+            if (
+                node
+                and node.get("state") == "OPEN"
+                and repository
+                and repository.get("nameWithOwner") == repo
+            ):
+                return node
+        if not pulls["pageInfo"]["hasNextPage"]:
+            return None
+        cursor = pulls["pageInfo"]["endCursor"]
+
+
 def ready_issue(reference, check, stacked_on=(), proposed_with=()):
     if stacked_on and not check:
         raise IssueError("--stacked-on needs --check")
@@ -1058,10 +1083,17 @@ def ready_issue(reference, check, stacked_on=(), proposed_with=()):
                     f"open blocker {blocker_ref} sits lower in this stack on {branch}",
                 )
             else:
-                report(
-                    False,
-                    f"open blocker {blocker_ref} has no open pull request from a linked agent/ branch",
-                )
+                pull = closing_pull(blocker_repo, blocker["number"])
+                if pull:
+                    report(
+                        True,
+                        f"open blocker {blocker_ref} sits lower in this stack in pull request #{pull['number']} from {pull['headRefName']}",
+                    )
+                else:
+                    report(
+                        False,
+                        f"open blocker {blocker_ref} has no open pull request in this repository from a linked agent/ branch or with a closing reference",
+                    )
     else:
         report(True, "no open blocking issues")
     for stacked in stacked_on:
