@@ -149,7 +149,7 @@
   reason: >-
     For an open blocker, report treats False and None identically: each prints
     unmet, sets the unmet flag and prevents the Status write.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_488
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_505
   reason: >-
     A missing or null body becomes an empty string or XXXX. Neither has a
     Design: line, so both produce the same Architecture report and exit code.
@@ -158,11 +158,12 @@
     For a named blocker in another repository, report treats False and None
     identically: each prints unmet and sets the unmet flag. The following
     blocker checks and every public result are the same.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_443
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_460
   reason: >-
-    When a linked agent branch has no open pull request, report treats False
-    and None identically: each prints unmet and prevents the Status write.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_456
+    When neither a linked agent branch nor a closing pull request qualifies,
+    report treats False and None identically: each prints unmet and prevents
+    the Status write.
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_473
   reason: >-
     For a named issue that is not an open blocker, report treats False and
     None identically: each prints unmet and prevents the Status write.
@@ -175,7 +176,7 @@
   reason: >-
     For a proposed blocker whose card is not in Proposed, report treats False
     and None identically: each prints unmet and prevents the Status write.
-- mutant: tools.workflow.issue.x_ready_issue__mutmut_463
+- mutant: tools.workflow.issue.x_ready_issue__mutmut_480
   reason: >-
     For a proposed issue that is not an open blocker, report treats False and
     None identically: each prints unmet and prevents the Status write.
