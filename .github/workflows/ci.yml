@@ -1,12 +1,11 @@
 name: Python checks
 on:
   push: {}
-  pull_request: {}
 permissions:
   contents: read
 jobs:
   python:
-    uses: sh4i-yurei/ci-workflows/.github/workflows/python.yml@8d1ea0f42d357f6639eda1ac9359b9b1420d8789
+    uses: sh4i-yurei/ci-workflows/.github/workflows/python.yml@6fa70095587800bf834d27d1cf2313a7b8dbb168
     with:
       caller_workflow: .github/workflows/ci.yml
       caller_job: python
@@ -18,7 +17,7 @@ jobs:
         tar -xzf "$archive" -C "$RUNNER_TEMP"
         echo "$RUNNER_TEMP/gh_2.97.0_linux_amd64/bin" >> "$GITHUB_PATH"
         "$RUNNER_TEMP/gh_2.97.0_linux_amd64/bin/gh" --version
-        python -m pip install PyYAML==6.0.3 pytest==9.1.1 pytest-cov==7.1.0
+        python -m pip install PyYAML==6.0.3 pytest==9.1.1 pytest-cov==7.1.0 mutmut==3.8.0
   shell:
     uses: sh4i-yurei/ci-workflows/.github/workflows/shell.yml@58da91c02d82b0632d2a31fa9ee81bbb34dfe717
     with:

@@ -13,13 +13,13 @@ def test_python_workflow_caller():
     workflow = yaml.load(
         (ROOT / ".github/workflows/ci.yml").read_text(), Loader=yaml.BaseLoader
     )
-    assert workflow["on"] == {"push": {}, "pull_request": {}}
+    assert workflow["on"] == {"push": {}}
     assert workflow["permissions"] == {"contents": "read"}
     assert set(workflow["jobs"]) == {"python", "shell"}
     job = workflow["jobs"]["python"]
     assert job["uses"] == (
         "sh4i-yurei/ci-workflows/.github/workflows/python.yml@"
-        "8d1ea0f42d357f6639eda1ac9359b9b1420d8789"
+        "6fa70095587800bf834d27d1cf2313a7b8dbb168"
     )
     assert job["with"]["caller_workflow"] == ".github/workflows/ci.yml"
     assert job["with"]["caller_job"] == "python"
@@ -28,9 +28,10 @@ def test_python_workflow_caller():
     assert "gh_2.97.0_linux_amd64.tar.gz" in install
     assert "a2c9b8497e1f85b1ad0dfcb78b5a622e098801b8e461e459e88e1ee12f018112" in install
     assert '"$GITHUB_PATH"' in install
-    assert "PyYAML==6.0.3" in install
-    assert "pytest==9.1.1" in install
-    assert "pytest-cov==7.1.0" in install
+    assert (
+        "python -m pip install PyYAML==6.0.3 pytest==9.1.1 "
+        "pytest-cov==7.1.0 mutmut==3.8.0"
+    ) in install.splitlines()
     shell = workflow["jobs"]["shell"]
     assert shell["uses"] == (
         "sh4i-yurei/ci-workflows/.github/workflows/shell.yml@"
