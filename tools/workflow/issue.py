@@ -50,7 +50,7 @@ def api(endpoint, payload=None):
     return gh(args, payload)
 
 
-CARD_QUERY = """query($url: URI!, $owner: String!, $number: Int!) { resource(url: $url) { ... on Issue { projectItems(first: 20) { nodes { id project { id number owner { ... on User { login } ... on Organization { login } } } priority: fieldValueByName(name: "Priority") { ... on ProjectV2ItemFieldSingleSelectValue { name } } size: fieldValueByName(name: "Size") { ... on ProjectV2ItemFieldSingleSelectValue { name } } estimate: fieldValueByName(name: "Estimate") { ... on ProjectV2ItemFieldNumberValue { number } } } } } } repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
+CARD_QUERY = """query($url: URI!, $owner: String!, $number: Int!) { resource(url: $url) { ... on Issue { projectItems(first: 20) { nodes { id project { id number owner { ... on User { login } ... on Organization { login } } } priority: fieldValueByName(name: "Priority") { ... on ProjectV2ItemFieldSingleSelectValue { name } } size: fieldValueByName(name: "Size") { ... on ProjectV2ItemFieldSingleSelectValue { name } } estimate: fieldValueByName(name: "Estimate") { ... on ProjectV2ItemFieldNumberValue { number } } status: fieldValueByName(name: "Status") { ... on ProjectV2ItemFieldSingleSelectValue { name } } } } } } repositoryOwner(login: $owner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
 REPOSITORY_QUERY = """query($owner: String!, $name: String!, $boardOwner: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issues(states: OPEN, first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { number url projectItems(first: 20) { nodes { project { number owner { ... on User { login } ... on Organization { login } } } } } } } } repositoryOwner(login: $boardOwner) { ... on ProjectV2Owner { projectV2(number: $number) { id field(name: "Status") { ... on ProjectV2SingleSelectField { id options { id name } } } } } } }"""
 LINKED_BRANCHES_QUERY = "query($owner: String!, $name: String!, $number: Int!, $cursor: String) { repository(owner: $owner, name: $name) { issue(number: $number) { linkedBranches(first: 100, after: $cursor) { pageInfo { hasNextPage endCursor } nodes { ref { name } } } } } }"
 
@@ -793,12 +793,21 @@ def stacked_branch(repo, number):
         cursor = branches["pageInfo"]["endCursor"]
 
 
-def ready_issue(reference, check, stacked_on=()):
+def ready_issue(reference, check, stacked_on=(), proposed_with=()):
     if stacked_on and not check:
         raise IssueError("--stacked-on needs --check")
+    if proposed_with and not check:
+        raise IssueError("--proposed-with needs --check")
     for stacked in stacked_on:
         if not re.fullmatch(r"[^/#]+/[^/#]+#[1-9][0-9]*", stacked):
             raise IssueError("--stacked-on must be owner/repo#number")
+    for proposed in proposed_with:
+        if not re.fullmatch(r"[^/#]+/[^/#]+#[1-9][0-9]*", proposed):
+            raise IssueError("--proposed-with must be owner/repo#number")
+        if proposed in stacked_on:
+            raise IssueError(
+                f"{proposed} is named by both --stacked-on and --proposed-with"
+            )
     if reference.count("#") != 1:
         raise IssueError("issue must be owner/repo#number")
     repo, number_text = reference.split("#")
@@ -910,17 +919,42 @@ def ready_issue(reference, check, stacked_on=()):
     if not isinstance(blockers, list):
         raise IssueError(f"{reference}: blocked_by response is not a list")
     open_blockers = [blocker for blocker in blockers if blocker.get("state") == "open"]
-    named_open = set(stacked_on)
+    named_stacked = set(stacked_on)
+    named_proposed = set(proposed_with)
     if open_blockers:
         for blocker in open_blockers:
             blocker_repo = blocker["repository"]["full_name"]
             blocker_ref = f"{blocker_repo}#{blocker['number']}"
-            if blocker_ref not in named_open:
+            if blocker_ref not in named_stacked and blocker_ref not in named_proposed:
                 report(False, f"open blocker {blocker_ref}")
                 continue
-            named_open.remove(blocker_ref)
+            if blocker_ref in named_stacked:
+                named_stacked.remove(blocker_ref)
+                proposed = False
+            else:
+                named_proposed.remove(blocker_ref)
+                proposed = True
             if blocker_repo != repo:
                 report(False, f"open blocker {blocker_ref} is in another repository")
+                continue
+            if proposed:
+                _, blocker_card = card_read(board, blocker["html_url"])
+                status = blocker_card.get("status") if blocker_card else None
+                status_name = status.get("name") if isinstance(status, dict) else None
+                if blocker_card is None:
+                    where = "no card on this board"
+                else:
+                    where = status_name or "no Status"
+                if status_name == "Proposed":
+                    report(
+                        True,
+                        f"open blocker {blocker_ref} is in Proposed beside this issue",
+                    )
+                else:
+                    report(
+                        False,
+                        f"open blocker {blocker_ref} is not in Proposed ({where})",
+                    )
                 continue
             branch = stacked_branch(blocker_repo, blocker["number"])
             if branch:
@@ -936,9 +970,15 @@ def ready_issue(reference, check, stacked_on=()):
     else:
         report(True, "no open blocking issues")
     for stacked in stacked_on:
-        if stacked in named_open:
+        if stacked in named_stacked:
             report(False, f"stacked-on {stacked} is not an open blocker of this issue")
-            named_open.remove(stacked)
+            named_stacked.remove(stacked)
+    for proposed in proposed_with:
+        if proposed in named_proposed:
+            report(
+                False, f"proposed-with {proposed} is not an open blocker of this issue"
+            )
+            named_proposed.remove(proposed)
     architecture = values.get("Size") == "Architecture"
     design = any(
         line.startswith("Design: ") for line in (issue.get("body") or "").splitlines()
@@ -985,10 +1025,21 @@ def main(argv=None):
         default=[],
         help="an open blocker that sits lower in this stack; needs --check",
     )
+    ready_parser.add_argument(
+        "--proposed-with",
+        action="append",
+        default=[],
+        help="an open blocker whose card is in Proposed beside this one; needs --check",
+    )
     arguments = parser.parse_args(argv)
     try:
         if arguments.command == "ready":
-            return ready_issue(arguments.issue, arguments.check, arguments.stacked_on)
+            return ready_issue(
+                arguments.issue,
+                arguments.check,
+                arguments.stacked_on,
+                arguments.proposed_with,
+            )
         if arguments.command == "debt":
             return debt_issue(arguments.review_handoff, arguments.dry_run)
         return open_issue(arguments.file, arguments.dry_run)
