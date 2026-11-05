@@ -90,8 +90,10 @@ if args[:1] == ["api"]:
         if number is None or args[number - 1] != "-F":
             print("gh: number must be an integer", file=sys.stderr)
             sys.exit(1)
-        if state.get("graphql_error"):
-            messages = state["graphql_error"]
+        url = next(arg.removeprefix("url=") for arg in args if arg.startswith("url="))
+        card_error = state.get("card_errors_by_url", {}).get(url)
+        if card_error or state.get("graphql_error"):
+            messages = card_error or state["graphql_error"]
             if isinstance(messages, str):
                 messages = [messages]
             print(
@@ -99,7 +101,9 @@ if args[:1] == ["api"]:
             )
             print("gh: " + messages[0], file=sys.stderr)
             sys.exit(1)
-        result = state.get("card_response", fixture("card-query"))
+        result = state.get("cards_by_url", {}).get(
+            url, state.get("card_response", fixture("card-query"))
+        )
         owner = next(
             arg.removeprefix("owner=") for arg in args if arg.startswith("owner=")
         )

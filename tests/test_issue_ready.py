@@ -99,6 +99,272 @@ class IssueReady(unittest.TestCase):
             "estimate": 2,
         }
 
+    def proposed_card(self, number=22, status="Proposed"):
+        answer = json.loads((FIXTURES / "card-query-65.json").read_text())
+        answer["data"]["resource"]["projectItems"]["nodes"][0]["status"] = (
+            {"name": status} if status is not None else None
+        )
+        self.state.setdefault("cards_by_url", {})[
+            f"https://github.com/{REPO}/issues/{number}"
+        ] = answer
+        return answer
+
+    def proposed_setup(self):
+        self.state["blocked_by"] = [self.stacked_blocker()]
+        self.proposed_card()
+        self.ready_fields()
+
+    def blocker_lines(self, result):
+        return [
+            line
+            for line in result.stdout.splitlines()
+            if line.startswith(("met: open blocker ", "unmet: open blocker "))
+        ]
+
+    def card_calls(self):
+        return [
+            call["args"]
+            for call in self.calls()
+            if call["args"][:2] == ["api", "graphql"]
+            and any(arg.startswith("url=") for arg in call["args"])
+        ]
+
+    def test_proposed_with_requires_check_before_github_call(self):
+        result = self.run_ready("23", "--proposed-with", f"{REPO}#22")
+        self.assertEqual(
+            (result.returncode, result.stdout), (2, "--proposed-with needs --check\n")
+        )
+        self.assertEqual(self.calls(), [])
+
+    def test_proposed_with_requires_full_reference_before_github_call(self):
+        result = self.run_ready("23", "--check", "--proposed-with", "claude-config#22")
+        self.assertEqual(
+            (result.returncode, result.stdout),
+            (2, "--proposed-with must be owner/repo#number\n"),
+        )
+        self.assertEqual(self.calls(), [])
+
+    def test_blocker_cannot_use_both_options(self):
+        result = self.run_ready(
+            "23",
+            "--check",
+            "--stacked-on",
+            f"{REPO}#22",
+            "--proposed-with",
+            f"{REPO}#22",
+        )
+        self.assertEqual(
+            (result.returncode, result.stdout),
+            (2, f"{REPO}#22 is named by both --stacked-on and --proposed-with\n"),
+        )
+        self.assertEqual(self.calls(), [])
+
+    def test_proposed_blocker_on_same_board_is_ready_without_stack_or_edit(self):
+        self.proposed_setup()
+        result = self.run_ready("23", "--check", "--proposed-with", f"{REPO}#22")
+        self.assertEqual(
+            (result.returncode, result.stdout.splitlines()),
+            (
+                0,
+                [
+                    "met: one type: label",
+                    "met: a scope: label",
+                    "met: required form sections",
+                    "met: Priority",
+                    "met: Size",
+                    "met: Estimate",
+                    "met: milestone or parent",
+                    f"met: open blocker {REPO}#22 is in Proposed beside this issue",
+                    "met: Architecture design link not required",
+                    f"ready: {REPO}#23",
+                ],
+            ),
+        )
+        self.assertEqual(len(self.card_calls()), 2)
+        blocker_call = self.card_calls()[1]
+        for field, value, flag in (
+            ("url", f"https://github.com/{REPO}/issues/22", "-f"),
+            ("owner", "sh4i-yurei", "-f"),
+            ("number", "2", "-F"),
+        ):
+            argument = f"{field}={value}"
+            self.assertIn(argument, blocker_call)
+            self.assertEqual(blocker_call[blocker_call.index(argument) - 1], flag)
+        self.assertFalse(
+            any(
+                "linkedBranches" in " ".join(call["args"])
+                or "/pulls?" in " ".join(call["args"])
+                or call["args"][:2] == ["project", "item-edit"]
+                for call in self.calls()
+            )
+        )
+
+    def test_proposed_blocker_reports_other_columns_and_missing_status(self):
+        for status, shown in (
+            ("Agent queue", "Agent queue"),
+            ("Backlog", "Backlog"),
+            (None, "no Status"),
+        ):
+            with self.subTest(status=status):
+                self.proposed_setup()
+                self.proposed_card(status=status)
+                result = self.run_ready(
+                    "23", "--check", "--proposed-with", f"{REPO}#22"
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(
+                    self.blocker_lines(result),
+                    [f"unmet: open blocker {REPO}#22 is not in Proposed ({shown})"],
+                )
+
+    def test_proposed_blocker_requires_card_on_checked_board(self):
+        for change in ("other board", "no cards"):
+            with self.subTest(change=change):
+                self.proposed_setup()
+                nodes = self.state["cards_by_url"][
+                    f"https://github.com/{REPO}/issues/22"
+                ]["data"]["resource"]["projectItems"]["nodes"]
+                if change == "other board":
+                    nodes[0]["project"]["number"] = 3
+                else:
+                    nodes.clear()
+                result = self.run_ready(
+                    "23", "--check", "--proposed-with", f"{REPO}#22"
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(
+                    self.blocker_lines(result),
+                    [
+                        f"unmet: open blocker {REPO}#22 is not in Proposed (no card on this board)"
+                    ],
+                )
+
+    def test_proposed_name_without_open_blocker_does_not_read_its_card(self):
+        self.ready_fields()
+        result = self.run_ready("23", "--check", "--proposed-with", f"{REPO}#22")
+        self.assertEqual(result.returncode, 1)
+        lines = result.stdout.splitlines()
+        position = lines.index("met: no open blocking issues")
+        self.assertEqual(
+            lines[position + 1],
+            f"unmet: proposed-with {REPO}#22 is not an open blocker of this issue",
+        )
+        self.assertEqual(len(self.card_calls()), 1)
+
+    def test_proposed_closed_blocker_is_not_open(self):
+        self.state["blocked_by"] = [self.stacked_blocker(state="closed")]
+        self.ready_fields()
+        result = self.run_ready("23", "--check", "--proposed-with", f"{REPO}#22")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(
+            f"unmet: proposed-with {REPO}#22 is not an open blocker of this issue",
+            result.stdout.splitlines(),
+        )
+        self.assertEqual(len(self.card_calls()), 1)
+
+    def test_proposed_cross_repository_blocker_has_no_card_read(self):
+        blocker = json.loads((FIXTURES / "ready-infra-60-blocked.json").read_text())[0]
+        blocker["state"] = "open"
+        self.state["blocked_by"] = [blocker]
+        self.ready_fields()
+        result = self.run_ready(
+            "23", "--check", "--proposed-with", "sh4i-yurei/ci-workflows#4"
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            self.blocker_lines(result),
+            ["unmet: open blocker sh4i-yurei/ci-workflows#4 is in another repository"],
+        )
+        self.assertEqual(len(self.card_calls()), 1)
+
+    def test_proposed_pass_does_not_hide_unnamed_blocker(self):
+        self.proposed_setup()
+        other = json.loads((FIXTURES / "ready-infra-60-blocked.json").read_text())[0]
+        other["state"] = "open"
+        self.state["blocked_by"].append(other)
+        result = self.run_ready("23", "--check", "--proposed-with", f"{REPO}#22")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            self.blocker_lines(result),
+            [
+                f"met: open blocker {REPO}#22 is in Proposed beside this issue",
+                "unmet: open blocker sh4i-yurei/ci-workflows#4",
+            ],
+        )
+
+    def test_stacked_and_proposed_blockers_keep_github_order(self):
+        self.state["blocked_by"] = [self.stacked_blocker(), self.stacked_blocker(20)]
+        self.ready_fields()
+        self.linked()
+        self.open_pull()
+        self.proposed_card(20)
+        result = self.run_ready(
+            "23",
+            "--check",
+            "--stacked-on",
+            f"{REPO}#22",
+            "--proposed-with",
+            f"{REPO}#20",
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(
+            self.blocker_lines(result),
+            [
+                f"met: open blocker {REPO}#22 sits lower in this stack on agent/22-ready-check",
+                f"met: open blocker {REPO}#20 is in Proposed beside this issue",
+            ],
+        )
+
+    def test_unmatched_option_names_follow_no_blockers_in_option_order(self):
+        self.ready_fields()
+        result = self.run_ready(
+            "23",
+            "--check",
+            "--stacked-on",
+            f"{REPO}#20",
+            "--proposed-with",
+            f"{REPO}#22",
+        )
+        self.assertEqual(result.returncode, 1)
+        lines = result.stdout.splitlines()
+        position = lines.index("met: no open blocking issues")
+        self.assertEqual(
+            lines[position + 1 : position + 3],
+            [
+                f"unmet: stacked-on {REPO}#20 is not an open blocker of this issue",
+                f"unmet: proposed-with {REPO}#22 is not an open blocker of this issue",
+            ],
+        )
+
+    def test_proposed_card_graphql_error_is_reported_without_edit(self):
+        self.proposed_setup()
+        self.state["card_errors_by_url"] = {
+            f"https://github.com/{REPO}/issues/22": "API rate limit already exceeded for user ID 232996764."
+        }
+        result = self.run_ready("23", "--check", "--proposed-with", f"{REPO}#22")
+        self.assertEqual(
+            (result.returncode, result.stdout),
+            (2, "API rate limit already exceeded for user ID 232996764.\n"),
+        )
+        self.assertFalse(
+            any(call["args"][:2] == ["project", "item-edit"] for call in self.calls())
+        )
+
+    def test_proposed_help_keeps_stacked_help(self):
+        output = io.StringIO()
+        with redirect_stdout(output), self.assertRaises(SystemExit) as ended:
+            issue_tool.main(["ready", "--help"])
+        self.assertEqual(ended.exception.code, 0)
+        help_text = " ".join(output.getvalue().split())
+        self.assertIn(
+            "an open blocker whose card is in Proposed beside this one; needs --check",
+            help_text,
+        )
+        self.assertIn(
+            "an open blocker that sits lower in this stack; needs --check",
+            help_text,
+        )
+
     def test_stacked_on_requires_check_before_any_github_call(self):
         result = self.run_ready("23", "--stacked-on", f"{REPO}#22")
         self.assertEqual(
@@ -1227,7 +1493,9 @@ class IssueReady(unittest.TestCase):
             ),
             (
                 ["ready", "--help"],
-                "usage: issue.py ready [-h] [--check] [--stacked-on STACKED_ON] issue\n\n"
+                "usage: issue.py ready [-h] [--check] [--stacked-on STACKED_ON]\n"
+                "                      [--proposed-with PROPOSED_WITH]\n"
+                "                      issue\n\n"
                 "positional arguments:\n"
                 "  issue\n\n"
                 "options:\n"
@@ -1235,7 +1503,10 @@ class IssueReady(unittest.TestCase):
                 "  --check\n"
                 "  --stacked-on STACKED_ON\n"
                 "                        an open blocker that sits lower in this stack; needs\n"
-                "                        --check\n",
+                "                        --check\n"
+                "  --proposed-with PROPOSED_WITH\n"
+                "                        an open blocker whose card is in Proposed beside this\n"
+                "                        one; needs --check\n",
             ),
         ):
             with self.subTest(args=args):
@@ -1252,7 +1523,10 @@ class IssueReady(unittest.TestCase):
                 help_text = help_text.replace(
                     f"usage: {command_name}", f"usage: {expected_name}", 1
                 )
-                self.assertEqual((raised.exception.code, help_text), (0, expected))
+                self.assertEqual(
+                    (raised.exception.code, " ".join(help_text.split())),
+                    (0, " ".join(expected.split())),
+                )
 
 
 if __name__ == "__main__":
