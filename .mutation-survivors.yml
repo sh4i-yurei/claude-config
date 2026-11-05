@@ -1,35 +1,34 @@
-# G3b Ready mutants left by the completed scoped mutmut run.
-# The command parser's remaining mutants alter unchanged G3a Open behavior.
+# Equivalent mutants confirmed by scoped local mutmut runs.
 - mutant: tools.workflow.issue.x_review_result__mutmut_5
   reason: >-
     False and None are both false in the only condition that reads in_response
     before the Response heading. No block selection or command output changes.
-- mutant: tools.workflow.issue.x_review_result__mutmut_20
+- mutant: tools.workflow.issue.x_review_blocks__mutmut_2
   reason: >-
     False and None are both false when the parser tests whether it is inside a
     fenced block. The state is set to True before any block content is read.
-- mutant: tools.workflow.issue.x_review_result__mutmut_22
+- mutant: tools.workflow.issue.x_review_blocks__mutmut_4
   reason: >-
     The content list is reset to an empty list at the start of every json block.
     Its initial value is never read through the command.
-- mutant: tools.workflow.issue.x_review_result__mutmut_34
+- mutant: tools.workflow.issue.x_review_blocks__mutmut_16
   reason: >-
     False and None are both false after a closing fence. Both states lead to the
     same next block selection and command result.
-- mutant: tools.workflow.issue.x_debt_issue__mutmut_82
+- mutant: tools.workflow.issue.x_file_debt_rounds__mutmut_74
   reason: >-
     Once duplicate round files are refused, the final round's file is always
     the given file. Re-reading it returns the same review result as the first
     read when the handoff is stable during the command. Testing the difference
     would require changing the input file between two internal reads.
-- mutant: tools.workflow.issue.x_debt_issue__mutmut_156
+- mutant: tools.workflow.issue.x_debt_rounds__mutmut_118
   reason: >-
     A missing or empty sub-issue body becomes either an empty string or XXXX.
-    Neither contains the given review file name, so the refusal and writes agree.
-- mutant: tools.workflow.issue.x_debt_issue__mutmut_168
+    Neither contains a final round's review file name or URL, so the refusal and writes agree.
+- mutant: tools.workflow.issue.x_debt_rounds__mutmut_130
   reason: >-
     A missing or empty sub-issue body becomes either an empty string or XXXX.
-    Neither contains an earlier round's file name, so the refusal and writes agree.
+    Neither contains an earlier round's review file name or URL, so the refusal and writes agree.
 - mutant: hooks.git-guard.x_command__mutmut_115
   reason: >-
     bashlex redirect nodes always expose the heredoc attribute; removing getattr's fallback leaves every parsed command decision unchanged.

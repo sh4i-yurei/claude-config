@@ -128,3 +128,12 @@ def load_boards():
     """Return validated repository-to-project mappings from workflow.toml."""
     boards, _ = load_board_config()
     return boards
+
+
+def load_bot():
+    """Return the configured nightly review bot's login."""
+    bot = _read("workflow.toml").get("bot")
+    login = bot.get("login") if isinstance(bot, dict) else None
+    if not isinstance(login, str) or not login:
+        raise ConfigError("workflow.toml: [bot] login must be a non-empty string")
+    return login

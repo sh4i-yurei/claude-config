@@ -153,7 +153,42 @@ if args[:1] == ["api"]:
         ):
             result["data"]["repositoryOwner"] = None
     elif method == "GET":
-        if endpoint.endswith("/issues/28/sub_issues") and debt_fixtures:
+        if (
+            endpoint == "repos/sh4i-yurei/claude-config/pulls/69/reviews"
+            and debt_fixtures
+        ):
+            query = (
+                dict(part.split("=", 1) for part in args[1].split("?", 1)[1].split("&"))
+                if "?" in args[1]
+                else {}
+            )
+            page = query.get("page")
+            if (
+                query.get("per_page") != "100"
+                or not page
+                or not page.isdecimal()
+                or int(page) < 1
+            ):
+                print(
+                    "reviews require per_page=100 and a positive page", file=sys.stderr
+                )
+                sys.exit(1)
+            reviews = state.get("reviews")
+            if reviews is None:
+                reviews = json.loads(
+                    (debt_fixtures / "pull-69-reviews.json").read_text()
+                )
+            start = (int(page) - 1) * 100
+            result = reviews[start : start + 100]
+        elif endpoint.endswith("/issues/67/sub_issues") and debt_fixtures:
+            result = state.get("sub_issues_response")
+            if result is None:
+                result = json.loads(
+                    (debt_fixtures / "issue-67-sub-issues.json").read_text()
+                )
+        elif endpoint.endswith("/issues/67") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-67.json").read_text())
+        elif endpoint.endswith("/issues/28/sub_issues") and debt_fixtures:
             result = (
                 json.loads((debt_fixtures / "issue-28-sub-issues.json").read_text())
                 if not state.get("empty_sub_issues")

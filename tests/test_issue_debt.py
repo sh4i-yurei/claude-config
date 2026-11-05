@@ -1,4 +1,5 @@
 from contextlib import redirect_stderr, redirect_stdout
+import copy
 import io
 import json
 import os
@@ -16,6 +17,7 @@ OPEN_FIXTURES = ROOT / "tests/fixtures/issue_open"
 sys.path.insert(0, str(ROOT / "tools/workflow"))
 sys.path.insert(0, str(ROOT))
 import tools.workflow.issue as issue_tool
+import tools.workflow.config as config_package
 import config as workflow_config
 
 G6C = "2026-10-27-codex-to-claude-workflow-g6c-board-add-race-review-2.md"
@@ -94,6 +96,378 @@ class IssueDebt(unittest.TestCase):
         code, output = self.run_command("debt", path)
         self.assertEqual((code, output), (2, f"{path.name}: {message}\n"))
         self.assertEqual(self.calls(), [])
+
+    def pr_review(self):
+        reviews = json.loads((FIXTURES / "pull-69-reviews.json").read_text())
+        review = next(review for review in reviews if review["id"] == 5781854192)
+        review["user"]["login"] = "sh4iyureibot-cpu"
+        return review
+
+    def run_pr(self, *options):
+        return self.run_command("debt", "--pr", f"{REPO}#69", *options)
+
+    def pr_state(self, reviews=None, children=None):
+        self.state["reviews"] = reviews if reviews is not None else [self.pr_review()]
+        self.state["sub_issues_response"] = children if children is not None else []
+        self.save()
+
+    def pr_result(self, review, change):
+        review = copy.deepcopy(review)
+        before, rest = review["body"].split("```json\n", 1)
+        block, after = rest.split("\n```", 1)
+        result = json.loads(block)
+        change(result)
+        review["body"] = before + "```json\n" + json.dumps(result) + "\n```" + after
+        return review
+
+    def pr_context(self, create):
+        return (
+            create["body"]
+            .split("### Project, step, and reason\n\n", 1)[1]
+            .split("\n\n### What changes", 1)[0]
+        )
+
+    def test_load_bot(self):
+        self.assertEqual(config_package.load_bot(), "sh4iyureibot-cpu")
+        original = (self.workflow / "workflow.toml").read_text()
+        for replacement in ("", '[bot]\nlogin = ""\n', "[bot]\nlogin = 3\n"):
+            with self.subTest(replacement=replacement):
+                (self.workflow / "workflow.toml").write_text(
+                    original.replace('[bot]\nlogin = "sh4iyureibot-cpu"\n', replacement)
+                )
+                with patch.object(config_package, "DIRECTORY", self.workflow):
+                    with self.assertRaisesRegex(
+                        config_package.ConfigError,
+                        r"^workflow\.toml: \[bot\] login must be a non-empty string$",
+                    ):
+                        config_package.load_bot()
+
+    def test_pr_bot_config_error_is_named(self):
+        path = self.workflow / "workflow.toml"
+        path.write_text(
+            path.read_text().replace('login = "sh4iyureibot-cpu"', 'login = ""')
+        )
+        code, output = self.run_pr("--dry-run")
+        self.assertEqual(
+            (code, output),
+            (2, "workflow.toml: [bot] login must be a non-empty string\n"),
+        )
+        self.assertEqual(self.calls(), [])
+
+    def test_pr_invalid_reviews_response_is_named(self):
+        self.state["reviews"] = "invalid"
+        self.save()
+        code, output = self.run_pr("--dry-run")
+        self.assertEqual(
+            (code, output), (2, f"{REPO}#69: GitHub returned invalid reviews\n")
+        )
+
+    def test_pr_argument_validation(self):
+        for argv in (("debt",), ("debt", str(FIXTURES / G6C), "--pr", f"{REPO}#69")):
+            with self.subTest(argv=argv):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    code = issue_tool.main(list(argv))
+                self.assertEqual(
+                    (code, output.getvalue()),
+                    (2, "debt takes a review file or --pr, exactly one\n"),
+                )
+                self.assertEqual(self.calls(), [])
+        code, output = self.run_command("debt", "--pr", "claude-config#69")
+        self.assertEqual((code, output), (2, "--pr must be owner/repo#number\n"))
+        self.assertEqual(self.calls(), [])
+
+    def test_pr_one_round_dry_run(self):
+        self.pr_state()
+        code, output = self.run_pr("--dry-run")
+        self.assertEqual(code, 0, output)
+        create = self.planned(output)
+        address = self.pr_review()["html_url"]
+        self.assertEqual(
+            self.pr_context(create),
+            f"Non-blocking findings from 6b's round 1 review of #67, in {address}.",
+        )
+        self.assertEqual(create["title"], "Tech debt from the review of 6b")
+        self.assertEqual(
+            create["labels"], ["type:chore", "scope:workflow", "tech-debt"]
+        )
+        result = json.loads(
+            self.pr_review()["body"].split("```json\n", 1)[1].split("\n```", 1)[0]
+        )
+        self.assertEqual(
+            self.changes(create),
+            [
+                f"- {finding['file']}:{finding['line']}: {finding['summary']}"
+                for finding in result["findings"]
+            ],
+        )
+        self.assertIn(
+            f"Would call: POST repos/{REPO}/issues/67/sub_issues with sub_issue_id NEW_ISSUE_ID",
+            output.splitlines(),
+        )
+        self.assertEqual(
+            [c["args"] for c in self.calls() if "/reviews?" in " ".join(c["args"])],
+            [["api", f"repos/{REPO}/pulls/69/reviews?per_page=100&page=1"]],
+        )
+        self.no_writes()
+
+    def test_pr_ignores_other_reviews_and_invalid_bot_reviews(self):
+        cases = [
+            json.loads((FIXTURES / "pull-69-reviews.json").read_text()),
+            [dict(self.pr_review(), body=self.pr_review()["body"].split("\n", 1)[1])],
+            [dict(self.pr_review(), state="CHANGES_REQUESTED")],
+        ]
+        for reviews in cases:
+            with self.subTest(reviews=reviews):
+                self.pr_state(reviews)
+                code, output = self.run_pr("--dry-run")
+                self.assertEqual(
+                    (code, output),
+                    (
+                        2,
+                        f"{REPO}#69: no review by sh4iyureibot-cpu carries a nightly review marker\n",
+                    ),
+                )
+
+    def test_pr_skips_non_round_reviews_before_bot_round(self):
+        base = self.pr_review()
+        for earlier in (
+            None,
+            dict(base, body=None),
+            dict(base, body=base["body"].split("\n", 1)[1]),
+        ):
+            with self.subTest(earlier=earlier is None):
+                self.pr_state([earlier, base])
+                code, output = self.run_pr("--dry-run")
+                self.assertEqual(code, 0, output)
+                self.assertEqual(
+                    self.pr_context(self.planned(output)),
+                    f"Non-blocking findings from 6b's round 1 review of #67, in {base['html_url']}.",
+                )
+
+    def test_pr_reviews_paginate(self):
+        reviews = [
+            dict(self.pr_review(), user={"login": "sh4i-yurei"}) for _ in range(100)
+        ] + [self.pr_review()]
+        self.pr_state(reviews)
+        code, output = self.run_pr("--dry-run")
+        self.assertEqual(code, 0, output)
+        self.assertEqual(
+            [c["args"][-1] for c in self.calls() if "/reviews?" in " ".join(c["args"])],
+            [
+                f"repos/{REPO}/pulls/69/reviews?per_page=100&page=1",
+                f"repos/{REPO}/pulls/69/reviews?per_page=100&page=2",
+            ],
+        )
+
+    def test_pr_two_rounds_keep_each_address(self):
+        first = self.pr_result(
+            self.pr_review(),
+            lambda result: result.update(
+                verdict="changes_required",
+                findings=[
+                    *result["findings"],
+                    {
+                        "severity": "blocking",
+                        "summary": "A blocking finding",
+                        "breaks_test_case": "a stated case",
+                    },
+                ],
+            ),
+        )
+        second = copy.deepcopy(self.pr_review())
+        second["id"] = 5781854193
+        second["html_url"] = first["html_url"].replace("5781854192", "5781854193")
+        second["body"] = second["body"].replace("round=1", "round=2")
+        self.pr_state([first, second])
+        code, output = self.run_pr("--dry-run")
+        self.assertEqual(code, 0, output)
+        create = self.planned(output)
+        self.assertEqual(
+            self.pr_context(create),
+            f"Non-blocking findings from 6b's review rounds 1 to 2 of #67, in {first['html_url']} and {second['html_url']}.",
+        )
+        expected = []
+        for number, review in ((1, first), (2, second)):
+            result = json.loads(
+                review["body"].split("```json\n", 1)[1].split("\n```", 1)[0]
+            )
+            expected.extend(
+                f"- Round {number}: {finding['file']}:{finding['line']}: {finding['summary']}"
+                for finding in result["findings"]
+                if finding["severity"] == "non_blocking"
+            )
+        self.assertEqual(self.changes(create), expected)
+
+    def test_pr_without_leftovers_makes_no_sub_issues_call(self):
+        review = self.pr_result(
+            self.pr_review(),
+            lambda result: result.update(
+                findings=[
+                    {
+                        "severity": "non_blocking",
+                        "breaks_test_case": "a stated case",
+                        "summary": "not leftover",
+                    }
+                ]
+            ),
+        )
+        self.pr_state([review])
+        code, output = self.run_pr("--dry-run")
+        self.assertEqual(
+            (code, output), (0, f"{REPO}#69: no leftover findings; nothing opened\n")
+        )
+        self.assertEqual(
+            [call["args"] for call in self.calls()],
+            [["api", f"repos/{REPO}/pulls/69/reviews?per_page=100&page=1"]],
+        )
+
+    def test_pr_real_run_matches_file_opening_steps(self):
+        self.pr_state()
+        dry_code, dry_output = self.run_pr("--dry-run")
+        self.assertEqual(dry_code, 0, dry_output)
+        create = self.planned(dry_output)
+        self.env["FAKE_GH_CALLS"] = str(self.root / "debt-calls.jsonl")
+        code, output = self.run_pr()
+        self.assertEqual(code, 0, output)
+        calls = self.calls()
+        self.assertEqual(
+            calls[0]["args"],
+            ["api", f"repos/{REPO}/pulls/69/reviews?per_page=100&page=1"],
+        )
+        self.assertEqual(
+            calls[1]["args"], ["api", f"repos/{REPO}/issues/67/sub_issues"]
+        )
+        self.assertEqual(calls[2]["args"], ["api", f"repos/{REPO}/issues/67"])
+        self.env["FAKE_GH_CALLS"] = str(self.root / "open-calls.jsonl")
+        issue_file = self.root / "same-pr-debt.toml"
+        fields = {}
+        for section in create["body"].strip().split("\n\n### "):
+            heading, value = section.removeprefix("### ").split("\n\n", 1)
+            fields[
+                {
+                    "Project, step, and reason": "context",
+                    "What changes": "changes",
+                    "Done when": "done",
+                }[heading]
+            ] = value
+        issue_file.write_text(
+            f'repo = {json.dumps(REPO)}\nkind = "chore"\ntitle = {json.dumps(create["title"])}\n'
+            'scope = "scope:workflow"\nparent = 67\nlabels = ["tech-debt"]\n\n[body]\n'
+            + "".join(f"{key} = {json.dumps(value)}\n" for key, value in fields.items())
+        )
+        open_code, open_output = self.run_command("open", issue_file)
+        self.assertEqual(open_code, 0, open_output)
+        self.assertEqual(calls[3:], self.calls())
+
+    def test_pr_review_block_validation(self):
+        base = self.pr_review()
+        cases = [
+            (
+                base["body"] + "\n<!-- nightly:review issue=67 round=2 -->",
+                f"{REPO}#69: {base['html_url']} has more than one nightly review marker",
+            ),
+            (
+                base["body"].split("```json", 1)[0],
+                f"{REPO}#69: {base['html_url']}: expected exactly one review result block, found 0",
+            ),
+            (
+                base["body"] + "\n```json\n" + base["body"].split("```json\n", 1)[1],
+                f"{REPO}#69: {base['html_url']}: expected exactly one review result block, found 2",
+            ),
+            (
+                base["body"].replace("issue=67", "issue=12"),
+                f"{REPO}#69: {base['html_url']}: its marker names issue 12 but its result names issue 67",
+            ),
+            (
+                base["body"].replace(REPO, "sh4i-yurei/codex-config"),
+                f"{REPO}#69: {base['html_url']}: its result names repository sh4i-yurei/codex-config, not {REPO}",
+            ),
+        ]
+        for body, message in cases:
+            with self.subTest(message=message):
+                self.pr_state([dict(base, body=body)])
+                code, output = self.run_pr("--dry-run")
+                self.assertEqual((code, output), (2, message + "\n"))
+
+    def test_pr_round_validation(self):
+        first = self.pr_review()
+        second = copy.deepcopy(first)
+        second["id"] = 5781854193
+        second["html_url"] = first["html_url"].replace("5781854192", "5781854193")
+        second["body"] = second["body"].replace("round=1", "round=2")
+        cases = [
+            ([second], f"{REPO}#69: round 1 is missing"),
+            (
+                [first, dict(second, body=first["body"])],
+                f"{REPO}#69: round 1 appears in more than one review: {first['html_url']} and {second['html_url']}",
+            ),
+            (
+                [
+                    self.pr_result(
+                        first, lambda result: result.update(verdict="changes_required")
+                    )
+                ],
+                f"{REPO}#69: the final round's verdict is changes_required; leftovers are filed once the build passes",
+            ),
+            (
+                [
+                    self.pr_result(first, lambda result: result.update(item="6a")),
+                    second,
+                ],
+                f"{REPO}#69: {first['html_url']} names a different repository, issue or item",
+            ),
+        ]
+        for reviews, message in cases:
+            with self.subTest(message=message):
+                self.pr_state(reviews)
+                code, output = self.run_pr("--dry-run")
+                self.assertEqual((code, output), (2, message + "\n"))
+
+    def test_pr_checks_middle_round_metadata(self):
+        first = self.pr_review()
+        middle = self.pr_result(first, lambda result: result.update(item="6a"))
+        middle["id"] = 5781854193
+        middle["html_url"] = first["html_url"].replace("5781854192", "5781854193")
+        middle["body"] = middle["body"].replace("round=1", "round=2")
+        final = copy.deepcopy(first)
+        final["id"] = 5781854194
+        final["html_url"] = first["html_url"].replace("5781854192", "5781854194")
+        final["body"] = final["body"].replace("round=1", "round=3")
+        self.pr_state([first, middle, final])
+        code, output = self.run_pr("--dry-run")
+        self.assertEqual(
+            (code, output),
+            (
+                2,
+                f"{REPO}#69: {middle['html_url']} names a different repository, issue or item\n",
+            ),
+        )
+
+    def test_pr_already_filed(self):
+        review = self.pr_review()
+        child = json.loads((FIXTURES / "issue-67-sub-issues.json").read_text())[0]
+        child["body"] = (child.get("body") or "") + review["html_url"]
+        self.pr_state(children=[child])
+        code, output = self.run_pr("--dry-run")
+        self.assertEqual(
+            (code, output),
+            (2, f"{REPO}#69: #68 already files this review's leftovers\n"),
+        )
+
+    def test_pr_help(self):
+        output = io.StringIO()
+        with redirect_stdout(output), self.assertRaises(SystemExit) as error:
+            issue_tool.main(["debt", "--help"])
+        self.assertEqual(error.exception.code, 0)
+        self.assertEqual(
+            next(
+                line.strip()
+                for line in output.getvalue().splitlines()
+                if line.strip().startswith("--pr PR")
+            ),
+            "--pr PR         a pull request whose bot reviews hold the rounds",
+        )
 
     def test_duplicate_final_round_is_refused(self):
         duplicate = "2026-10-28-codex-to-claude-workflow-g6c-board-add-race-review-2.md"

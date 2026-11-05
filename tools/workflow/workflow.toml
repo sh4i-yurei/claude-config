@@ -1,6 +1,9 @@
 owners = ["sh4i-yurei"]
 exceptions = ["sh4i-yurei/second-brain"]
 
+[bot]
+login = "sh4iyureibot-cpu"
+
 [products]
 "keepbreath.ing" = { owner = "sh4i-yurei", number = 1 }
 "Tooling" = { owner = "sh4i-yurei", number = 2 }
