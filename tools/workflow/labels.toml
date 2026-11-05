@@ -165,3 +165,7 @@ description = "Area: tailscale"
 [repository."sh4i-yurei/keepbreathing-infra"."scope:workstation"]
 color = "C5DEF5"
 description = "Area: workstation"
+
+[repository."sh4i-yurei/platform-tickets".ticket]
+color = "D93F0B"
+description = "An alert from the platform, opened and closed by the ticket band"
