@@ -9,7 +9,8 @@ import subprocess
 import tomllib
 from urllib.parse import urlencode
 
-from config import ConfigError, load, load_board_config, load_boards
+from config import ConfigError, load, load_board_config, load_boards, load_bot
+from markers import parse_review_marker
 
 
 class IssueError(Exception):
@@ -578,25 +579,12 @@ def open_data(data, dry_run):
     return 0
 
 
-def review_result(path):
-    try:
-        lines = Path(path).read_text().splitlines()
-    except OSError as error:
-        raise IssueError(f"{path}: {error}") from error
-    response = []
-    in_response = False
-    for line in lines:
-        if line == "## Response":
-            in_response = True
-            continue
-        if in_response and line.startswith("## "):
-            break
-        if in_response:
-            response.append(line)
+def review_blocks(lines):
+    """Find complete review result blocks among the given lines."""
     blocks = []
     inside = False
     content = []
-    for line in response:
+    for line in lines:
         if not inside and line == "```json":
             inside = True
             content = []
@@ -613,6 +601,25 @@ def review_result(path):
                 blocks.append(value)
         elif inside:
             content.append(line)
+    return blocks
+
+
+def review_result(path):
+    try:
+        lines = Path(path).read_text().splitlines()
+    except OSError as error:
+        raise IssueError(f"{path}: {error}") from error
+    response = []
+    in_response = False
+    for line in lines:
+        if line == "## Response":
+            in_response = True
+            continue
+        if in_response and line.startswith("## "):
+            break
+        if in_response:
+            response.append(line)
+    blocks = review_blocks(response)
     if len(blocks) != 1:
         raise IssueError(
             f"{Path(path).name}: expected exactly one review result block in Response, found {len(blocks)}"
@@ -628,7 +635,7 @@ def review_file_identity(name):
     return build, int(match.group(1))
 
 
-def debt_issue(path, dry_run):
+def file_debt_rounds(path):
     result = review_result(path)
     name = Path(path).name
     identity = review_file_identity(name)
@@ -661,23 +668,99 @@ def debt_issue(path, dry_run):
     for round_number in range(1, final_round + 1):
         if round_number not in rounds:
             raise IssueError(f"{name}: round {round_number} is missing")
-    if result["verdict"] != "pass":
-        raise IssueError(
-            f"{name}: the final round's verdict is {result['verdict']}; leftovers are filed once the build passes"
-        )
     reviews = []
     for round_number in range(1, final_round + 1):
         round_path = rounds[round_number]
         round_result = (
             result if round_number == final_round else review_result(round_path)
         )
-        if round_number != final_round and any(
-            round_result[key] != result[key] for key in ("repo", "issue", "item")
-        ):
-            raise IssueError(
-                f"{name}: {round_path.name} names a different repository, issue or item"
-            )
         reviews.append((round_number, round_path.name, round_result))
+    return name, reviews, final_round, None
+
+
+def pr_debt_rounds(reference):
+    match = re.fullmatch(r"([^/#\s]+/[^/#\s]+)#([1-9][0-9]*)", reference)
+    if not match:
+        raise IssueError("--pr must be owner/repo#number")
+    repo, number = match.groups()
+    try:
+        bot = load_bot()
+    except ConfigError as error:
+        raise IssueError(str(error)) from error
+    reviews = []
+    page = 1
+    while True:
+        response = api(f"repos/{repo}/pulls/{number}/reviews?per_page=100&page={page}")
+        if not isinstance(response, list):
+            raise IssueError(f"{reference}: GitHub returned invalid reviews")
+        reviews.extend(response)
+        if len(response) < 100:
+            break
+        page += 1
+    rounds = []
+    for review in reviews:
+        if not isinstance(review, dict) or review.get("state") != "COMMENTED":
+            continue
+        user = review.get("user")
+        if not isinstance(user, dict) or user.get("login") != bot:
+            continue
+        body = review.get("body")
+        lines = body.splitlines() if isinstance(body, str) else []
+        markers = [marker for line in lines if (marker := parse_review_marker(line))]
+        if not markers:
+            continue
+        address = review.get("html_url")
+        if len(markers) != 1:
+            raise IssueError(
+                f"{reference}: {address} has more than one nightly review marker"
+            )
+        blocks = review_blocks(lines)
+        if len(blocks) != 1:
+            raise IssueError(
+                f"{reference}: {address}: expected exactly one review result block, found {len(blocks)}"
+            )
+        result = blocks[0]
+        marker_issue, round_number = markers[0]
+        if marker_issue != result["issue"]:
+            raise IssueError(
+                f"{reference}: {address}: its marker names issue {marker_issue} but its result names issue {result['issue']}"
+            )
+        if result["repo"] != repo:
+            raise IssueError(
+                f"{reference}: {address}: its result names repository {result['repo']}, not {repo}"
+            )
+        rounds.append((round_number, address, result))
+    if not rounds:
+        raise IssueError(
+            f"{reference}: no review by {bot} carries a nightly review marker"
+        )
+    return reference, rounds, max(round_number for round_number, _, _ in rounds), repo
+
+
+def debt_rounds(name, reviews, final_round, pr_repo, dry_run):
+    by_number = {}
+    for number, address, result in reviews:
+        by_number.setdefault(number, []).append((address, result))
+    for number in sorted(by_number):
+        if len(by_number[number]) > 1:
+            addresses = [address for address, _ in by_number[number]]
+            raise IssueError(
+                f"{name}: round {number} appears in more than one review: {' and '.join(addresses)}"
+            )
+    for number in range(1, final_round + 1):
+        if number not in by_number:
+            raise IssueError(f"{name}: round {number} is missing")
+    reviews = [(number, *by_number[number][0]) for number in range(1, final_round + 1)]
+    result = reviews[-1][2]
+    if result["verdict"] != "pass":
+        raise IssueError(
+            f"{name}: the final round's verdict is {result['verdict']}; leftovers are filed once the build passes"
+        )
+    for number, address, prior in reviews[:-1]:
+        if any(prior[key] != result[key] for key in ("repo", "issue", "item")):
+            raise IssueError(
+                f"{name}: {address} names a different repository, issue or item"
+            )
     leftovers = []
     for round_number, round_name, round_result in reviews:
         findings = round_result["findings"]
@@ -706,8 +789,9 @@ def debt_issue(path, dry_run):
     children = api(f"repos/{repo}/issues/{number}/sub_issues")
     if not isinstance(children, list):
         raise IssueError(f"{name}: GitHub returned invalid sub-issues")
+    final_address = reviews[-1][1]
     for child in children:
-        if isinstance(child, dict) and name in (child.get("body") or ""):
+        if isinstance(child, dict) and final_address in (child.get("body") or ""):
             raise IssueError(
                 f"{name}: #{child['number']} already files this review's leftovers"
             )
@@ -737,7 +821,10 @@ def debt_issue(path, dry_run):
             changes.append(f"- {prefix}{location}: {summary}")
         else:
             changes.append(f"- {prefix}{summary}")
-    sources = [f"05_Agents/handoffs/{round_name}" for _, round_name, _ in reviews]
+    sources = [
+        round_name if pr_repo else f"05_Agents/handoffs/{round_name}"
+        for _, round_name, _ in reviews
+    ]
     if final_round == 1:
         context = f"Non-blocking findings from {item}'s round 1 review of #{number}, in {sources[0]}."
     else:
@@ -756,6 +843,14 @@ def debt_issue(path, dry_run):
         },
     }
     return open_data(data, dry_run)
+
+
+def debt_issue(path, dry_run):
+    return debt_rounds(*file_debt_rounds(path), dry_run)
+
+
+def debt_pr(reference, dry_run):
+    return debt_rounds(*pr_debt_rounds(reference), dry_run)
 
 
 def form_sections(body):
@@ -1012,7 +1107,10 @@ def main(argv=None):
     debt_parser = commands.add_parser(
         "debt", help="file a build's review leftovers from its final round"
     )
-    debt_parser.add_argument("review_handoff")
+    debt_parser.add_argument("review_handoff", nargs="?")
+    debt_parser.add_argument(
+        "--pr", help="a pull request whose bot reviews hold the rounds"
+    )
     debt_parser.add_argument("--dry-run", action="store_true")
     ready_parser = commands.add_parser(
         "ready", help="check an issue's Definition of Ready"
@@ -1041,6 +1139,10 @@ def main(argv=None):
                 arguments.proposed_with,
             )
         if arguments.command == "debt":
+            if bool(arguments.review_handoff) == bool(arguments.pr):
+                raise IssueError("debt takes a review file or --pr, exactly one")
+            if arguments.pr:
+                return debt_pr(arguments.pr, arguments.dry_run)
             return debt_issue(arguments.review_handoff, arguments.dry_run)
         return open_issue(arguments.file, arguments.dry_run)
     except IssueError as error:
