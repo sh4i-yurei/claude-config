@@ -110,11 +110,11 @@ Start from `_Templates/project.md`. Name it as he'd say it out loud —
 `keepbreath.ing`, `Dev server`, `Home lab - Pi cluster` — because the filename is
 what `[[links]]` resolve against everywhere else.
 
-Nine sections: **What it is**, **Why** (including what done looks like), **Scope**
-(in and out), **How it's built**, **Decisions**, **Where it stands**, **Next**,
+Ten sections: **What it is**, **Why** (including what done looks like), **Scope**
+(in and out), **How it's built**, **Facts**, **Decisions**, **Where it stands**, **Next**,
 **Open questions**, **Risks**. An idea that hasn't started might only fill the
 first three; delete the rest rather than leaving empty headings. A live project
-fills all nine and that's fine — there is no length cap.
+fills all ten and that's fine — there is no length cap.
 
 The **In** half of Scope has to be concrete enough to build from. "The baseline every
 box shares" is not; a list of what the baseline actually does is. If you cannot write a
@@ -129,6 +129,15 @@ what order things happen in, and anything about the environment the build depend
 a fact was read off a real machine rather than assumed, say so and date it. Estates drift
 and notes go stale quietly — the Ansible project believed its droplets were AlmaLinux 10
 for four days because nobody had looked.
+
+**Facts** holds every claim a decision or a build depends on, about a real system,
+tool, service, machine, file or his own code, each with the evidence that proved it:
+a disposable test with its command and output, a source read with the file and line,
+a documentation lookup with its archive path, or a read-only check on the machine
+with the line it printed and the date. A decision rests only on facts listed there,
+and a claim that is still unchecked keeps its item out of Next. Build handoffs quote
+the entries their test cases depend on. The rule is Workflow upkeep decision 47, and
+the steps are the gate in `codex-build-loop`.
 
 ## Decisions are numbered, and superseded rather than deleted
 

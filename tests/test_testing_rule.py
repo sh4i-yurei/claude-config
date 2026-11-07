@@ -72,3 +72,49 @@ def test_project_note_skill_sizes_design_from_inbox_authority():
         "critique",
     ):
         assert expected in prose
+
+
+def test_project_note_skill_lists_ten_sections_with_facts():
+    skill = (ROOT / "skills/project-note/SKILL.md").read_text()
+    section = skill.split("## Creating one", 1)[1].split("\n## ", 1)[0]
+    prose = " ".join(section.split())
+    assert "Ten sections:" in prose
+    assert "**How it's built**, **Facts**, **Decisions**" in prose
+    assert "fills all ten" in prose
+    assert "Nine sections" not in prose
+    assert "fills all nine" not in prose
+
+
+def test_project_note_skill_describes_facts_and_their_place():
+    skill = (ROOT / "skills/project-note/SKILL.md").read_text()
+    section = skill.split("## Creating one", 1)[1].split(
+        "\n## Decisions are numbered", 1
+    )[0]
+    paragraphs = [" ".join(part.split()) for part in section.split("\n\n")]
+    facts = next(
+        (part for part in paragraphs if part.startswith("**Facts** holds")), None
+    )
+    assert facts == (
+        "**Facts** holds every claim a decision or a build depends on, about a real system, tool, "
+        "service, machine, file or his own code, each with the evidence that proved it: a disposable "
+        "test with its command and output, a source read with the file and line, a documentation "
+        "lookup with its archive path, or a read-only check on the machine with the line it printed "
+        "and the date. A decision rests only on facts listed there, and a claim that is still unchecked "
+        "keeps its item out of Next. Build handoffs quote the entries their test cases depend on. "
+        "The rule is Workflow upkeep decision 47, and the steps are the gate in `codex-build-loop`."
+    )
+    assert (
+        paragraphs.index(facts)
+        == next(
+            i
+            for i, part in enumerate(paragraphs)
+            if part.startswith("**How it's built** carries")
+        )
+        + 1
+    )
+
+
+def test_vault_file_skill_names_ten_project_sections():
+    prose = " ".join((ROOT / "skills/vault-file/SKILL.md").read_text().split())
+    assert "has ten sections and specific rules" in prose
+    assert "nine sections" not in prose

@@ -28,7 +28,7 @@ Read the item first, then decide what it *is* — that determines everything els
 loud (`Dev server`, `keepbreath.ing`), because that filename is what `[[links]]`
 resolve against. Pick the subfolder by domain: `11_Infrastructure`, `12_Web`,
 `13_Mail`, `14_Security`, `15_Code`, `16_Tooling`. Use the `project-note` skill; it
-has nine sections and specific rules.
+has ten sections and specific rules.
 
 **A procedure you run when something happens** → `60_Operational_Manual/`, in the
 category matching what *triggers* it: `61_Deploying`, `62_Machines`,
