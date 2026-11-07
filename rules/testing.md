@@ -25,7 +25,9 @@ exposes that gap. A survivor may be explained only when no test of behaviour cou
 If only a test pinning an internal detail could kill a mutant, explain it instead of
 writing that test (testing-standard rule 4).
 
-Build handoffs come only from `_Templates/handoff-codex-build.md` and pass the pre-handoff
-checklist in `60_Operational_Manual/68_Dev_Workflow/codex-build-loop.md`. This keeps the
-test cases and evidence requirements in each build request. That manual and
+Build handoffs come only from `_Templates/handoff-codex-build.md` and pass the verification
+gate in `60_Operational_Manual/68_Dev_Workflow/codex-build-loop.md`: every fact with its
+evidence, each test case shown on the starting commit to run where it says and to fail
+without the change, and a read-only pre-flight. The pre-handoff checklist there lists the
+kinds of claim the gate checks. That manual and
 `~/Documents/Second_Brain/40_Reference/testing-standard.md` are the authorities.

@@ -27,6 +27,9 @@ def test_always_loaded_testing_rule_covers_build_and_evidence():
         "only a test pinning an internal detail could kill",
         "_Templates/handoff-codex-build.md",
         "pre-handoff checklist",
+        "verification gate",
+        "fail without the change",
+        "read-only pre-flight",
         "40_Reference/testing-standard.md",
         "60_Operational_Manual/68_Dev_Workflow/codex-build-loop.md",
     ):
