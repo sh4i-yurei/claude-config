@@ -188,3 +188,12 @@
   reason: >-
     Python's encoding lookup treats UTF-8 and utf-8 identically for writing.
     The output file bytes are the same for every input.
+- mutant: hooks.handoff-check.x_main__mutmut_67
+  reason: >-
+    str.replace replaces every occurrence for any negative count, so a count
+    of -2 and a count of -1 give the same Edit result whenever replace_all is set.
+- mutant: hooks.handoff-check.x_section_bullets__mutmut_8
+  reason: >-
+    When no section heading follows, the section ends at either len(lines) or
+    None, and lines[start:None] equals lines[start:len(lines)]. Every bullet and
+    every decision is unchanged.
