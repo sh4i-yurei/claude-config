@@ -20,6 +20,7 @@ TEMPLATE = Path(
 PLACEHOLDER = re.compile(r"(?<!\$)\{\{[\s\S]*?\}\}")
 SECTION = re.compile(r"[A-Z][A-Z ]+(?:, [^\n]+)?")
 BRANCH = re.compile(r"- Branch: stay on (\S+)\.(?: .*)?")
+EVIDENCE = re.compile(r"Evidence:\s*\S")
 
 
 def request_lines(content):
@@ -42,6 +43,30 @@ def is_build_handoff(content):
 
 def sections_from_template(content):
     return [line for line in request_lines(content) if SECTION.fullmatch(line)]
+
+
+def section_bullets(lines, section):
+    """Return each bullet in a Request section as its first line and its full text.
+
+    A bullet's full text joins its continuation lines, up to the next bullet or
+    a blank line. The section ends at the next section heading.
+    """
+    start = lines.index(section) + 1
+    end = next(
+        (i for i in range(start, len(lines)) if SECTION.fullmatch(lines[i])),
+        len(lines),
+    )
+    body = lines[start:end]
+    starts = [i for i, line in enumerate(body) if line.startswith("- ")]
+    bullets = []
+    for offset, following in zip(starts, [*starts[1:], len(body)]):
+        continuation = []
+        for line in body[offset + 1 : following]:
+            if not line.strip():
+                break
+            continuation.append(line.strip())
+        bullets.append((body[offset], " ".join([body[offset], *continuation])))
+    return bullets
 
 
 def problems(content, template):
@@ -70,35 +95,22 @@ def problems(content, template):
     )
 
     for section in sections:
-        if section == "TEST CASES" and section in masked_lines:
-            start = masked_lines.index(section) + 1
-            end = next(
-                (
-                    i
-                    for i in range(start, len(masked_lines))
-                    if SECTION.fullmatch(masked_lines[i])
-                ),
-                len(masked_lines),
-            )
-            cases = masked_lines[start:end]
-            bullets = [
-                (i, line) for i, line in enumerate(cases) if line.startswith("- ")
-            ]
+        if section not in masked_lines:
+            continue
+        if section == "TEST CASES":
+            bullets = section_bullets(masked_lines, section)
             if not bullets:
                 issues.append("Handoff has no test cases")
-            for offset, bullet in bullets:
-                following = next(
-                    (next_offset for next_offset, _ in bullets if next_offset > offset),
-                    len(cases),
-                )
-                continuation = []
-                for line in cases[offset + 1 : following]:
-                    if not line.strip():
-                        break
-                    continuation.append(line.strip())
-                joined = " ".join([bullet, *continuation])
-                if not bullet.startswith("- WHEN ") or ", THEN" not in joined:
-                    issues.append(f"Invalid test case: {bullet[:60]}")
+            for first, joined in bullets:
+                if not first.startswith("- WHEN ") or ", THEN" not in joined:
+                    issues.append(f"Invalid test case: {first[:60]}")
+        elif section == "FACTS":
+            bullets = section_bullets(masked_lines, section)
+            if not bullets:
+                issues.append("Handoff has no facts")
+            for first, joined in bullets:
+                if not EVIDENCE.search(joined):
+                    issues.append(f"Fact without evidence: {first[:60]}")
     return issues
 
 
@@ -120,20 +132,27 @@ def main():
         path.relative_to(HANDOFFS)
     except (OSError, ValueError):
         return 0
+    # A target that doesn't exist yet, or can't be read, has no Request on disk.
     try:
-        if event["tool_name"] == "Write":
-            content = tool_input.get("content")
-        else:
-            content = path.read_text()
-            old = tool_input.get("old_string")
-            new = tool_input.get("new_string")
-            if isinstance(old, str) and isinstance(new, str) and old:
-                content = content.replace(
-                    old, new, -1 if tool_input.get("replace_all") else 1
-                )
+        current = path.read_text()
     except (OSError, UnicodeError):
+        current = None
+    if event["tool_name"] == "Write":
+        content = tool_input.get("content")
+    elif current is None:
         return 0
+    else:
+        content = current
+        old = tool_input.get("old_string")
+        new = tool_input.get("new_string")
+        if isinstance(old, str) and isinstance(new, str) and old:
+            content = content.replace(
+                old, new, -1 if tool_input.get("replace_all") else 1
+            )
     if not isinstance(content, str) or not is_build_handoff(content):
+        return 0
+    # Decision 53: an existing handoff is checked only when its Request changes.
+    if current is not None and request_lines(current) == request_lines(content):
         return 0
     try:
         template = TEMPLATE.read_text()
