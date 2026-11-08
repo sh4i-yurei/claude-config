@@ -17,7 +17,8 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
   `config.py` validates both files, and `sync_labels.py` applies the definitions to every active
   repository returned by GitHub for those owners. A newly created repository receives the global
   labels without an entry in either file. `issue.py open` creates a checked issue and places it
-  and stray open issues on that repository's board.
+  and stray open issues on that repository's board. `handoff_cost.py` counts the Codex sessions
+  that followed one handoff, with their model calls and tokens.
 - `vale/`: configuration for Vale, the prose linter. `vale.ini` covers posts and is run by
   the `vale-post-lint.py` hook; `vale-sweep.ini` covers every prose note and is run by the
   vault sweep. `styles/` holds the rules: `keepbreath`, my own, and `ai-tells`, a downloaded
@@ -223,6 +224,27 @@ open issue blocking it. An Architecture-sized issue also needs a body line begin
 It prints each condition as met or unmet. Exit 0 means all conditions are met and, without
 `--check`, the board Status is Ready. Exit 1 means an issue needs more work. Exit 2 means a
 configuration or GitHub error, including a missing board mapping or board item.
+
+## Counting a handoff's Codex cost
+
+Run this command from the repository root with a handoff's file name or path. It reads every
+Codex session file under `~/.codex/sessions`, or under the folder `--sessions` names.
+
+```bash
+python3 tools/workflow/handoff_cost.py 2026-11-07-claude-to-codex-workflow-upkeep-handoff-facts.md
+```
+
+A session counts for the handoff when its first "Follow the Request in" message names a file
+with the same name. The command prints one line for each such session and then a total:
+
+```text
+rollout-2026-11-07T08-31-50-01a1c1f0-9c3e-7a63-b2d8-1e5f4c7a8d03.jsonl: 2 steps, 92069 input tokens (79616 cached), 1161 output tokens
+1 sessions, 2 steps, 92069 input tokens (79616 cached), 1161 output tokens
+```
+
+A step is one model call. The tokens are the sums of each call's own usage record, which also
+count the call that compacts a long session's context. When no session followed the handoff, the
+command says so on standard error and exits 1.
 
 ## What is not here
 
