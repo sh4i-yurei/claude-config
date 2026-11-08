@@ -12,6 +12,7 @@ VAULT = Path.home() / "Documents/Second_Brain"
 HANDOFFS = Path(
     os.environ.get("HANDOFF_CHECK_ROOT", VAULT / "05_Agents/handoffs")
 ).resolve()
+PROJECTS = Path(os.environ.get("HANDOFF_PROJECTS_ROOT", VAULT / "10_Projects"))
 TEMPLATE = Path(
     os.environ.get(
         "HANDOFF_BUILD_TEMPLATE", VAULT / "_Templates/handoff-codex-build.md"
@@ -21,6 +22,10 @@ PLACEHOLDER = re.compile(r"(?<!\$)\{\{[\s\S]*?\}\}")
 SECTION = re.compile(r"[A-Z][A-Z ]+(?:, [^\n]+)?")
 BRANCH = re.compile(r"- Branch: stay on (\S+)\.(?: .*)?")
 EVIDENCE = re.compile(r"Evidence:\s*\S")
+GATE = (
+    "Copy each fact word for word from the project note's Facts section: "
+    "see The gate in 60_Operational_Manual/68_Dev_Workflow/codex-build-loop.md"
+)
 
 
 def request_lines(content):
@@ -69,6 +74,55 @@ def section_bullets(lines, section):
     return bullets
 
 
+def normalized_fact(text):
+    """Compare fact text without Markdown code marks or formatting whitespace."""
+    return " ".join(text.replace("`", "").split())
+
+
+def project_facts(content):
+    """Find the named note and return its Facts bullets or one refusal."""
+    front = re.match(r"\A---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|\Z)", content)
+    project = (
+        re.search(r"(?m)^project:[^\n]*?\[\[([^\]\n]*)\]\]", front.group(1))
+        if front
+        else None
+    )
+    name = re.split(r"[|#]", project.group(1), maxsplit=1)[0].strip() if project else ""
+    if not name:
+        return "Handoff names no project note", set()
+    notes = [
+        path
+        for path in PROJECTS.rglob("*.md")
+        if path.is_file() and path.name == f"{name}.md"
+    ]
+    if not notes:
+        return f"Project note not found: {name}", set()
+    if len(notes) > 1:
+        return f"Project note name is ambiguous: {name}", set()
+    try:
+        lines = notes[0].read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return f"Project note cannot be read: {name}", set()
+    try:
+        start = lines.index("## Facts") + 1
+    except ValueError:
+        return f"Project note has no Facts section: {name}", set()
+    end = next(
+        (i for i in range(start, len(lines)) if lines[i].startswith("## ")), len(lines)
+    )
+    body = lines[start:end]
+    starts = [i for i, line in enumerate(body) if line.startswith("- ")]
+    facts = set()
+    for offset, following in zip(starts, [*starts[1:], len(body)]):
+        continuation = []
+        for line in body[offset + 1 : following]:
+            if not line.strip() or line.startswith("#"):
+                break
+            continuation.append(line.strip())
+        facts.add(normalized_fact(" ".join([body[offset], *continuation])))
+    return None, facts
+
+
 def problems(content, template):
     lines = request_lines(content)
     sections = sections_from_template(template)
@@ -80,6 +134,7 @@ def problems(content, template):
         for section in sections
         if section not in masked_lines
     ]
+    fact_gate = False
 
     branch_lines = [line for line in lines if line.startswith("- Branch:")]
     if not branch_lines or any(
@@ -108,9 +163,18 @@ def problems(content, template):
             bullets = section_bullets(masked_lines, section)
             if not bullets:
                 issues.append("Handoff has no facts")
+            note_issue, note_bullets = project_facts(content)
+            if note_issue:
+                issues.append(note_issue)
+                fact_gate = True
             for first, joined in bullets:
                 if not EVIDENCE.search(joined):
                     issues.append(f"Fact without evidence: {first[:60]}")
+                if not note_issue and normalized_fact(joined) not in note_bullets:
+                    issues.append(f"Fact not in the project note's Facts: {first[:60]}")
+                    fact_gate = True
+    if fact_gate:
+        issues.append(GATE)
     return issues
 
 

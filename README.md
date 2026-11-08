@@ -116,10 +116,14 @@ The hook checks only files under `05_Agents/handoffs/` with
 doesn't exist yet or can't be read in full, and a Write or Edit to an existing handoff
 only when the Request block it produces differs from the one in the file now.
 When the template has a section named exactly `FACTS`, it refuses a FACTS bullet that has
-no `Evidence:` followed by text, and a FACTS section with no bullets.
+no `Evidence:` followed by text, and a FACTS section with no bullets. It also finds the note
+named by the handoff's `project:` wikilink under `Second_Brain/10_Projects` and requires each
+FACTS bullet to match one in that note's `## Facts` section after removing backticks and
+collapsing whitespace. Missing, ambiguous, unreadable or factless project notes are refused.
+`HANDOFF_PROJECTS_ROOT` can point the hook at another project notes folder.
 It reads required section names
 from `Second_Brain/_Templates/handoff-codex-build.md` whenever it checks a handoff.
-Tests load the hook in-process and patch its `HANDOFFS` and `TEMPLATE` to point it at
+Tests load the hook in-process and patch its `HANDOFFS`, `PROJECTS` and `TEMPLATE` to point it at
 repository fixtures. If the template cannot be read, the hook allows the write
 and sends a warning to Claude through `additionalContext`.
 

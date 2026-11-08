@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import json
 import io
+import locale
 import os
 from pathlib import Path
 import runpy
@@ -17,6 +18,7 @@ HOOK = ROOT / "hooks/handoff-check.py"
 FIXTURES = ROOT / "tests/fixtures"
 HANDOFFS = FIXTURES / "handoffs"
 TEMPLATE = FIXTURES / "handoff-codex-build.md"
+NO_PROJECTS = FIXTURES / "no-projects"
 BUILD = HANDOFFS / "2026-10-22-claude-to-codex-workflow-w2-handoff-check.md"
 OLD = HANDOFFS / "2026-10-22-claude-to-codex-testing-2.1-infra-python.md"
 REVIEW = HANDOFFS / "2026-10-22-codex-to-claude-testing-1r-plumbing-review-1.md"
@@ -38,13 +40,14 @@ def handoff_folder():
         yield folder
 
 
-def call_hook(stdin_text, *, template=None, handoffs=None):
+def call_hook(stdin_text, *, template=None, handoffs=None, projects=None):
     """Run the hook in-process on raw stdin; return its exit code, stdout and stderr."""
     stdout = io.StringIO()
     stderr = io.StringIO()
     with (
         patch.object(CHECK, "HANDOFFS", Path(handoffs or HANDOFFS).resolve()),
         patch.object(CHECK, "TEMPLATE", Path(template or TEMPLATE)),
+        patch.object(CHECK, "PROJECTS", Path(projects or NO_PROJECTS)),
         patch.object(sys, "stdin", io.StringIO(stdin_text)),
         contextlib.redirect_stdout(stdout),
         contextlib.redirect_stderr(stderr),
@@ -71,6 +74,7 @@ def run_hook(
     all=False,
     template=None,
     handoffs=None,
+    projects=None,
 ):
     fields = {"file_path": str(path)}
     if tool == "Write":
@@ -79,7 +83,7 @@ def run_hook(
         fields.update(old_string=old, new_string=new, replace_all=all)
     event = {"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": fields}
     returned, printed, errors = call_hook(
-        json.dumps(event), template=template, handoffs=handoffs
+        json.dumps(event), template=template, handoffs=handoffs, projects=projects
     )
     assert returned == 0, errors
     output = json.loads(printed)["hookSpecificOutput"] if printed else {}
@@ -590,6 +594,16 @@ class FactsAndChangedRequest(unittest.TestCase):
         self.template.write_text(
             TEMPLATE.read_text().replace("\nTEST CASES\n", "\nFACTS\n\nTEST CASES\n", 1)
         )
+        self.projects = Path(directory.name) / "projects"
+        self.projects.mkdir()
+        self.note = self.projects / "Global development workflow.md"
+        self.note.write_text(
+            "## Facts\n"
+            f"{GOOD_FACT}\n"
+            "- The hook reads required sections from the template's Request block on every call.\n"
+            "- The hook reads the template on each call. Evidence:\n"
+            "- The template has a FACTS section.\n"
+        )
 
     def run_check(self, path, content=None, *, template=None, **fields):
         return run_hook(
@@ -597,6 +611,7 @@ class FactsAndChangedRequest(unittest.TestCase):
             content,
             template=template or self.template,
             handoffs=self.folder,
+            projects=self.projects,
             **fields,
         )
 
@@ -727,6 +742,238 @@ class FactsAndChangedRequest(unittest.TestCase):
         directory.mkdir()
         self.assertEqual(
             self.run_check(directory, self.text), ("Missing section: FACTS", "")
+        )
+
+
+class ProjectFacts(FactsAndChangedRequest):
+    """Decision 55: FACTS bullets must come from the named project note."""
+
+    GATE = (
+        "Copy each fact word for word from the project note's Facts section: "
+        "see The gate in 60_Operational_Manual/68_Dev_Workflow/codex-build-loop.md"
+    )
+
+    def test_word_for_word_wrapped_note_fact(self):
+        self.note.write_text(
+            "## Facts\n- The hook reads the template on each call.\n"
+            "  Evidence: `hooks/handoff-check.py` line 139.\n"
+        )
+        self.assertEqual(self.run_check(self.new, self.with_facts(GOOD_FACT)), ("", ""))
+
+    def test_paraphrased_fact_is_refused(self):
+        self.note.write_text("## Facts\n" + GOOD_FACT + "\n")
+        changed = GOOD_FACT.replace("each call", "every call")
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts(changed)),
+            (
+                "Fact not in the project note's Facts: "
+                + changed[:60]
+                + "\n"
+                + self.GATE,
+                "",
+            ),
+        )
+
+    def test_note_without_facts_section(self):
+        self.note.write_text("## Decisions\n" + GOOD_FACT + "\n")
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts(GOOD_FACT)),
+            (
+                "Project note has no Facts section: Global development workflow\n"
+                + self.GATE,
+                "",
+            ),
+        )
+
+    def test_subheading_keeps_fact_inside_facts(self):
+        self.note.write_text("## Facts\n### Item 29\n" + GOOD_FACT + "\n")
+        self.assertEqual(self.run_check(self.new, self.with_facts(GOOD_FACT)), ("", ""))
+
+    def test_subheading_ends_a_bullets_continuation(self):
+        self.note.write_text(
+            "## Facts\n- The hook reads the template on each call.\n"
+            "### Another group\n  Evidence: hooks/handoff-check.py line 139.\n"
+        )
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts(GOOD_FACT)),
+            (
+                "Fact not in the project note's Facts: "
+                + GOOD_FACT[:60]
+                + "\n"
+                + self.GATE,
+                "",
+            ),
+        )
+
+    def test_fact_before_subheading_still_matches(self):
+        self.note.write_text("## Facts\n" + GOOD_FACT + "\n### Another group\n")
+        self.assertEqual(self.run_check(self.new, self.with_facts(GOOD_FACT)), ("", ""))
+
+    def test_fact_before_blank_and_paragraph_still_matches(self):
+        self.note.write_text("## Facts\n" + GOOD_FACT + "\n\nA paragraph.\n")
+        self.assertEqual(self.run_check(self.new, self.with_facts(GOOD_FACT)), ("", ""))
+
+    def test_next_major_heading_ends_facts(self):
+        self.note.write_text("## Facts\n## Decisions\n" + GOOD_FACT + "\n")
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts(GOOD_FACT)),
+            (
+                "Fact not in the project note's Facts: "
+                + GOOD_FACT[:60]
+                + "\n"
+                + self.GATE,
+                "",
+            ),
+        )
+
+    def test_missing_note(self):
+        self.note.unlink()
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts(GOOD_FACT)),
+            ("Project note not found: Global development workflow\n" + self.GATE, ""),
+        )
+
+    def test_ambiguous_note(self):
+        second = self.projects / "nested" / self.note.name
+        second.parent.mkdir()
+        second.write_text("## Facts\n" + GOOD_FACT + "\n")
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts(GOOD_FACT)),
+            (
+                "Project note name is ambiguous: Global development workflow\n"
+                + self.GATE,
+                "",
+            ),
+        )
+
+    def test_directory_named_like_note_is_not_a_second_note(self):
+        directory = self.projects / "nested" / self.note.name
+        directory.mkdir(parents=True)
+        self.assertEqual(self.run_check(self.new, self.with_facts(GOOD_FACT)), ("", ""))
+
+    def test_missing_project_line(self):
+        content = self.with_facts(GOOD_FACT).replace(
+            'project: "[[Global development workflow]]"\n', ""
+        )
+        self.assertEqual(
+            self.run_check(self.new, content),
+            ("Handoff names no project note\n" + self.GATE, ""),
+        )
+
+    def test_alias_and_heading_project_links(self):
+        for link in (
+            "Global development workflow|shown name",
+            "Global development workflow#Facts",
+        ):
+            with self.subTest(link=link):
+                content = self.with_facts(GOOD_FACT).replace(
+                    "[[Global development workflow]]", f"[[{link}]]", 1
+                )
+                self.assertEqual(self.run_check(self.new, content), ("", ""))
+
+    def test_unreadable_note(self):
+        self.note.write_bytes(b"\xff")
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts(GOOD_FACT)),
+            (
+                "Project note cannot be read: Global development workflow\n"
+                + self.GATE,
+                "",
+            ),
+        )
+
+    def test_utf8_note_is_read_under_ascii_locale(self):
+        fact = GOOD_FACT.replace("template", "café template")
+        self.note.write_text("## Facts\n" + fact + "\n", encoding="utf-8")
+        previous = locale.setlocale(locale.LC_CTYPE)
+        try:
+            locale.setlocale(locale.LC_CTYPE, "C")
+            self.assertEqual(self.run_check(self.new, self.with_facts(fact)), ("", ""))
+        finally:
+            locale.setlocale(locale.LC_CTYPE, previous)
+
+    def test_bullet_refusals_follow_order(self):
+        changed = GOOD_FACT.replace("each call", "every call").replace(" Evidence:", "")
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts(changed)),
+            (
+                "Fact without evidence: " + changed[:60] + "\n"
+                "Fact not in the project note's Facts: "
+                + changed[:60]
+                + "\n"
+                + self.GATE,
+                "",
+            ),
+        )
+
+    def test_unchanged_request_does_not_read_note(self):
+        self.note.write_text("## Decisions\n")
+        self.build.write_text(self.with_facts(GOOD_FACT))
+        self.assertEqual(
+            self.run_check(
+                self.build, tool="Edit", old="state: open", new="state: done"
+            ),
+            ("", ""),
+        )
+
+    def test_project_without_wikilink_or_name(self):
+        for project in ("Global development workflow", '"[[|shown name]]"'):
+            with self.subTest(project=project):
+                content = self.with_facts(GOOD_FACT).replace(
+                    'project: "[[Global development workflow]]"',
+                    f"project: {project}",
+                    1,
+                )
+                self.assertEqual(
+                    self.run_check(self.new, content),
+                    ("Handoff names no project note\n" + self.GATE, ""),
+                )
+
+    def test_template_without_facts_skips_note(self):
+        self.note.unlink()
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts(GOOD_FACT), template=TEMPLATE),
+            ("", ""),
+        )
+
+    def test_projects_environment_override_and_default(self):
+        with patch.dict(os.environ, {"HANDOFF_PROJECTS_ROOT": str(self.projects)}):
+            self.assertEqual(
+                runpy.run_path(str(HOOK), run_name="handoff_check_test")["PROJECTS"],
+                self.projects,
+            )
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(
+                runpy.run_path(str(HOOK), run_name="handoff_check_test")["PROJECTS"],
+                Path.home() / "Documents/Second_Brain/10_Projects",
+            )
+
+    def test_empty_facts_still_checks_note(self):
+        self.note.write_text("## Decisions\n")
+        self.assertEqual(
+            self.run_check(self.new, self.with_facts("No bullet here.")),
+            (
+                "Handoff has no facts\n"
+                "Project note has no Facts section: Global development workflow\n"
+                + self.GATE,
+                "",
+            ),
+        )
+
+    def test_gate_comes_after_invalid_test_case(self):
+        changed = self.with_facts(GOOD_FACT.replace("each call", "every call"))
+        changed = changed.replace(
+            "\nTEST CASES\n", "\nTEST CASES\n- IF broken, THEN nothing.\n", 1
+        )
+        self.assertEqual(
+            self.run_check(self.new, changed),
+            (
+                "Fact not in the project note's Facts: "
+                + GOOD_FACT.replace("each call", "every call")[:60]
+                + "\nInvalid test case: - IF broken, THEN nothing.\n"
+                + self.GATE,
+                "",
+            ),
         )
 
 

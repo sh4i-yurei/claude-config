@@ -197,3 +197,38 @@
     When no section heading follows, the section ends at either len(lines) or
     None, and lines[start:None] equals lines[start:len(lines)]. Every bullet and
     every decision is unchanged.
+- mutant: hooks.handoff-check.x_normalized_fact__mutmut_2
+  reason: >-
+    Both facts are split into whitespace-free words and joined with the same
+    fixed delimiter. Replacing one space with XX XX preserves equality of the
+    word sequences, so every match decision is unchanged.
+- mutant: hooks.handoff-check.x_problems__mutmut_19
+  reason: >-
+    False and None are both false in the final truthiness check. The flag is
+    assigned True on every path that needs the gate line, so output is unchanged.
+- mutant: hooks.handoff-check.x_project_facts__mutmut_9
+  reason: >-
+    The public hook calls project_facts only after is_build_handoff accepts the
+    same frontmatter fence. The frontmatter match is always present on that path.
+- mutant: hooks.handoff-check.x_project_facts__mutmut_26
+  reason: >-
+    Only the first element of the split is used. Removing maxsplit=1 does not
+    change the text before the first alias or heading separator.
+- mutant: hooks.handoff-check.x_project_facts__mutmut_31
+  reason: >-
+    Only the first element of the split is used. maxsplit=2 and maxsplit=1
+    return the same text before the first alias or heading separator.
+- mutant: hooks.handoff-check.x_project_facts__mutmut_48
+  reason: >-
+    The Python 3.12 rehearsal runs in UTF-8 mode. In that runtime,
+    Path.read_text with encoding=None still uses UTF-8 even when LC_CTYPE is C,
+    so the in-process hook emits the same result. The ASCII-locale behavior
+    test distinguishes the explicit encoding on the host Python runtime.
+- mutant: hooks.handoff-check.x_project_facts__mutmut_51
+  reason: >-
+    Python's encoding lookup treats UTF-8 and utf-8 as the same codec for
+    reading, so the decoded note and every refusal are unchanged.
+- mutant: hooks.handoff-check.x_project_facts__mutmut_62
+  reason: >-
+    When no next heading exists, lines[start:None] and
+    lines[start:len(lines)] contain the same note lines.
