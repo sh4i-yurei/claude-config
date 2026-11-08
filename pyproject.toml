@@ -4,7 +4,7 @@ force-exclude = true
 
 [tool.mutmut]
 source_paths = ["hooks", "tools", "skills/research", "skills/vault-query", "skills/vault-sweep"]
-also_copy = ["vendor", "README.md", ".github", "rules", "skills/project-note", ".mutation-survivors.yml"]
+also_copy = ["vendor", "README.md", ".github", "rules", "skills", ".mutation-survivors.yml"]
 pytest_add_cli_args_test_selection = ["tests"]
 cache_invalidation_files = ["tests/*.py", "tests/**/*.py", "vendor/**/*.py"]
 on_dependency_change = "rerun"
