@@ -1,0 +1,14 @@
+{"type":"session_meta"}
+{"type":"event_msg"}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"# AGENTS.md instructions"}]}}
+{"type":"world_state"}
+{"type":"turn_context"}
+{"type":"event_msg"}
+{"type":"event_msg"}
+{"type":"event_msg"}
+{"type":"response_item","payload":{"type":"reasoning"}}
+{"type":"response_item","payload":{"type":"custom_tool_call"}}
+{"type":"token_usage_record","payload":{"usage":{"input_tokens":54781,"cached_input_tokens":54528,"output_tokens":249}}}
+{"type":"event_msg"}
+{"type":"response_item","payload":{"type":"custom_tool_call_output"}}
+{"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":393838,"cached_input_tokens":353024,"cache_write_input_tokens":0,"output_tokens":3858,"reasoning_output_tokens":693,"total_tokens":397696},"last_token_usage":{"input_tokens":54781,"cached_input_tokens":54528,"cache_write_input_tokens":0,"output_tokens":249,"reasoning_output_tokens":43,"total_tokens":55030}}}}
