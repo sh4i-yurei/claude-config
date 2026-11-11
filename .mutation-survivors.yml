@@ -232,3 +232,20 @@
   reason: >-
     When no next heading exists, lines[start:None] and
     lines[start:len(lines)] contain the same note lines.
+- mutant: hooks.herdr-session-name.x_herdr__mutmut_18
+  reason: >-
+    Python's codec lookup treats "UTF-8" and "utf-8" as the same codec, so the
+    decoded answer and every result are identical.
+- mutant: hooks.herdr-session-name.x_main__mutmut_73
+  reason: >-
+    The label is lowercased and every run of characters outside a to z and 0 to 9
+    becomes a hyphen before strip runs, so no X can be at either end; stripping
+    "XX-XX" removes the same hyphens as stripping "-".
+- mutant: tools.workflow.handoff_send.x_herdr__mutmut_18
+  reason: >-
+    Python's codec lookup treats "UTF-8" and "utf-8" as the same codec, so the
+    decoded answer and every result are identical.
+- mutant: tools.workflow.handoff_send.x_run__mutmut_70
+  reason: >-
+    None and "" both fail the isinstance(fields, dict) check that follows, so the
+    command gives the same "has no readable frontmatter" refusal.
