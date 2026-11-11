@@ -8,7 +8,7 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
 - `skills/`: one folder per skill, each with a `SKILL.md` and any scripts it runs. The
   research tools are in `skills/research/scripts/`.
 - `hooks/`: the hook scripts. `~/.claude/settings.json` wires them to events by their
-  `~/.claude/hooks/...` paths.
+  `~/.claude/hooks/...` paths. `herdr-session-name.py` names an interactive session after its workspace.
 - `rules/`: instructions loaded into every session, such as the writing style.
 - `tools/`: standalone scripts that aren't skills. `tools/token-usage/` measures where Claude
   Code's and Codex's tokens go, from their session files.
@@ -18,7 +18,7 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
   repository returned by GitHub for those owners. A newly created repository receives the global
   labels without an entry in either file. `issue.py open` creates a checked issue and places it
   and stray open issues on that repository's board. `handoff_cost.py` counts the Codex sessions
-  that followed one handoff, with their model calls and tokens.
+  that followed one handoff, with their model calls and tokens. `handoff_send.py` delivers a handoff or its Response notice to a named live session.
 - `vale/`: configuration for Vale, the prose linter. `vale.ini` covers posts and is run by
   the `vale-post-lint.py` hook; `vale-sweep.ini` covers every prose note and is run by the
   vault sweep. `styles/` holds the rules: `keepbreath`, my own, and `ai-tells`, a downloaded
@@ -228,6 +228,39 @@ open issue blocking it. An Architecture-sized issue also needs a body line begin
 It prints each condition as met or unmet. Exit 0 means all conditions are met and, without
 `--check`, the board Status is Ready. Exit 1 means an issue needs more work. Exit 2 means a
 configuration or GitHub error, including a missing board mapping or board item.
+
+## Delivering a handoff to a live session
+
+In the `dev` shell from the repository root, run these commands with a handoff file in
+`~/Documents/Second_Brain/05_Agents/handoffs/`:
+
+```bash
+python3 tools/workflow/handoff_send.py deliver handoff.md
+python3 tools/workflow/handoff_send.py reply handoff.md
+```
+
+`deliver` waits for the session in `session:` and prompts it to read the Request. It prints
+`delivered handoff.md to <session>`. After the Response is written, `reply` waits for the
+session in `reply_to:` and tells it the Response is ready. It prints
+`told <reply_to> that handoff.md has its Response`. Both commands accept a full path and an
+optional `--wait-minutes N` (default 30). A refusal or failed delivery prints one error on
+standard error.
+
+## Session naming registration
+
+To name interactive Claude sessions after their herdr workspaces, add this entry to the
+`SessionStart` hooks in `~/.claude/settings.json` after `herdr-session-name.py` is on `main`:
+
+```json
+{
+  "hooks": [
+    {"type": "command", "command": "python3 ~/.claude/hooks/herdr-session-name.py", "timeout": 10}
+  ]
+}
+```
+
+The hook prints `This session's herdr name is <name>.` into the session's context when
+herdr names it. It prints nothing when the session cannot be named.
 
 ## Counting a handoff's Codex cost
 
