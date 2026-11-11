@@ -30,37 +30,42 @@ def refuse(message, code=2):
     return code
 
 
+class InvalidHerdrResponse(Exception):
+    """A herdr call returned an answer that cannot be read."""
+
+
 def herdr(args):
     try:
-        result = subprocess.run(["herdr", *args], text=True, capture_output=True)
-        answer = json.loads(result.stdout if result.returncode == 0 else result.stderr)
+        result = subprocess.run(["herdr", *args], capture_output=True)
+        raw = result.stdout if result.returncode == 0 else result.stderr
+        answer = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeError, ValueError):
-        return 1, None, "invalid_response", "invalid response"
+        raise InvalidHerdrResponse(
+            f"herdr {' '.join(args[:2])}: invalid response"
+        ) from None
     if not isinstance(answer, dict):
-        return 1, None, "invalid_response", "invalid response"
+        raise InvalidHerdrResponse(f"herdr {' '.join(args[:2])}: invalid response")
     if result.returncode:
         error = answer.get("error")
         if not isinstance(error, dict):
-            return 1, None, "invalid_response", "invalid response"
+            raise InvalidHerdrResponse(f"herdr {' '.join(args[:2])}: invalid response")
         code, message = error.get("code"), error.get("message")
         if not isinstance(code, str) or not isinstance(message, str):
-            return 1, None, "invalid_response", "invalid response"
-        return result.returncode, None, code, message
-    if args[:2] == ["agent", "send-keys"]:
-        return 0, None, None, None
+            raise InvalidHerdrResponse(f"herdr {' '.join(args[:2])}: invalid response")
+        return None, code, message
     details = answer.get("result")
     if not isinstance(details, dict):
-        return 1, None, "invalid_response", "invalid response"
+        raise InvalidHerdrResponse(f"herdr {' '.join(args[:2])}: invalid response")
     agent = details.get("agent")
     status = agent.get("agent_status") if isinstance(agent, dict) else None
-    return 0, status, None, None
+    return status, None, None
 
 
 def command_error(args, message):
     return refuse(f"herdr {' '.join(args[:2])}: {message}", 1)
 
 
-def main(argv=None):
+def run(argv=None):
     parser = argparse.ArgumentParser(prog="handoff_send.py", description=__doc__)
     parser.add_argument("mode", choices=("deliver", "reply"))
     parser.add_argument("handoff")
@@ -102,15 +107,15 @@ def main(argv=None):
         return refuse("herdr is not on PATH")
 
     get_args = ["agent", "get", target]
-    code, _, reason, message = herdr(get_args)
-    if code:
+    _, reason, message = herdr(get_args)
+    if message is not None:
         if reason == "agent_not_found":
             return refuse(f"no live session named {target}", 1)
         return command_error(get_args, message)
 
     wait_args = ["agent", "wait", target, "--timeout", str(args.wait_minutes * 60_000)]
-    code, status, reason, message = herdr(wait_args)
-    if code:
+    status, reason, message = herdr(wait_args)
+    if message is not None:
         if reason == "agent_not_found":
             return refuse(f"no live session named {target}", 1)
         if reason == "timeout":
@@ -142,12 +147,12 @@ def main(argv=None):
         "--timeout",
         "10000",
     ]
-    code, status, reason, message = herdr(prompt_args)
+    status, reason, message = herdr(prompt_args)
     last_args = prompt_args
-    if code and reason == "agent_prompt_stalled":
+    if message is not None and reason == "agent_prompt_stalled":
         keys_args = ["agent", "send-keys", target, "enter"]
-        code, _, reason, message = herdr(keys_args)
-        if code:
+        _, reason, message = herdr(keys_args)
+        if message is not None:
             if reason == "agent_not_found":
                 return refuse(f"no live session named {target}", 1)
             return command_error(keys_args, message)
@@ -162,14 +167,14 @@ def main(argv=None):
             "--timeout",
             "5000",
         ]
-        code, status, reason, message = herdr(start_args)
+        status, reason, message = herdr(start_args)
         last_args = start_args
-        if code and reason == "timeout":
+        if message is not None and reason == "timeout":
             return refuse(
                 f"{target} did not start on the prompt; it may be sitting in its input box",
                 1,
             )
-    if code:
+    if message is not None:
         if reason == "agent_not_found":
             return refuse(f"no live session named {target}", 1)
         if reason == "agent_blocked":
@@ -185,6 +190,13 @@ def main(argv=None):
     else:
         print(f"told {target} that {path.name} has its Response")
     return 0
+
+
+def main(argv=None):
+    try:
+        return run(argv)
+    except InvalidHerdrResponse as error:
+        return refuse(str(error), 1)
 
 
 if __name__ == "__main__":

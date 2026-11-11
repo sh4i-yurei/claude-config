@@ -514,12 +514,11 @@ class HandoffSend(unittest.TestCase):
                 self.assertEqual(len(self.calls()), 4)
 
     def test_parser_and_relative_path(self):
+        help_code, help_out, _ = self.run_command("--help")
+        self.assertEqual(help_code, 0)
         self.assertIn(
             "Deliver a handoff to a named interactive session.",
-            [
-                " ".join(part.split())
-                for part in self.run_command("--help")[1].split("\n\n")
-            ],
+            [" ".join(part.split()) for part in help_out.split("\n\n")],
         )
         code, _, err = self.run_command("other", self.handoff.name)
         self.assertEqual(code, 2)
@@ -532,13 +531,13 @@ class HandoffSend(unittest.TestCase):
         )
         self.assertEqual(self.calls(), [])
         self.success(wait=60000)
-        with patch("os.getcwd", return_value=str(self.root)):
-            self.assertEqual(
-                self.run_command(
-                    "deliver", "handoffs/delivery.md", "--wait-minutes", "1"
-                ),
-                (0, "delivered delivery.md to workflow-upkeep\n", ""),
-            )
+        old_dir = Path.cwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, old_dir)
+        self.assertEqual(
+            self.run_command("deliver", "handoffs/delivery.md", "--wait-minutes", "1"),
+            (0, "delivered delivery.md to workflow-upkeep\n", ""),
+        )
         self.assertEqual(self.calls(), [step["args"] for step in self.scenario])
 
     def test_unreadable_first_wait(self):
@@ -588,9 +587,21 @@ class HandoffSend(unittest.TestCase):
             self.run_command("deliver", self.handoff.name),
             (1, "", "herdr agent get: invalid response\n"),
         )
+        Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+        self.scenario = []
+        self.step(
+            ["agent", "get", "workflow-upkeep"],
+            stdout_hex=answer("get").encode("utf-16").hex(),
+        )
+        self.assertEqual(
+            self.run_command("deliver", self.handoff.name),
+            (1, "", "herdr agent get: invalid response\n"),
+        )
+        self.assertEqual(self.calls(), [["agent", "get", "workflow-upkeep"]])
         for payload, status, expected in (
             ("boom", 1, "herdr agent prompt: invalid response"),
             ("[]", 0, "herdr agent prompt: invalid response"),
+            ('{"id":"cli:agent:prompt"}', 0, "herdr agent prompt: invalid response"),
             (
                 '{"id":"cli:agent:prompt","result":{"type":"agent_prompted"}}',
                 0,
@@ -684,6 +695,27 @@ class HandoffSend(unittest.TestCase):
                     (1, "", expected + "\n"),
                 )
                 self.assertEqual(self.calls(), [step["args"] for step in self.scenario])
+
+    def test_stalled_prompt_send_keys_without_result(self):
+        self.success()
+        self.scenario[2].update(
+            stdout="",
+            stderr=failure(
+                "prompt",
+                "agent_prompt_stalled",
+                "agent prompt produced no observed working or blocked state within 5000 ms; current status is idle",
+            ),
+            status=1,
+        )
+        self.step(
+            ["agent", "send-keys", "workflow-upkeep", "enter"],
+            output='{"id":"cli:agent:send-keys"}',
+        )
+        self.assertEqual(
+            self.run_command("deliver", self.handoff.name),
+            (1, "", "herdr agent send-keys: invalid response\n"),
+        )
+        self.assertEqual(self.calls(), [step["args"] for step in self.scenario])
 
     def test_numeric_session_is_refused(self):
         self.handoff.write_text("---\nstate: open\nsession: 5\n---\n")

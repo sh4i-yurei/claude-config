@@ -10,10 +10,12 @@ import sys
 
 def herdr(args):
     try:
-        result = subprocess.run(
-            ["herdr", *args], text=True, capture_output=True, timeout=5
+        result = subprocess.run(["herdr", *args], capture_output=True, timeout=5)
+        answer = (
+            json.loads(result.stdout.decode("utf-8"))
+            if result.returncode == 0
+            else None
         )
-        answer = json.loads(result.stdout) if result.returncode == 0 else None
         return answer if isinstance(answer, dict) else None
     except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError):
         return None

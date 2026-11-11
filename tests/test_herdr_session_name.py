@@ -296,6 +296,7 @@ class HerdrSessionName(unittest.TestCase):
     def test_binary_failure_and_exit_status(self):
         for step in (
             {"stdout_hex": "ff7b7d0a"},
+            {"stdout_hex": workspaces().encode("utf-16").hex()},
             {"delay": 5.5, "output": workspaces()},
             {"output": workspaces(), "status": 1},
         ):
