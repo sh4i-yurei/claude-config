@@ -25,4 +25,10 @@ if args != response["args"]:
     sys.exit(1)
 sys.stdout.write(response.get("stdout", ""))
 sys.stderr.write(response.get("stderr", ""))
+sys.stdout.flush()
+sys.stderr.flush()
+if "stdout_hex" in response:
+    sys.stdout.buffer.write(bytes.fromhex(response["stdout_hex"]))
+if "stderr_hex" in response:
+    sys.stderr.buffer.write(bytes.fromhex(response["stderr_hex"]))
 sys.exit(response.get("status", 0))

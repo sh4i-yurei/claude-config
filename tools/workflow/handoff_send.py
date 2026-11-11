@@ -31,21 +31,37 @@ def refuse(message, code=2):
 
 
 def herdr(args):
-    result = subprocess.run(["herdr", *args], text=True, capture_output=True)
     try:
+        result = subprocess.run(["herdr", *args], text=True, capture_output=True)
         answer = json.loads(result.stdout if result.returncode == 0 else result.stderr)
-    except json.JSONDecodeError:
-        answer = {}
-    return result.returncode, answer
+    except (OSError, UnicodeError, ValueError):
+        return 1, None, "invalid_response", "invalid response"
+    if not isinstance(answer, dict):
+        return 1, None, "invalid_response", "invalid response"
+    if result.returncode:
+        error = answer.get("error")
+        if not isinstance(error, dict):
+            return 1, None, "invalid_response", "invalid response"
+        code, message = error.get("code"), error.get("message")
+        if not isinstance(code, str) or not isinstance(message, str):
+            return 1, None, "invalid_response", "invalid response"
+        return result.returncode, None, code, message
+    if args[:2] == ["agent", "send-keys"]:
+        return 0, None, None, None
+    details = answer.get("result")
+    if not isinstance(details, dict):
+        return 1, None, "invalid_response", "invalid response"
+    agent = details.get("agent")
+    status = agent.get("agent_status") if isinstance(agent, dict) else None
+    return 0, status, None, None
 
 
-def command_error(args, answer):
-    message = answer.get("error", {}).get("message", "invalid response")
+def command_error(args, message):
     return refuse(f"herdr {' '.join(args[:2])}: {message}", 1)
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="handoff_send.py", description=__doc__)
     parser.add_argument("mode", choices=("deliver", "reply"))
     parser.add_argument("handoff")
     parser.add_argument("--wait-minutes", type=positive_number, default=30)
@@ -85,16 +101,16 @@ def main(argv=None):
     if shutil.which("herdr") is None:
         return refuse("herdr is not on PATH")
 
-    code, answer = herdr(["agent", "get", target])
+    get_args = ["agent", "get", target]
+    code, _, reason, message = herdr(get_args)
     if code:
-        if answer.get("error", {}).get("code") == "agent_not_found":
+        if reason == "agent_not_found":
             return refuse(f"no live session named {target}", 1)
-        return command_error(["agent", "get"], answer)
+        return command_error(get_args, message)
 
     wait_args = ["agent", "wait", target, "--timeout", str(args.wait_minutes * 60_000)]
-    code, answer = herdr(wait_args)
+    code, status, reason, message = herdr(wait_args)
     if code:
-        reason = answer.get("error", {}).get("code")
         if reason == "agent_not_found":
             return refuse(f"no live session named {target}", 1)
         if reason == "timeout":
@@ -102,8 +118,10 @@ def main(argv=None):
                 f"{target} was not idle after {args.wait_minutes} minutes; nothing was sent",
                 1,
             )
-        return command_error(wait_args, answer)
-    if answer.get("result", {}).get("agent", {}).get("agent_status") == "blocked":
+        return command_error(wait_args, message)
+    if status not in ("idle", "done", "blocked"):
+        return command_error(wait_args, "invalid response")
+    if status == "blocked":
         return refuse(f"{target} is waiting on a prompt; nothing was sent", 1)
 
     prompt = (
@@ -124,14 +142,15 @@ def main(argv=None):
         "--timeout",
         "10000",
     ]
-    code, answer = herdr(prompt_args)
-    if code and answer.get("error", {}).get("code") == "agent_prompt_stalled":
+    code, status, reason, message = herdr(prompt_args)
+    last_args = prompt_args
+    if code and reason == "agent_prompt_stalled":
         keys_args = ["agent", "send-keys", target, "enter"]
-        code, answer = herdr(keys_args)
+        code, _, reason, message = herdr(keys_args)
         if code:
-            if answer.get("error", {}).get("code") == "agent_not_found":
+            if reason == "agent_not_found":
                 return refuse(f"no live session named {target}", 1)
-            return command_error(keys_args, answer)
+            return command_error(keys_args, message)
         start_args = [
             "agent",
             "wait",
@@ -143,28 +162,20 @@ def main(argv=None):
             "--timeout",
             "5000",
         ]
-        code, answer = herdr(start_args)
-        if code and answer.get("error", {}).get("code") == "timeout":
+        code, status, reason, message = herdr(start_args)
+        last_args = start_args
+        if code and reason == "timeout":
             return refuse(
                 f"{target} did not start on the prompt; it may be sitting in its input box",
                 1,
             )
     if code:
-        reason = answer.get("error", {}).get("code")
         if reason == "agent_not_found":
             return refuse(f"no live session named {target}", 1)
         if reason == "agent_blocked":
             return refuse(f"{target} is waiting on a prompt; nothing was sent", 1)
-        return command_error(
-            prompt_args
-            if answer.get("id") == "cli:agent:prompt"
-            else ["agent", "wait"],
-            answer,
-        )
-    if answer.get("result", {}).get("agent", {}).get("agent_status") not in (
-        "working",
-        "blocked",
-    ):
+        return command_error(last_args, message)
+    if status not in ("working", "blocked"):
         return refuse(
             f"{target} did not start on the prompt; it may be sitting in its input box",
             1,

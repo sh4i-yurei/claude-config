@@ -96,13 +96,14 @@ class HandoffSend(unittest.TestCase):
             else []
         )
 
-    def step(self, args, *, output=None, error=None, status=0):
+    def step(self, args, *, output=None, error=None, status=0, **extra):
         self.scenario.append(
             {
                 "args": args,
                 "stdout": output or "",
                 "stderr": error or "",
                 "status": status,
+                **extra,
             }
         )
 
@@ -256,7 +257,10 @@ class HandoffSend(unittest.TestCase):
                 "deliver", self.handoff.name, "--wait-minutes", value
             )
             self.assertEqual(code, 2)
-            self.assertIn("error:", err)
+            self.assertEqual(
+                err.splitlines()[-1],
+                "handoff_send.py: error: argument --wait-minutes: must be a positive whole number",
+            )
         self.assertEqual(self.calls(), [])
 
     def test_no_herdr(self):
@@ -321,7 +325,15 @@ class HandoffSend(unittest.TestCase):
                 if status.startswith("agent_"):
                     self.scenario[2].update(
                         stdout="",
-                        stderr=failure("prompt", status, "agent prompt failed"),
+                        stderr=failure(
+                            "prompt",
+                            status,
+                            {
+                                "agent_blocked": "agent workflow-upkeep is blocked and requires interactive input",
+                                "agent_not_found": "agent target workflow-upkeep not found",
+                                "agent_prompt_stalled": "agent prompt produced no observed working or blocked state within 5000 ms; current status is idle",
+                            }[status],
+                        ),
                         status=1,
                     )
                 if status == "agent_prompt_stalled":
@@ -376,7 +388,11 @@ class HandoffSend(unittest.TestCase):
         self.success()
         self.scenario[2].update(
             stdout="",
-            stderr=failure("prompt", "agent_prompt_stalled", "stalled"),
+            stderr=failure(
+                "prompt",
+                "agent_prompt_stalled",
+                "agent prompt produced no observed working or blocked state within 5000 ms; current status is idle",
+            ),
             status=1,
         )
         self.step(
@@ -479,7 +495,11 @@ class HandoffSend(unittest.TestCase):
                 self.success()
                 self.scenario[2].update(
                     stdout="",
-                    stderr=failure("prompt", "agent_prompt_stalled", "stalled"),
+                    stderr=failure(
+                        "prompt",
+                        "agent_prompt_stalled",
+                        "agent prompt produced no observed working or blocked state within 5000 ms; current status is idle",
+                    ),
                     status=1,
                 )
                 self.step(
@@ -492,3 +512,183 @@ class HandoffSend(unittest.TestCase):
                     (1, "", expected + "\n"),
                 )
                 self.assertEqual(len(self.calls()), 4)
+
+    def test_parser_and_relative_path(self):
+        self.assertIn(
+            "Deliver a handoff to a named interactive session.",
+            [
+                " ".join(part.split())
+                for part in self.run_command("--help")[1].split("\n\n")
+            ],
+        )
+        code, _, err = self.run_command("other", self.handoff.name)
+        self.assertEqual(code, 2)
+        self.assertIn(
+            err.splitlines()[-1],
+            (
+                "handoff_send.py: error: argument mode: invalid choice: 'other' (choose from deliver, reply)",
+                "handoff_send.py: error: argument mode: invalid choice: 'other' (choose from 'deliver', 'reply')",
+            ),
+        )
+        self.assertEqual(self.calls(), [])
+        self.success(wait=60000)
+        with patch("os.getcwd", return_value=str(self.root)):
+            self.assertEqual(
+                self.run_command(
+                    "deliver", "handoffs/delivery.md", "--wait-minutes", "1"
+                ),
+                (0, "delivered delivery.md to workflow-upkeep\n", ""),
+            )
+        self.assertEqual(self.calls(), [step["args"] for step in self.scenario])
+
+    def test_unreadable_first_wait(self):
+        for payload, status, stream in (
+            ("boom", 1, "stderr"),
+            ("boom", 0, "stdout"),
+            ('{"id":"cli:agent:wait","result":{"type":"agent_info"}}', 0, "stdout"),
+            ('{"id":"cli:agent:wait","result":[]}', 0, "stdout"),
+        ):
+            with self.subTest(payload=payload, status=status):
+                Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+                self.scenario = []
+                self.success()
+                self.scenario[1].update(stdout="", stderr="", status=status)
+                self.scenario[1][stream] = payload
+                self.assertEqual(
+                    self.run_command("deliver", self.handoff.name),
+                    (1, "", "herdr agent wait: invalid response\n"),
+                )
+                self.assertEqual(
+                    self.calls(), [step["args"] for step in self.scenario[:2]]
+                )
+
+    def test_unreadable_get_and_prompt(self):
+        bad_errors = (
+            "[]",
+            '{"error":"boom","id":"cli:agent:get"}',
+            '{"error":{"message":"boom"},"id":"cli:agent:get"}',
+            '{"error":{"code":"unavailable"},"id":"cli:agent:get"}',
+            '{"error":{"code":"unavailable","message":5},"id":"cli:agent:get"}',
+            '{"error":{"code":5,"message":"boom"},"id":"cli:agent:get"}',
+        )
+        for payload in bad_errors:
+            with self.subTest(payload=payload):
+                Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+                self.scenario = []
+                self.step(["agent", "get", "workflow-upkeep"], error=payload, status=1)
+                self.assertEqual(
+                    self.run_command("deliver", self.handoff.name),
+                    (1, "", "herdr agent get: invalid response\n"),
+                )
+                self.assertEqual(self.calls(), [["agent", "get", "workflow-upkeep"]])
+        Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+        self.scenario = []
+        self.step(["agent", "get", "workflow-upkeep"], status=1, stderr_hex="ff7b7d0a")
+        self.assertEqual(
+            self.run_command("deliver", self.handoff.name),
+            (1, "", "herdr agent get: invalid response\n"),
+        )
+        for payload, status, expected in (
+            ("boom", 1, "herdr agent prompt: invalid response"),
+            ("[]", 0, "herdr agent prompt: invalid response"),
+            (
+                '{"id":"cli:agent:prompt","result":{"type":"agent_prompted"}}',
+                0,
+                "workflow-upkeep did not start on the prompt; it may be sitting in its input box",
+            ),
+        ):
+            with self.subTest(payload=payload, status=status):
+                Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+                self.scenario = []
+                self.success()
+                self.scenario[2].update(
+                    stdout=payload if status == 0 else "",
+                    stderr=payload if status else "",
+                    status=status,
+                )
+                self.assertEqual(
+                    self.run_command("deliver", self.handoff.name),
+                    (1, "", expected + "\n"),
+                )
+                self.assertEqual(self.calls(), [step["args"] for step in self.scenario])
+
+    def test_stall_followup_failures(self):
+        for payload, status, expected in (
+            ("boom", 1, "herdr agent send-keys: invalid response"),
+            (None, 1, "no live session named workflow-upkeep"),
+            ("boom", 0, "herdr agent wait: invalid response"),
+            (None, 1, "herdr agent wait: server failed"),
+            (
+                '{"id":"cli:agent:wait","result":{"type":"agent_info"}}',
+                0,
+                "workflow-upkeep did not start on the prompt; it may be sitting in its input box",
+            ),
+            (
+                answer("wait", "idle"),
+                0,
+                "workflow-upkeep did not start on the prompt; it may be sitting in its input box",
+            ),
+        ):
+            with self.subTest(payload=payload, status=status):
+                Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+                self.scenario = []
+                self.success()
+                self.scenario[2].update(
+                    stdout="",
+                    stderr=failure(
+                        "prompt",
+                        "agent_prompt_stalled",
+                        "agent prompt produced no observed working or blocked state within 5000 ms; current status is idle",
+                    ),
+                    status=1,
+                )
+                self.step(
+                    ["agent", "send-keys", "workflow-upkeep", "enter"],
+                    output=json.dumps(
+                        {"id": "cli:agent:send-keys", "result": {"type": "ok"}}
+                    ),
+                )
+                if expected == "herdr agent send-keys: invalid response":
+                    self.scenario[3].update(stdout="", stderr=payload, status=1)
+                else:
+                    self.step(
+                        [
+                            "agent",
+                            "wait",
+                            "workflow-upkeep",
+                            "--until",
+                            "working",
+                            "--until",
+                            "blocked",
+                            "--timeout",
+                            "5000",
+                        ],
+                        output=payload if status == 0 else "",
+                        error=(
+                            failure(
+                                "wait",
+                                "agent_not_found",
+                                "agent target workflow-upkeep not found",
+                            )
+                            if expected.startswith("no live")
+                            else failure("wait", "unavailable", "server failed")
+                            if payload is None
+                            else payload
+                        )
+                        if status
+                        else "",
+                        status=status,
+                    )
+                self.assertEqual(
+                    self.run_command("deliver", self.handoff.name),
+                    (1, "", expected + "\n"),
+                )
+                self.assertEqual(self.calls(), [step["args"] for step in self.scenario])
+
+    def test_numeric_session_is_refused(self):
+        self.handoff.write_text("---\nstate: open\nsession: 5\n---\n")
+        self.assertEqual(
+            self.run_command("deliver", self.handoff.name),
+            (2, "", "delivery.md has no session: field\n"),
+        )
+        self.assertEqual(self.calls(), [])

@@ -13,8 +13,9 @@ def herdr(args):
         result = subprocess.run(
             ["herdr", *args], text=True, capture_output=True, timeout=5
         )
-        return json.loads(result.stdout) if result.returncode == 0 else None
-    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        answer = json.loads(result.stdout) if result.returncode == 0 else None
+        return answer if isinstance(answer, dict) else None
+    except (OSError, subprocess.TimeoutExpired, ValueError, UnicodeError):
         return None
 
 
@@ -32,12 +33,17 @@ def main():
     answer = herdr(["workspace", "list"])
     if not isinstance(answer, dict):
         return 0
-    entries = answer.get("result", {}).get("workspaces", [])
+    result = answer.get("result")
+    if not isinstance(result, dict):
+        return 0
+    entries = result.get("workspaces")
+    if not isinstance(entries, list):
+        return 0
     label = next(
         (
             item.get("label")
             for item in entries
-            if item.get("workspace_id") == workspace
+            if isinstance(item, dict) and item.get("workspace_id") == workspace
         ),
         None,
     )

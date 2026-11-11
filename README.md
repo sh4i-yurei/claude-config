@@ -8,7 +8,8 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
 - `skills/`: one folder per skill, each with a `SKILL.md` and any scripts it runs. The
   research tools are in `skills/research/scripts/`.
 - `hooks/`: the hook scripts. `~/.claude/settings.json` wires them to events by their
-  `~/.claude/hooks/...` paths. `herdr-session-name.py` names an interactive session after its workspace.
+  `~/.claude/hooks/...` paths. `herdr-session-name.py` names an interactive session after its
+  workspace.
 - `rules/`: instructions loaded into every session, such as the writing style.
 - `tools/`: standalone scripts that aren't skills. `tools/token-usage/` measures where Claude
   Code's and Codex's tokens go, from their session files.
@@ -18,7 +19,8 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
   repository returned by GitHub for those owners. A newly created repository receives the global
   labels without an entry in either file. `issue.py open` creates a checked issue and places it
   and stray open issues on that repository's board. `handoff_cost.py` counts the Codex sessions
-  that followed one handoff, with their model calls and tokens. `handoff_send.py` delivers a handoff or its Response notice to a named live session.
+  that followed one handoff, with their model calls and tokens. `handoff_send.py` delivers a
+  handoff or its Response notice to a named live session.
 - `vale/`: configuration for Vale, the prose linter. `vale.ini` covers posts and is run by
   the `vale-post-lint.py` hook; `vale-sweep.ini` covers every prose note and is run by the
   vault sweep. `styles/` holds the rules: `keepbreath`, my own, and `ai-tells`, a downloaded

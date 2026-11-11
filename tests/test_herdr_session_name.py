@@ -30,16 +30,18 @@ def workspaces(labels=("Workflow upkeep", "IaC / Platform"), ids=("w1", "w3")):
                     "type": "workspace_list",
                     "workspaces": [
                         {
-                            "active_tab_id": "w1:t1",
+                            "active_tab_id": tab,
                             "agent_status": "working",
                             "focused": False,
                             "label": label,
                             "number": number,
-                            "pane_count": 3,
+                            "pane_count": panes,
                             "tab_count": 2,
                             "workspace_id": workspace,
                         }
-                        for number, (label, workspace) in enumerate(zip(labels, ids), 1)
+                        for label, workspace, tab, number, panes in zip(
+                            labels, ids, ("w1:t1", "w3:t1"), (1, 3), (3, 2)
+                        )
                     ],
                 },
             }
@@ -122,9 +124,9 @@ class HerdrSessionName(unittest.TestCase):
             else []
         )
 
-    def step(self, args, *, output="", error="", status=0):
+    def step(self, args, *, output="", error="", status=0, **extra):
         self.scenario.append(
-            {"args": args, "stdout": output, "stderr": error, "status": status}
+            {"args": args, "stdout": output, "stderr": error, "status": status, **extra}
         )
 
     def success(
@@ -268,3 +270,44 @@ class HerdrSessionName(unittest.TestCase):
         fake = self.root / "bin/herdr"
         fake.write_text("#!/no/such/interpreter\n")
         self.assertEqual(self.run_hook(), (0, ""))
+
+    def test_unreadable_workspace_and_rename_answers(self):
+        for payload in (
+            "[]",
+            '["w3"]',
+            '{"id":"cli:workspace:list","result":[]}',
+            '{"id":"cli:workspace:list","result":{"workspaces":["w3"]}}',
+            '{"id":"cli:workspace:list","result":{"type":"workspace_list"}}',
+            '{"id":"cli:workspace:list"}',
+        ):
+            with self.subTest(payload=payload):
+                Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+                self.scenario = []
+                self.step(["workspace", "list"], output=payload)
+                self.assertEqual(self.run_hook(), (0, ""))
+                self.assertEqual(self.calls(), [["workspace", "list"]])
+        Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+        self.scenario = []
+        self.success()
+        self.scenario[1]["stdout"] = "[]"
+        self.assertEqual(self.run_hook(), (0, ""))
+        self.assertEqual(self.calls(), [step["args"] for step in self.scenario])
+
+    def test_binary_failure_and_exit_status(self):
+        for step in (
+            {"stdout_hex": "ff7b7d0a"},
+            {"delay": 5.5, "output": workspaces()},
+            {"output": workspaces(), "status": 1},
+        ):
+            with self.subTest(step=step):
+                Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+                self.scenario = []
+                self.step(["workspace", "list"], **step)
+                self.assertEqual(self.run_hook(), (0, ""))
+                self.assertEqual(self.calls(), [["workspace", "list"]])
+        Path(self.env["FAKE_HERDR_CALLS"]).unlink(missing_ok=True)
+        self.scenario = []
+        self.success()
+        self.scenario[1].update(status=1)
+        self.assertEqual(self.run_hook(), (0, ""))
+        self.assertEqual(self.calls(), [step["args"] for step in self.scenario])
