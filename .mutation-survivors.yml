@@ -249,10 +249,6 @@
   reason: >-
     None and "" both fail the isinstance(fields, dict) check that follows, so the
     command gives the same "has no readable frontmatter" refusal.
-- mutant: tools.vault_commit.x__git__mutmut_6
-  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
-- mutant: tools.vault_commit.x__git__mutmut_13
-  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
 - mutant: tools.vault_commit.x__paths__mutmut_19
   reason: The mutated check value is falsy just like False, so the same branch and public result follow.
 - mutant: tools.vault_commit.x__paths__mutmut_44
@@ -269,11 +265,9 @@
   reason: The mutated check value is falsy just like False, so the same branch and public result follow.
 - mutant: tools.vault_commit.x_main__mutmut_316
   reason: The mutated check value is falsy just like False, so the same branch and public result follow.
-- mutant: tools.vault_commit.x__git__mutmut_1
-  reason: Changing the default check behavior affects only Git faults the handoff says are unreachable and leaves unhandled.
+- mutant: tools.vault_commit.x_main__mutmut_319
+  reason: A refused git push prints the same stderr with or without -q, and a successful push's stderr is captured and never printed.
 - mutant: tools.vault_commit.x__paths__mutmut_47
-  reason: This flag changes only Git output that the command captures and discards; the command result is unchanged.
-- mutant: tools.vault_commit.x__paths__mutmut_53
   reason: This flag changes only Git output that the command captures and discards; the command result is unchanged.
 - mutant: tools.vault_commit.x_main__mutmut_59
   reason: This flag changes only Git output that the command captures and discards; the command result is unchanged.

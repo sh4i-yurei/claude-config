@@ -150,6 +150,62 @@ def origin_head(origin):
     return git(origin, "rev-parse", "refs/heads/main").stdout.strip()
 
 
+@pytest.mark.parametrize("mode", ("child", "in_process"))
+def test_unborn_branch_raises_git_error(tmp_path, monkeypatch, capfd, mode):
+    vault = tmp_path / "vault"
+    origin = tmp_path / "origin.git"
+    home = tmp_path / "home"
+    vault.mkdir()
+    home.mkdir()
+    git(vault, "init", "-q", "-b", "main")
+    git(vault, "config", "user.name", "Test")
+    git(vault, "config", "user.email", "test@example.invalid")
+    git(vault, "init", "-q", "--bare", str(origin))
+    git(vault, "remote", "add", "origin", str(origin))
+    git(vault, "config", "core.hooksPath", ".githooks")
+    (vault / ".githooks").mkdir()
+    set_hook(vault, "#!/bin/sh\nprintf 'ran\\n' >> hook-runs\n")
+    (vault / "c.txt").write_text("c\n")
+
+    if mode == "child":
+        result = run_child(vault, home, "-m", "add c", "--", "c.txt")
+        assert result.returncode == 1
+        assert result.stdout == ""
+        assert "subprocess.CalledProcessError" in result.stderr
+        assert "kept moving" not in result.stderr
+    else:
+        monkeypatch.setenv("SECOND_BRAIN", str(vault))
+        monkeypatch.setenv("HOME", str(home))
+        monkeypatch.chdir(vault)
+        with pytest.raises(subprocess.CalledProcessError) as error:
+            vault_commit.main(["-m", "add c", "--", "c.txt"])
+        assert error.value.cmd == ["git", "rev-parse", "HEAD"]
+        output = capfd.readouterr()
+        assert output.out == ""
+        assert "kept moving" not in output.err
+
+    assert not (vault / "hook-runs").exists()
+    assert git(vault, "rev-list", "--all", "--count").stdout.strip() == "0"
+    assert git(origin, "rev-list", "--all", "--count").stdout.strip() == "0"
+
+
+def test_untracked_text_allowed_by_ignore_exception(tmp_path, runner):
+    vault, origin, home = setup_vault(tmp_path)
+    (vault / ".gitignore").write_text("*\n!*.txt\n!.gitignore\n")
+    git(vault, "add", ".gitignore")
+    git(vault, "commit", "-qm", "ignore other files")
+    git(vault, "push", "-q", "origin", "main")
+    (vault / "c.txt").write_text("c\n")
+
+    code, out, err = runner(vault, home, "-m", "add c", "--", "c.txt")
+
+    assert (code, err) == (0, "")
+    assert out == git(vault, "log", "--oneline", "-1").stdout
+    assert changed(vault) == ["c.txt"]
+    assert git(vault, "show", "HEAD:c.txt").stdout == "c\n"
+    assert origin_head(origin) == head(vault)
+
+
 def test_private_index_preserves_other_staged_file(tmp_path, runner):
     vault, origin, home = setup_vault(tmp_path)
     (vault / "c.txt").write_text("c\n")
