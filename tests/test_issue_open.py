@@ -497,7 +497,7 @@ class IssueOpen(unittest.TestCase):
             "sh4i-yurei/codex-config": "scope:ci, scope:config, scope:hooks, scope:rules, scope:setup, scope:skills",
             "sh4i-yurei/keepbreathing": "scope:ci, scope:deploy, scope:site",
             "sh4i-yurei/keepbreath-contact-api": "scope:ci, scope:deploy, scope:redis",
-            "sh4i-yurei/keepbreathing-infra": "scope:access, scope:baseline, scope:ci, scope:hub, scope:node-exporter, scope:staging, scope:tailscale, scope:web, scope:workstation",
+            "sh4i-yurei/keepbreathing-infra": "scope:access, scope:baseline, scope:ci, scope:hub, scope:iac, scope:node-exporter, scope:staging, scope:tailscale, scope:web, scope:workstation",
         }
         for repo, names in choices.items():
             for scope in (
@@ -530,6 +530,7 @@ class IssueOpen(unittest.TestCase):
                 "baseline",
                 "ci",
                 "hub",
+                "iac",
                 "node-exporter",
                 "staging",
                 "tailscale",
