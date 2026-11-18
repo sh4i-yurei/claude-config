@@ -274,9 +274,9 @@
 - mutant: tools.vault_commit.x_main__mutmut_300
   reason: This flag changes only Git output that the command captures and discards; the command result is unchanged.
 - mutant: tools.vault_commit.x__git__mutmut_21
-  reason: The hook's stdout is empty under the stated vault hook, and capture=None is falsy just like False.
+  reason: Git hook run sends the hook's stdout and stderr to git's own stderr, so its stdout is always empty and capturing it changes nothing.
 - mutant: tools.vault_commit.x_main__mutmut_157
-  reason: The hook's stdout is empty under the stated vault hook, and capture=None is falsy just like False.
+  reason: Git hook run sends the hook's stdout and stderr to git's own stderr, so its stdout is always empty and capturing it changes nothing.
 - mutant: tools.vault_commit.x__paths__mutmut_5
   reason: Pathlib discards the left operand when joining an absolute path, and resolve already anchors a relative parent at the current directory.
 - mutant: tools.vault_commit.x__paths__mutmut_6
@@ -293,11 +293,3 @@
   reason: The temporary folder and index file names are private to the attempt; changing their names leaves the commit and cleanup unchanged.
 - mutant: tools.vault_commit.x_main__mutmut_209
   reason: Git add with this pathspec stages tracked removals with or without -A, so the committed tree is unchanged.
-- mutant: tools.vault_commit.x__arguments__mutmut_13
-  reason: The explicit usage string hides this metavar; its only effect is help layout, which the handoff does not specify.
-- mutant: tools.vault_commit.x__arguments__mutmut_16
-  reason: The explicit usage string hides this metavar; its only effect is help layout, which the handoff does not specify.
-- mutant: tools.vault_commit.x__arguments__mutmut_20
-  reason: The explicit usage string hides this metavar; its only effect is help layout, which the handoff does not specify.
-- mutant: tools.vault_commit.x__arguments__mutmut_21
-  reason: The explicit usage string hides this metavar; its only effect is help layout, which the handoff does not specify.

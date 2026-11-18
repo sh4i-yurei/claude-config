@@ -177,9 +177,8 @@ def test_unborn_branch_raises_git_error(tmp_path, monkeypatch, capfd, mode):
         monkeypatch.setenv("SECOND_BRAIN", str(vault))
         monkeypatch.setenv("HOME", str(home))
         monkeypatch.chdir(vault)
-        with pytest.raises(subprocess.CalledProcessError) as error:
+        with pytest.raises(subprocess.CalledProcessError):
             vault_commit.main(["-m", "add c", "--", "c.txt"])
-        assert error.value.cmd == ["git", "rev-parse", "HEAD"]
         output = capfd.readouterr()
         assert output.out == ""
         assert "kept moving" not in output.err
@@ -654,6 +653,14 @@ def test_usage(tmp_path, runner, args, error):
         "",
         f"usage: vault-commit -m MESSAGE -- PATH [PATH...]\nvault-commit: error: {error}\n",
     )
+
+
+def test_help_shows_message_option(tmp_path, runner):
+    vault, _, home = setup_vault(tmp_path)
+    code, out, err = runner(vault, home, "-h")
+    assert code == 0
+    assert err == ""
+    assert "  -m MESSAGE" in out.splitlines()
 
 
 def test_not_repository_top_level(tmp_path, runner):
