@@ -81,14 +81,15 @@ def main(argv=None):
     except SystemExit as error:
         return error.code
 
-    vault = (
-        Path(os.environ.get("SECOND_BRAIN", "~/Documents/Second_Brain"))
-        .expanduser()
-        .resolve()
-    )
+    vault_given = Path(
+        os.environ.get("SECOND_BRAIN", "~/Documents/Second_Brain")
+    ).expanduser()
+    vault = vault_given.resolve()
+    if not vault.is_dir():
+        return _error(f"not a git repository: {vault_given}", 2)
     top = _git(vault, "rev-parse", "--show-toplevel", check=False)
     if top.returncode != 0 or Path(top.stdout.strip()).resolve() != vault:
-        return _error(f"not a git repository: {vault}", 2)
+        return _error(f"not a git repository: {vault_given}", 2)
 
     branch_result = _git(
         vault, "symbolic-ref", "--quiet", "--short", "HEAD", check=False

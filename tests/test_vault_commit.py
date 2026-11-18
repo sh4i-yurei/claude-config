@@ -1,6 +1,5 @@
 """Public behavior of vault-commit in disposable Git repositories."""
 
-import importlib.util
 import os
 from pathlib import Path
 import runpy
@@ -8,6 +7,7 @@ import subprocess
 import sys
 
 import pytest
+from tools import vault_commit
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,14 +75,22 @@ def run_in_process(vault, home, monkeypatch, capfd, *args, cwd=None, main_style=
             runpy.run_path(str(ROOT / "tools/vault_commit.py"), run_name="__main__")
         code = result.value.code
     else:
-        spec = importlib.util.spec_from_file_location(
-            "vault_commit", ROOT / "tools/vault_commit.py"
-        )
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        code = module.main(list(args))
+        code = vault_commit.main(list(args))
     output = capfd.readouterr()
     return code, output.out, output.err
+
+
+@pytest.fixture(params=("child", "in_process"))
+def runner(request, monkeypatch, capfd):
+    def run(vault, home, *args, cwd=None, main_style=False):
+        if request.param == "child":
+            result = run_child(vault, home, *args, cwd=cwd)
+            return result.returncode, result.stdout, result.stderr
+        return run_in_process(
+            vault, home, monkeypatch, capfd, *args, cwd=cwd, main_style=main_style
+        )
+
+    return run
 
 
 def head(vault):
@@ -103,14 +111,12 @@ def origin_head(origin):
     return git(origin, "rev-parse", "refs/heads/main").stdout.strip()
 
 
-def test_private_index_preserves_other_staged_file(tmp_path, monkeypatch, capfd):
+def test_private_index_preserves_other_staged_file(tmp_path, runner):
     vault, origin, home = setup_vault(tmp_path)
     (vault / "c.txt").write_text("c\n")
     (vault / "d.txt").write_text("d\n")
     git(vault, "add", "d.txt")
-    code, out, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "add c", "--", "c.txt", main_style=True
-    )
+    code, out, err = runner(vault, home, "-m", "add c", "--", "c.txt", main_style=True)
     assert (code, err) == (0, "")
     assert out.splitlines()[-1] == f"{head(vault)[:7]} add c"
     assert changed(vault) == ["c.txt"]
@@ -119,7 +125,7 @@ def test_private_index_preserves_other_staged_file(tmp_path, monkeypatch, capfd)
     assert git(vault, "log", "-1", "--format=%B").stdout == "add c\n\n"
 
 
-def test_hook_stages_another_sessions_file(tmp_path, monkeypatch, capfd):
+def test_hook_stages_another_sessions_file(tmp_path, runner):
     for name in ("plain", "private"):
         base = tmp_path / name
         base.mkdir()
@@ -136,9 +142,7 @@ def test_hook_stages_another_sessions_file(tmp_path, monkeypatch, capfd):
             git(vault, "commit", "-qm", "plain a")
             assert changed(vault) == ["a.txt", "b.txt"]
         else:
-            code, _, err = run_in_process(
-                vault, home, monkeypatch, capfd, "-m", "add a", "--", "a.txt"
-            )
+            code, _, err = runner(vault, home, "-m", "add a", "--", "a.txt")
             assert (code, err, changed(vault), staged(vault)) == (
                 0,
                 "",
@@ -147,7 +151,7 @@ def test_hook_stages_another_sessions_file(tmp_path, monkeypatch, capfd):
             )
 
 
-def test_hook_moves_branch_once(tmp_path, monkeypatch, capfd):
+def test_hook_moves_branch_once(tmp_path, runner):
     vault, origin, home = setup_vault(tmp_path)
     marker = tmp_path / "hook-ran"
     set_hook(
@@ -156,9 +160,7 @@ def test_hook_moves_branch_once(tmp_path, monkeypatch, capfd):
     )
     (vault / "z.txt").write_text("z\n")
     (vault / "c.txt").write_text("c\n")
-    code, _, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "add c", "--", "c.txt"
-    )
+    code, _, err = runner(vault, home, "-m", "add c", "--", "c.txt")
     assert (code, err, changed(vault), origin_head(origin)) == (
         0,
         "",
@@ -168,7 +170,7 @@ def test_hook_moves_branch_once(tmp_path, monkeypatch, capfd):
     assert git(vault, "log", "-1", "--format=%s", "HEAD^").stdout == "add z\n"
 
 
-def test_hook_moves_branch_every_attempt(tmp_path, monkeypatch, capfd):
+def test_hook_moves_branch_every_attempt(tmp_path, runner):
     vault, _, home = setup_vault(tmp_path)
     count = tmp_path / "hook-count"
     set_hook(
@@ -176,9 +178,7 @@ def test_hook_moves_branch_every_attempt(tmp_path, monkeypatch, capfd):
         f'#!/bin/sh\nn=$(cat "{count}" 2>/dev/null || echo 0)\nn=$((n + 1))\necho "$n" > "{count}"\necho "$n" > z.txt\ngit add z.txt\ngit commit --no-verify -qm "z $n"\n',
     )
     (vault / "c.txt").write_text("c\n")
-    code, out, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "add c", "--", "c.txt"
-    )
+    code, out, err = runner(vault, home, "-m", "add c", "--", "c.txt")
     assert (
         code,
         out,
@@ -188,7 +188,7 @@ def test_hook_moves_branch_every_attempt(tmp_path, monkeypatch, capfd):
     ) == (1, "", "main kept moving; nothing committed", "3\n", 0)
 
 
-def test_push_refusal_leaves_local_commit(tmp_path, monkeypatch, capfd):
+def test_push_refusal_leaves_local_commit(tmp_path, runner):
     vault, origin, home = setup_vault(tmp_path)
     other = tmp_path / "other"
     git(tmp_path, "clone", "-q", str(origin), str(other))
@@ -201,9 +201,7 @@ def test_push_refusal_leaves_local_commit(tmp_path, monkeypatch, capfd):
     git(other, "push", "-q", "origin", "main")
     remote = origin_head(origin)
     (vault / "c.txt").write_text("c\n")
-    code, out, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "add c", "--", "c.txt"
-    )
+    code, out, err = runner(vault, home, "-m", "add c", "--", "c.txt")
     assert code == 1 and out == ""
     assert (
         err.splitlines()[0]
@@ -214,14 +212,12 @@ def test_push_refusal_leaves_local_commit(tmp_path, monkeypatch, capfd):
     assert git(vault, "cat-file", "-e", remote, check=False).returncode == 1
 
 
-def test_shared_index_lock_still_pushes(tmp_path, monkeypatch, capfd):
+def test_shared_index_lock_still_pushes(tmp_path, runner):
     vault, origin, home = setup_vault(tmp_path)
     set_hook(vault, "#!/bin/sh\ntouch .git/index.lock\n")
     (vault / "c.txt").write_text("c\n")
     try:
-        code, _, err = run_in_process(
-            vault, home, monkeypatch, capfd, "-m", "add c", "--", "c.txt"
-        )
+        code, _, err = runner(vault, home, "-m", "add c", "--", "c.txt")
     finally:
         (vault / ".git/index.lock").unlink(missing_ok=True)
     assert code == 1
@@ -251,15 +247,13 @@ def test_temporary_index_cleaned(tmp_path, outcome):
     assert list(temp.iterdir()) == []
 
 
-def test_hook_failure(tmp_path, monkeypatch, capfd):
+def test_hook_failure(tmp_path, runner):
     vault, origin, home = setup_vault(
         tmp_path, "#!/bin/sh\necho 'broken link in x.md'\nexit 1\n"
     )
     (vault / "c.txt").write_text("c\n")
     old = head(vault)
-    code, out, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "add c", "--", "c.txt"
-    )
+    code, out, err = runner(vault, home, "-m", "add c", "--", "c.txt")
     assert (code, out, err) == (
         1,
         "",
@@ -268,14 +262,12 @@ def test_hook_failure(tmp_path, monkeypatch, capfd):
     assert (head(vault), staged(vault), origin_head(origin)) == (old, [], old)
 
 
-def test_missing_hook(tmp_path, monkeypatch, capfd):
+def test_missing_hook(tmp_path, runner):
     vault, _, home = setup_vault(tmp_path)
     (vault / ".githooks/pre-commit").unlink()
     (vault / "c.txt").write_text("c\n")
     old = head(vault)
-    code, out, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "add c", "--", "c.txt"
-    )
+    code, out, err = runner(vault, home, "-m", "add c", "--", "c.txt")
     assert (code, out, err, head(vault)) == (
         2,
         "",
@@ -284,13 +276,11 @@ def test_missing_hook(tmp_path, monkeypatch, capfd):
     )
 
 
-def test_absolute_hook_location(tmp_path, monkeypatch, capfd):
+def test_absolute_hook_location(tmp_path, runner):
     vault, origin, home = setup_vault(tmp_path)
     git(vault, "config", "core.hooksPath", str(vault / ".githooks"))
     (vault / "c.txt").write_text("c\n")
-    code, _, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "add c", "--", "c.txt"
-    )
+    code, _, err = runner(vault, home, "-m", "add c", "--", "c.txt")
     assert (code, err, changed(vault), origin_head(origin)) == (
         0,
         "",
@@ -299,12 +289,10 @@ def test_absolute_hook_location(tmp_path, monkeypatch, capfd):
     )
 
 
-def test_deleted_and_unchanged_paths(tmp_path, monkeypatch, capfd):
+def test_deleted_and_unchanged_paths(tmp_path, runner):
     vault, origin, home = setup_vault(tmp_path)
     (vault / "initial.txt").unlink()
-    code, _, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "drop", "--", "initial.txt"
-    )
+    code, _, err = runner(vault, home, "-m", "drop", "--", "initial.txt")
     assert (code, err, changed(vault), origin_head(origin)) == (
         0,
         "",
@@ -315,15 +303,15 @@ def test_deleted_and_unchanged_paths(tmp_path, monkeypatch, capfd):
     git(vault, "add", "same.txt")
     git(vault, "commit", "-qm", "same")
     old = head(vault)
-    code, out, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "same", "--", "same.txt"
-    )
+    remote = origin_head(origin)
+    code, out, err = runner(vault, home, "-m", "same", "--", "same.txt")
     assert (code, out, err, head(vault)) == (
         0,
         "nothing to commit in those paths\n",
         "",
         old,
     )
+    assert origin_head(origin) == remote
 
 
 @pytest.mark.parametrize(
@@ -335,7 +323,7 @@ def test_deleted_and_unchanged_paths(tmp_path, monkeypatch, capfd):
         ("ignored", "ignored by the vault"),
     ],
 )
-def test_invalid_path_before_hook(tmp_path, monkeypatch, capfd, kind, message):
+def test_invalid_path_before_hook(tmp_path, runner, kind, message):
     vault, _, home = setup_vault(tmp_path)
     marker = tmp_path / "hook-ran"
     set_hook(vault, f"#!/bin/sh\ntouch '{marker}'\n")
@@ -354,22 +342,18 @@ def test_invalid_path_before_hook(tmp_path, monkeypatch, capfd, kind, message):
         marker.unlink()
         path = "secret.txt"
         (vault / path).write_text("secret\n")
-    code, out, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "x", "--", path
-    )
+    code, out, err = runner(vault, home, "-m", "x", "--", path)
     assert (code, out, err) == (2, "", f"{message}: {path}\n")
     assert not marker.exists()
 
 
-def test_subfolder_relative_and_absolute(tmp_path, monkeypatch, capfd):
+def test_subfolder_relative_and_absolute(tmp_path, runner):
     vault, origin, home = setup_vault(tmp_path)
     folder = vault / "sub"
     folder.mkdir()
     for number, path in enumerate(("one.txt", str(folder / "two.txt"))):
         (folder / f"{'one' if number == 0 else 'two'}.txt").write_text("x\n")
-        code, _, err = run_in_process(
-            vault, home, monkeypatch, capfd, "-m", "sub", "--", path, cwd=folder
-        )
+        code, _, err = runner(vault, home, "-m", "sub", "--", path, cwd=folder)
         assert (code, err, changed(vault), origin_head(origin)) == (
             0,
             "",
@@ -378,32 +362,34 @@ def test_subfolder_relative_and_absolute(tmp_path, monkeypatch, capfd):
         )
 
 
-def test_detached_head(tmp_path, monkeypatch, capfd):
+def test_detached_head(tmp_path, runner):
     vault, _, home = setup_vault(tmp_path)
     (vault / "c.txt").write_text("c\n")
     git(vault, "checkout", "-q", "--detach")
-    code, out, err = run_in_process(
-        vault, home, monkeypatch, capfd, "-m", "x", "--", "c.txt"
-    )
+    code, out, err = runner(vault, home, "-m", "x", "--", "c.txt")
     assert (code, out, err) == (2, "", "the vault is not on a branch\n")
 
 
 @pytest.mark.parametrize(
     "args", [("--", "c.txt"), ("-m", "x"), ("-m", "x", "c.txt"), ("-m", "x", "--")]
 )
-def test_usage(tmp_path, monkeypatch, capfd, args):
+def test_usage(tmp_path, runner, args):
     vault, _, home = setup_vault(tmp_path)
-    code, out, err = run_in_process(vault, home, monkeypatch, capfd, *args)
+    code, out, err = runner(vault, home, *args)
     assert code == 2 and out == "" and err.startswith("usage: vault-commit")
 
 
-def test_not_repository_top_level(tmp_path, monkeypatch, capfd):
+def test_not_repository_top_level(tmp_path, runner):
     vault, _, home = setup_vault(tmp_path)
     bad = vault / "sub"
     bad.mkdir()
-    monkeypatch.setenv("SECOND_BRAIN", str(bad))
-    monkeypatch.setenv("HOME", str(home))
-    code, out, err = run_in_process(
-        bad, home, monkeypatch, capfd, "-m", "x", "--", "c.txt"
-    )
+    code, out, err = runner(bad, home, "-m", "x", "--", "c.txt")
     assert (code, out, err) == (2, "", f"not a git repository: {bad}\n")
+
+
+def test_missing_vault_folder(tmp_path, runner):
+    missing = tmp_path / "absent-vault"
+    home = tmp_path / "home"
+    home.mkdir()
+    code, out, err = runner(missing, home, "-m", "x", "--", "c.txt", cwd=tmp_path)
+    assert (code, out, err) == (2, "", f"not a git repository: {missing}\n")
