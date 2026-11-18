@@ -551,7 +551,11 @@ def gh_problem(args, agent):
     if agent == "claude":
         return None
     if not path:
-        return GH_REASON
+        return (
+            None
+            if flags == {"--version": [None], "_ordered": [("--version", None)]}
+            else GH_REASON
+        )
     if path == ["api"]:
         methods = gh_values(flags, "-X", "--method")
         method = methods[-1] if methods else None
