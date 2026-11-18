@@ -158,6 +158,10 @@ description = "Area: ci"
 color = "C5DEF5"
 description = "Area: hub"
 
+[repository."sh4i-yurei/keepbreathing-infra"."scope:iac"]
+color = "C5DEF5"
+description = "Area: machines/, packer/ and tofu/"
+
 [repository."sh4i-yurei/keepbreathing-infra"."scope:node-exporter"]
 color = "C5DEF5"
 description = "Area: node-exporter"
