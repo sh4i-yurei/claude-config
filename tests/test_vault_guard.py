@@ -293,6 +293,41 @@ class VaultGuardTests(unittest.TestCase):
                 with self.subTest(agent=agent, command=command):
                     self.assertEqual(self.decision(command, agent), expected)
 
+    def test_gh_version_allowed_for_both_agents(self):
+        for agent in ("strict", "claude"):
+            with self.subTest(agent=agent):
+                self.assertEqual(self.decision("gh --version", agent), None)
+
+    def test_gh_version_allowed_through_path_and_shell(self):
+        commands = (
+            '"$RUNNER_TEMP/gh_2.97.0_linux_amd64/bin/gh" --version',
+            "bash -lc 'gh --version'",
+        )
+        for command in commands:
+            for agent in ("strict", "claude"):
+                with self.subTest(command=command, agent=agent):
+                    self.assertEqual(self.decision(command, agent), None)
+
+    def test_other_gh_commands_without_subcommands_stay_refused(self):
+        reason = "Allowed gh commands: run list/view/watch; pr view/list/diff/checks/status; issue view/list; repo view; api GET."
+        for command in ("gh --version --help", "gh --version=1", "gh --help", "gh"):
+            for agent, expected in (("strict", reason), ("claude", None)):
+                with self.subTest(command=command, agent=agent):
+                    self.assertEqual(self.decision(command, agent), expected)
+
+    def test_gh_version_with_unknown_command_stays_refused(self):
+        reason = "The guard can't judge this gh command: it doesn't know the command x."
+        for agent in ("strict", "claude"):
+            with self.subTest(agent=agent):
+                self.assertEqual(self.decision("gh --version x", agent), reason)
+
+    def test_gh_version_does_not_allow_later_gh_command(self):
+        reason = "Allowed gh commands: run list/view/watch; pr view/list/diff/checks/status; issue view/list; repo view; api GET."
+        self.assertEqual(
+            self.decision("gh --version && gh pr create --title x --body y", "strict"),
+            reason,
+        )
+
     def test_wrapped_nested_shell_priority(self):
         self.check_secret(
             (
