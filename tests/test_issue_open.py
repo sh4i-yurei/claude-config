@@ -496,6 +496,7 @@ class IssueOpen(unittest.TestCase):
             REPO: "scope:ci, scope:hooks, scope:rules, scope:skills, scope:tools, scope:vale, scope:workflow",
             "sh4i-yurei/codex-config": "scope:ci, scope:config, scope:hooks, scope:rules, scope:setup, scope:skills",
             "sh4i-yurei/keepbreathing": "scope:ci, scope:deploy, scope:site",
+            "sh4i-yurei/keepbreath-contact-api": "scope:ci, scope:deploy, scope:redis",
         }
         for repo, names in choices.items():
             for scope in (
@@ -520,6 +521,7 @@ class IssueOpen(unittest.TestCase):
                 "skills",
             ),
             "sh4i-yurei/keepbreathing": ("ci", "deploy", "site"),
+            "sh4i-yurei/keepbreath-contact-api": ("ci", "deploy", "redis"),
         }
         for repo, names in scopes.items():
             for name in names:
