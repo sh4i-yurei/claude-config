@@ -497,6 +497,7 @@ class IssueOpen(unittest.TestCase):
             "sh4i-yurei/codex-config": "scope:ci, scope:config, scope:hooks, scope:rules, scope:setup, scope:skills",
             "sh4i-yurei/keepbreathing": "scope:ci, scope:deploy, scope:site",
             "sh4i-yurei/keepbreath-contact-api": "scope:ci, scope:deploy, scope:redis",
+            "sh4i-yurei/keepbreathing-infra": "scope:access, scope:baseline, scope:ci, scope:hub, scope:node-exporter, scope:staging, scope:tailscale, scope:web, scope:workstation",
         }
         for repo, names in choices.items():
             for scope in (
@@ -510,6 +511,8 @@ class IssueOpen(unittest.TestCase):
                     self.assert_no_writes()
 
     def test_each_repository_scope_plans_its_exact_issue_labels(self):
+        self.state["debt_current_infra_forms"] = True
+        self.save()
         scopes = {
             REPO: ("ci", "hooks", "rules", "skills", "tools", "vale", "workflow"),
             "sh4i-yurei/codex-config": (
@@ -522,6 +525,17 @@ class IssueOpen(unittest.TestCase):
             ),
             "sh4i-yurei/keepbreathing": ("ci", "deploy", "site"),
             "sh4i-yurei/keepbreath-contact-api": ("ci", "deploy", "redis"),
+            "sh4i-yurei/keepbreathing-infra": (
+                "access",
+                "baseline",
+                "ci",
+                "hub",
+                "node-exporter",
+                "staging",
+                "tailscale",
+                "web",
+                "workstation",
+            ),
         }
         for repo, names in scopes.items():
             for name in names:
