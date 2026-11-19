@@ -61,6 +61,16 @@ vault-run --stdin "keepbreath0 sudo (hub)" -- ssh hub "sudo -S -p '' true"
 The runner reads the existing vault session itself. It does not pass the session key to the
 command or print secret values.
 
+## Committing to the vault
+
+Agents commit vault work only with `vault-commit -m MESSAGE -- PATH...` inside `dev`.
+It commits only the named paths even when other sessions have staged work.
+If the push is refused, the commit stays local for a person to sort out.
+
+```bash
+vault-commit -m "Workflow upkeep: a note" -- "10_Projects/16_Tooling/Workflow upkeep.md"
+```
+
 ## Agent guard registration
 
 `hooks/git-guard.py` runs under the host's `/usr/bin/python3`. It loads the vendored

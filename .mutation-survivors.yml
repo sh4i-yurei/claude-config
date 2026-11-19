@@ -249,3 +249,47 @@
   reason: >-
     None and "" both fail the isinstance(fields, dict) check that follows, so the
     command gives the same "has no readable frontmatter" refusal.
+- mutant: tools.vault_commit.x__paths__mutmut_19
+  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
+- mutant: tools.vault_commit.x__paths__mutmut_44
+  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
+- mutant: tools.vault_commit.x_main__mutmut_30
+  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
+- mutant: tools.vault_commit.x_main__mutmut_56
+  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
+- mutant: tools.vault_commit.x_main__mutmut_156
+  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
+- mutant: tools.vault_commit.x_main__mutmut_268
+  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
+- mutant: tools.vault_commit.x_main__mutmut_297
+  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
+- mutant: tools.vault_commit.x_main__mutmut_316
+  reason: The mutated check value is falsy just like False, so the same branch and public result follow.
+- mutant: tools.vault_commit.x_main__mutmut_319
+  reason: A refused git push prints the same stderr with or without -q, and a successful push's stderr is captured and never printed.
+- mutant: tools.vault_commit.x__paths__mutmut_47
+  reason: This flag changes only Git output that the command captures and discards; the command result is unchanged.
+- mutant: tools.vault_commit.x_main__mutmut_59
+  reason: This flag changes only Git output that the command captures and discards; the command result is unchanged.
+- mutant: tools.vault_commit.x_main__mutmut_300
+  reason: This flag changes only Git output that the command captures and discards; the command result is unchanged.
+- mutant: tools.vault_commit.x__git__mutmut_21
+  reason: Git hook run sends the hook's stdout and stderr to git's own stderr, so its stdout is always empty and capturing it changes nothing.
+- mutant: tools.vault_commit.x_main__mutmut_157
+  reason: Git hook run sends the hook's stdout and stderr to git's own stderr, so its stdout is always empty and capturing it changes nothing.
+- mutant: tools.vault_commit.x__paths__mutmut_5
+  reason: Pathlib discards the left operand when joining an absolute path, and resolve already anchors a relative parent at the current directory.
+- mutant: tools.vault_commit.x__paths__mutmut_6
+  reason: Pathlib discards the left operand when joining an absolute path, and resolve already anchors a relative parent at the current directory.
+- mutant: tools.vault_commit.x_main__mutmut_179
+  reason: The temporary folder and index file names are private to the attempt; changing their names leaves the commit and cleanup unchanged.
+- mutant: tools.vault_commit.x_main__mutmut_180
+  reason: The temporary folder and index file names are private to the attempt; changing their names leaves the commit and cleanup unchanged.
+- mutant: tools.vault_commit.x_main__mutmut_181
+  reason: The temporary folder and index file names are private to the attempt; changing their names leaves the commit and cleanup unchanged.
+- mutant: tools.vault_commit.x_main__mutmut_185
+  reason: The temporary folder and index file names are private to the attempt; changing their names leaves the commit and cleanup unchanged.
+- mutant: tools.vault_commit.x_main__mutmut_186
+  reason: The temporary folder and index file names are private to the attempt; changing their names leaves the commit and cleanup unchanged.
+- mutant: tools.vault_commit.x_main__mutmut_209
+  reason: Git add with this pathspec stages tracked removals with or without -A, so the committed tree is unchanged.
