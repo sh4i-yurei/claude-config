@@ -35,7 +35,7 @@ def test_python_workflow_caller():
     job = workflow["jobs"]["python"]
     assert job["uses"] == (
         "sh4i-yurei/ci-workflows/.github/workflows/python.yml@"
-        "6fa70095587800bf834d27d1cf2313a7b8dbb168"
+        "abf03158b1efda671529abb6b5b5c6f430d18fc4"
     )
     assert job["with"]["caller_workflow"] == ".github/workflows/ci.yml"
     assert job["with"]["caller_job"] == "python"
