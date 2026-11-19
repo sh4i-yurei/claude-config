@@ -32,6 +32,14 @@
 - mutant: hooks.git-guard.x_command__mutmut_115
   reason: >-
     bashlex redirect nodes always expose the heredoc attribute; removing getattr's fallback leaves every parsed command decision unchanged.
+- mutant: hooks.git-guard.x_git_problem__mutmut_94
+  reason: >-
+    git rev-parse --abbrev-ref already uses symbolic full names. Removing
+    --symbolic-full-name leaves the upstream name and every guard decision unchanged.
+- mutant: hooks.git-guard.x_git_problem__mutmut_103
+  reason: >-
+    Git accepts @{UPSTREAM} and @{upstream} with the same meaning. The upstream
+    lookup and every guard decision are unchanged.
 - mutant: hooks.git-guard.x_parse_gh__mutmut_11
   reason: >-
     False and None are both false in the parser's only checks of this state, so command paths, flags, and decisions are unchanged.
