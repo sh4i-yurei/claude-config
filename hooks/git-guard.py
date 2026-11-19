@@ -342,6 +342,16 @@ def git_problem(args, cwd, agent):
     if not args:
         return None
     action = args[0]
+    if action == "commit":
+        top_level = run_git(directory, *lookup, "rev-parse", "--show-toplevel")
+        vault = Path(
+            os.environ.get("SECOND_BRAIN", Path.home() / "Documents/Second_Brain")
+        )
+        if top_level and Path(top_level).resolve() == vault.resolve():
+            return (
+                "Commit vault work with vault-commit -m MESSAGE -- PATH...: a plain git "
+                "commit in the shared vault checkout can take another session's staged files."
+            )
     if unknown and action in ("push", "merge", "pull"):
         return "Unknown git global option for " + action + ": " + unknown
     if action in ("merge", "pull"):

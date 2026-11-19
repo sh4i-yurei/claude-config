@@ -9,6 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 
@@ -27,8 +28,8 @@ SECRET = "Secrets stay out of transcripts: "
 ISSUE = "Use tools/workflow/issue.py open; see README.md, Opening an issue from a file."
 
 
-def decision(command, agent):
-    event = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": "/tmp"}
+def decision(command, agent, cwd="/tmp"):
+    event = {"tool_name": "Bash", "tool_input": {"command": command}, "cwd": cwd}
     argv = [sys.executable, str(HOOK)]
     if agent == "claude":
         argv += ["--agent", "claude"]
@@ -63,6 +64,170 @@ def in_process_decision(command, agent, cwd="/tmp"):
 
 class VaultGuardTests(unittest.TestCase):
     decision = staticmethod(decision)
+    COMMIT_REASON = (
+        "Commit vault work with vault-commit -m MESSAGE -- PATH...: a plain git "
+        "commit in the shared vault checkout can take another session's staged files."
+    )
+
+    def scratch_vault(self, root):
+        vault = Path(root) / "vault"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(vault)], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(vault),
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "initial",
+            ],
+            check=True,
+        )
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(vault),
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/sh4i-yurei/second-brain.git",
+            ],
+            check=True,
+        )
+        return vault
+
+    def check_vault_commit(self, command, cwd, vault, expected):
+        with patch.dict(os.environ, {"SECOND_BRAIN": str(vault)}):
+            for agent in ("strict", "claude"):
+                with self.subTest(command=command, cwd=str(cwd), agent=agent):
+                    self.assertEqual(self.decision(command, agent, str(cwd)), expected)
+
+    def test_shared_vault_commit_forms(self):
+        with tempfile.TemporaryDirectory() as root:
+            vault = self.scratch_vault(root)
+            for command in (
+                "git commit -m x",
+                "git commit --amend --no-edit",
+                "git -c user.name=t commit -m x",
+            ):
+                self.check_vault_commit(command, vault, vault, self.COMMIT_REASON)
+
+    def test_shared_vault_subfolder_and_directory_switches(self):
+        with tempfile.TemporaryDirectory() as root:
+            vault = self.scratch_vault(root)
+            sub = vault / "sub"
+            sub.mkdir()
+            self.check_vault_commit("git commit -m x", sub, vault, self.COMMIT_REASON)
+            self.check_vault_commit(
+                f"git -C {vault} commit -m x", root, vault, self.COMMIT_REASON
+            )
+            self.check_vault_commit(
+                f"cd {vault} && git commit -m x", root, vault, self.COMMIT_REASON
+            )
+
+    def test_default_vault_location(self):
+        with tempfile.TemporaryDirectory() as root:
+            vault = self.scratch_vault(root)
+            home = Path(root) / "home"
+            (home / "Documents").mkdir(parents=True)
+            (home / "Documents" / "Second_Brain").symlink_to(
+                vault, target_is_directory=True
+            )
+            with patch.dict(os.environ, {"HOME": str(home)}):
+                os.environ.pop("SECOND_BRAIN", None)
+                for agent in ("strict", "claude"):
+                    with self.subTest(agent=agent):
+                        self.assertEqual(
+                            self.decision("git commit -m x", agent, str(vault)),
+                            self.COMMIT_REASON,
+                        )
+
+    def test_symbolic_vault_location_and_cwd(self):
+        with tempfile.TemporaryDirectory() as root:
+            vault = self.scratch_vault(root)
+            link = Path(root) / "linked-vault"
+            link.symlink_to(vault, target_is_directory=True)
+            self.check_vault_commit("git commit -m x", vault, link, self.COMMIT_REASON)
+            self.check_vault_commit("git commit -m x", link, vault, self.COMMIT_REASON)
+
+    def test_vault_worktree_and_clone_commits_allowed(self):
+        with tempfile.TemporaryDirectory() as root:
+            vault = self.scratch_vault(root)
+            worktree = Path(root) / "worktree"
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(vault),
+                    "worktree",
+                    "add",
+                    "-q",
+                    "-b",
+                    "test",
+                    str(worktree),
+                ],
+                check=True,
+            )
+            clone = Path(root) / "clone"
+            subprocess.run(["git", "clone", "-q", str(vault), str(clone)], check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(clone),
+                    "remote",
+                    "set-url",
+                    "origin",
+                    "https://github.com/sh4i-yurei/second-brain.git",
+                ],
+                check=True,
+            )
+            for cwd in (worktree, clone):
+                self.check_vault_commit("git commit -m x", cwd, vault, None)
+
+    def test_other_vault_actions_allowed(self):
+        with tempfile.TemporaryDirectory() as root:
+            vault = self.scratch_vault(root)
+            for command in (
+                "git status",
+                "git add a.md",
+                "git log -1",
+                "vault-commit -m x -- a.md",
+            ):
+                self.check_vault_commit(command, vault, vault, None)
+
+    def test_other_repository_commit_allowed(self):
+        with tempfile.TemporaryDirectory() as root:
+            vault = self.scratch_vault(root)
+            other = Path(root) / "other"
+            subprocess.run(["git", "init", "-q", "-b", "main", str(other)], check=True)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(other),
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://github.com/sh4i-yurei/claude-config.git",
+                ],
+                check=True,
+            )
+            self.check_vault_commit("git commit -m x", other, vault, None)
+
+    def test_missing_vault_location_allows_commit(self):
+        with tempfile.TemporaryDirectory() as root:
+            vault = self.scratch_vault(root)
+            self.check_vault_commit(
+                "git commit -m x", vault, Path(root) / "missing", None
+            )
 
     def check_secret(self, commands):
         for agent in ("claude", "strict"):
