@@ -69,8 +69,8 @@ class VaultGuardTests(unittest.TestCase):
         "commit in the shared vault checkout can take another session's staged files."
     )
 
-    def scratch_vault(self, root):
-        vault = Path(root) / "vault"
+    def scratch_vault(self, root, name="vault"):
+        vault = Path(root) / name
         subprocess.run(["git", "init", "-q", "-b", "main", str(vault)], check=True)
         subprocess.run(
             [
@@ -132,14 +132,21 @@ class VaultGuardTests(unittest.TestCase):
                 f"cd {vault} && git commit -m x", root, vault, self.COMMIT_REASON
             )
 
-    def test_default_vault_location(self):
+    def test_shared_vault_explicit_git_dir_and_work_tree(self):
         with tempfile.TemporaryDirectory() as root:
             vault = self.scratch_vault(root)
+            self.check_vault_commit(
+                f"git --git-dir={vault / '.git'} --work-tree={vault} commit -m x",
+                root,
+                vault,
+                self.COMMIT_REASON,
+            )
+
+    def test_default_vault_location(self):
+        with tempfile.TemporaryDirectory() as root:
             home = Path(root) / "home"
             (home / "Documents").mkdir(parents=True)
-            (home / "Documents" / "Second_Brain").symlink_to(
-                vault, target_is_directory=True
-            )
+            vault = self.scratch_vault(home / "Documents", "Second_Brain")
             with patch.dict(os.environ, {"HOME": str(home)}):
                 os.environ.pop("SECOND_BRAIN", None)
                 for agent in ("strict", "claude"):
