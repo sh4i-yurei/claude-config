@@ -1246,6 +1246,24 @@ class LookupTests(unittest.TestCase):
         self.assertIsNone(response.path)
         self.assertEqual(list(self.root.rglob("*.json")), [])
 
+    def test_gateway_response_reports_missing_key_item_as_not_configured(self):
+        message = (
+            "[gw] REFUSED api.firecrawl.dev: Vaultwarden item unavailable: "
+            'Firecrawl API key; no vault item is named exactly "Firecrawl API key"\n'
+        )
+        completed = subprocess.CompletedProcess([], 2, stdout="", stderr=message)
+        with mock.patch.object(lookup.subprocess, "run", return_value=completed):
+            response = lookup.gateway_response(
+                "search",
+                ["example"],
+                "Firecrawl",
+                "https://api.firecrawl.dev/v2/search",
+                fresh=True,
+                root=self.root,
+            )
+        self.assertEqual(response.failure, "not configured")
+        self.assertIsNone(response.path)
+
     def test_main_reports_missing_session_reason_in_tried_entry(self):
         message = (
             "[gw] REFUSED api.github.com: Vaultwarden session unavailable; run vu\n"
@@ -1385,32 +1403,65 @@ class LookupTests(unittest.TestCase):
                 "again": {"key_item": "First key"},
             }
         }
+        unlocked = subprocess.CompletedProcess(
+            ["bw", "status"], 0, stdout=json.dumps({"status": "unlocked"}), stderr=""
+        )
+        with (
+            mock.patch.dict(os.environ, {"BW_SESSION": "session"}, clear=False),
+            mock.patch.object(lookup, "load_config", return_value=config),
+            mock.patch.object(lookup.shutil, "which", return_value="/bin/tool"),
+            mock.patch.object(lookup.subprocess, "run", return_value=unlocked),
+            mock.patch.object(
+                lookup, "credential", return_value="TEST_ONLY_DOCTOR_SECRET"
+            ),
+        ):
+            outcome = lookup.doctor_lookup([], root=self.root)
+        self.assertEqual(
+            outcome["answer"]["keys"],
+            {
+                "First key": {"available": True, "reason": None},
+                "Second key": {"available": True, "reason": None},
+            },
+        )
+        self.assertTrue(outcome["answer"]["vaultwarden_session"]["available"])
+        self.assertNotIn("TEST_ONLY_DOCTOR_SECRET", json.dumps(outcome))
 
-        def bitwarden(command, **_kwargs):
-            if command == ["bw", "status"]:
-                return subprocess.CompletedProcess(
-                    command, 0, stdout=json.dumps({"status": "unlocked"}), stderr=""
-                )
-            if command[:4] == ["bw", "list", "items", "--search"]:
-                name = command[4]
-                return subprocess.CompletedProcess(
-                    command,
-                    0,
-                    stdout=json.dumps([{"id": f"id-{name}", "name": name}]),
-                    stderr="",
-                )
-            return subprocess.CompletedProcess(command, 0, stdout="secret\n", stderr="")
+    def test_doctor_turns_each_credential_result_into_a_status(self):
+        config = {
+            "providers": {
+                "one": {"key_item": "First key"},
+                "two": {"key_item": "Second key"},
+            }
+        }
+        unlocked = subprocess.CompletedProcess(
+            ["bw", "status"], 0, stdout=json.dumps({"status": "unlocked"}), stderr=""
+        )
+
+        def credential(item):
+            if item == "First key":
+                return "TEST_ONLY_DOCTOR_SECRET"
+            raise ValueError(f"Vaultwarden item unavailable: {item}; it has no password")
 
         with (
             mock.patch.dict(os.environ, {"BW_SESSION": "session"}, clear=False),
             mock.patch.object(lookup, "load_config", return_value=config),
             mock.patch.object(lookup.shutil, "which", return_value="/bin/tool"),
-            mock.patch.object(lookup.subprocess, "run", side_effect=bitwarden),
+            mock.patch.object(lookup.subprocess, "run", return_value=unlocked),
+            mock.patch.object(lookup, "credential", side_effect=credential) as read,
         ):
             outcome = lookup.doctor_lookup([], root=self.root)
-        self.assertEqual(set(outcome["answer"]["keys"]), {"First key", "Second key"})
-        self.assertTrue(outcome["answer"]["vaultwarden_session"]["available"])
-        self.assertNotIn("secret", json.dumps(outcome))
+        self.assertEqual(
+            outcome["answer"]["keys"],
+            {
+                "First key": {"available": True, "reason": None},
+                "Second key": {"available": False, "reason": "item unavailable"},
+            },
+        )
+        self.assertEqual(
+            sorted(call.args for call in read.call_args_list),
+            [("First key",), ("Second key",)],
+        )
+        self.assertNotIn("TEST_ONLY_DOCTOR_SECRET", json.dumps(outcome))
 
     def test_doctor_reports_missing_bw_and_invalid_session(self):
         config = {"providers": {"one": {"key_item": "First key"}}}
@@ -1418,8 +1469,10 @@ class LookupTests(unittest.TestCase):
         with (
             mock.patch.object(lookup, "load_config", return_value=config),
             mock.patch.object(lookup.shutil, "which", side_effect=which),
+            mock.patch.object(lookup, "credential") as unread,
         ):
             missing = lookup.doctor_lookup([], root=self.root)
+        unread.assert_not_called()
         self.assertFalse(missing["answer"]["tools"]["bw"]["available"])
         self.assertFalse(missing["answer"]["vaultwarden_session"]["available"])
         self.assertEqual(
@@ -1434,8 +1487,10 @@ class LookupTests(unittest.TestCase):
             mock.patch.object(lookup, "load_config", return_value=config),
             mock.patch.object(lookup.shutil, "which", return_value="/bin/tool"),
             mock.patch.object(lookup.subprocess, "run", return_value=locked) as run,
+            mock.patch.object(lookup, "credential") as unread,
         ):
             invalid = lookup.doctor_lookup([], root=self.root)
+        unread.assert_not_called()
         self.assertFalse(invalid["answer"]["vaultwarden_session"]["available"])
         self.assertFalse(invalid["answer"]["keys"]["First key"]["available"])
         run.assert_called_once()

@@ -31,6 +31,9 @@ from common import (
     write_envelope,
 )
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools"))
+import vault_item
+
 STATE = Path.home() / ".claude" / "research-gw-state.json"
 LOCK = Path.home() / ".claude" / "research-gw.lock"
 CURL = "/usr/bin/curl"
@@ -293,50 +296,16 @@ def session_token() -> str:
     return token
 
 
-def credential_item_id(item: str, env: dict[str, str]) -> str:
-    """Resolve one Vaultwarden item by exact name before reading its password."""
-    result = subprocess.run(
-        ["bw", "list", "items", "--search", item],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    try:
-        items = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        items = None
-    matches = (
-        [
-            entry.get("id")
-            for entry in items
-            if isinstance(entry, dict) and entry.get("name") == item
-        ]
-        if isinstance(items, list)
-        else []
-    )
-    if result.returncode != 0 or len(matches) != 1 or not isinstance(matches[0], str):
-        raise ValueError(
-            f"Vaultwarden item unavailable: {item}; run vu if the session expired"
-        )
-    return matches[0]
-
-
 def credential(item: str) -> str:
-    env = {**os.environ, "BW_SESSION": session_token(), "BW_NOINTERACTION": "true"}
-    item_id = credential_item_id(item, env)
-    result = subprocess.run(
-        ["bw", "get", "password", item_id],
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        raise ValueError(
-            f"Vaultwarden item unavailable: {item}; run vu if the session expired"
-        )
-    return result.stdout.strip()
+    """Return the login password of the one vault item named exactly item."""
+    try:
+        found = vault_item.read_item(item)
+    except vault_item.VaultItemError as error:
+        raise ValueError(f"Vaultwarden item unavailable: {item}; {error}") from None
+    password = (found.get("login") or {}).get("password")
+    if not isinstance(password, str) or not password:
+        raise ValueError(f"Vaultwarden item unavailable: {item}; it has no password")
+    return password
 
 
 def curl_quote(value: str) -> str:
