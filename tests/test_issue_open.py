@@ -507,7 +507,7 @@ class IssueOpen(unittest.TestCase):
                     data = self.valid().replace(REPO, repo).replace("scope:ci", scope)
                     result = self.run_open(data, "--dry-run")
                     self.assertEqual(result.returncode, 2, result.stdout)
-                    self.assertIn(f"scope must be one of: {names}", result.stdout)
+                    self.assertIn(f"scope must be one of: {names}", result.stdout.splitlines())
                     self.assert_no_writes()
 
     def test_each_repository_scope_plans_its_exact_issue_labels(self):
