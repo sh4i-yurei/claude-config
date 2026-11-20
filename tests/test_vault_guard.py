@@ -261,6 +261,9 @@ class VaultGuardTests(unittest.TestCase):
                 "distrobox enter dev -- vault-env",
                 "bash -lc 'eval \"$(vault-env)\" && gh run list'",
                 "/var/home/sh4i_yurei/.local/bin/vault-env",
+                "tools/vault_env.py",
+                "./vault_env.py",
+                "/var/home/sh4i_yurei/Documents/claude-config/tools/vault_env.py",
             )
         )
         self.check_allowed(
@@ -268,6 +271,8 @@ class VaultGuardTests(unittest.TestCase):
                 "grep -n vault-env README.md",
                 "rg -n 'vault-env' hooks",
                 "git log --grep vault-env --oneline",
+                "cat tools/vault_env.py",
+                "git log --oneline -- tools/vault_env.py",
             )
         )
 

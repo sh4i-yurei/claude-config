@@ -722,7 +722,7 @@ def command(node, cwd, agent, source, pipeline_input=()):
     if not args:
         return cwd, None
     name = os.path.basename(args[0])
-    if name == VAULT_ENV:
+    if name in (VAULT_ENV, "vault_env.py"):
         return cwd, "Secrets stay out of transcripts: use vault-run to fetch secrets."
     if (
         name == BW

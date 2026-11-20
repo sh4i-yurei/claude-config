@@ -1,0 +1,11 @@
+[
+  {"object":"item","type":2,"name":"(keepbreath.ing) API tokens, retired","secureNote":{"type":0},"fields":[{"name":"GH_TOKEN","value":"dummy-retired-gh","type":1}]},
+  {"object":"item","type":2,"name":"API tokens (keepbreath.ing)","secureNote":{"type":0},"fields":[{"name":"CLOUDFLARE_API_TOKEN","value":"dummy-cf","type":1},{"name":"GH_TOKEN","value":"dummy-gh","type":1},{"name":"DIGITALOCEAN_API_TOKEN","value":"dummy-do","type":1},{"name":"Brevo_smtp_key","value":"dummy-brevo","type":1}]},
+  {"object":"item","type":2,"name":"api tokens (keepbreath.ing)","secureNote":{"type":0},"fields":[{"name":"GH_TOKEN","value":"dummy-lower-gh","type":1}]},
+  {"object":"item","type":2,"name":"API tokens (keepbreath.ing) old","secureNote":{"type":0},"fields":[{"name":"GH_TOKEN","value":"dummy-old-gh","type":1}]},
+  {"object":"item","type":2,"name":"Cloudflare DNS token","notes":"Scoped copy of a token in API tokens (keepbreath.ing)","secureNote":{"type":0},"fields":[{"name":"CLOUDFLARE_API_TOKEN","value":"dummy-dns","type":1}]},
+  {"object":"item","type":2,"name":"Hub break-glass","notes":"keepbreath0 sudo (hub) is on the sheet","secureNote":{"type":0}},
+  {"object":"item","type":1,"name":"keepbreath0 sudo (control)","login":{"username":"keepbreath0","password":"dummy-control","uris":[],"fido2Credentials":[],"passwordRevisionDate":null}},
+  {"object":"item","type":1,"name":"keepbreath0 sudo (hub)","login":{"username":"keepbreath0","password":"dummy-pass","uris":[{"match":null,"uri":"ssh://hub"}],"fido2Credentials":[],"passwordRevisionDate":null},"fields":[{"name":"hash","value":"dummy-hash","type":1}]},
+  {"object":"item","type":1,"name":"keepbreath0 sudo (hub) old","login":{"username":"keepbreath0","password":"dummy-old-pass","uris":[],"fido2Credentials":[],"passwordRevisionDate":null}}
+]

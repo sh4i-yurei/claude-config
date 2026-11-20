@@ -61,6 +61,8 @@ vault-run --stdin "keepbreath0 sudo (hub)" -- ssh hub "sudo -S -p '' true"
 The runner reads the existing vault session itself. It does not pass the session key to the
 command or print secret values.
 
+vault-run, vault-env and git-credential-bw all read an item through tools/vault_item.py, which finds the one item whose name is exactly the name asked for. When no item or several items have that name, they say so instead of reading the wrong one. vault-env and git-credential-bw are linked as ~/.local/bin/vault-env and ~/.local/bin/git-credential-bw, from tools/vault_env.py and tools/git_credential_bw.py.
+
 ## Committing to the vault
 
 Agents commit vault work only with `vault-commit -m MESSAGE -- PATH...` inside `dev`.

@@ -14,6 +14,9 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from tools import vault_item
+
+sys.modules["vault_item"] = vault_item
 from tools import vault_run
 
 TOKEN_ITEM = "API tokens (keepbreath.ing)"
@@ -26,6 +29,12 @@ VALUES = (
     "dummy-pass",
     "dummy-hash",
     "dummy-session",
+    "dummy-retired-gh",
+    "dummy-lower-gh",
+    "dummy-old-gh",
+    "dummy-dns",
+    "dummy-control",
+    "dummy-old-pass",
 )
 PYTHON = "/usr/bin/python3"
 CREATE = [PYTHON, "-c", "open('ran','w')"]
@@ -43,32 +52,7 @@ class VaultRunTests(unittest.TestCase):
         self.session.write_text("dummy-session")
         self.marker = self.root / "container"
         self.marker.touch()
-        fake = self.bin / "bw"
-        fake.write_text("""#!/usr/bin/python3
-import json, os, sys
-from pathlib import Path
-with Path(os.environ["FAKE_BW_CALLS"]).open("a") as output:
-    output.write(json.dumps({"args": sys.argv[1:], "session": os.environ.get("BW_SESSION"), "nointeraction": os.environ.get("BW_NOINTERACTION")}) + "\\n")
-if not os.environ.get("BW_SESSION"):
-    print("Vault is locked.", file=sys.stderr)
-    sys.exit(1)
-if os.environ.get("FAKE_BW_MODE") == "failed-json":
-    print('{"fields": [{"name": "GH_TOKEN", "value": "dummy-gh"}]}')
-    sys.exit(1)
-if os.environ.get("FAKE_BW_MODE") == "stderr-secret":
-    print("dummy-pass", file=sys.stderr)
-items = {
-    "API tokens (keepbreath.ing)": {"object": "item", "type": 2, "name": "API tokens (keepbreath.ing)", "secureNote": {"type": 0}, "fields": [{"name": "CLOUDFLARE_API_TOKEN", "value": "dummy-cf", "type": 1}, {"name": "GH_TOKEN", "value": "dummy-gh", "type": 1}, {"name": "DIGITALOCEAN_API_TOKEN", "value": "dummy-do", "type": 1}, {"name": "Brevo_smtp_key", "value": "dummy-brevo", "type": 1}]},
-    "keepbreath0 sudo (hub)": {"object": "item", "type": 1, "name": "keepbreath0 sudo (hub)", "login": {"username": "keepbreath0", "password": "dummy-pass", "uris": [], "fido2Credentials": [], "passwordRevisionDate": None}, "fields": [{"name": "hash", "value": "dummy-hash", "type": 1}]},
-}
-if sys.argv[1:] != ["get", "item", sys.argv[3]] or sys.argv[3] not in items:
-    print("Not found.", file=sys.stderr)
-    sys.exit(1)
-if os.environ.get("FAKE_BW_MODE") == "no-fields":
-    items["API tokens (keepbreath.ing)"].pop("fields")
-print(json.dumps(items[sys.argv[3]]))
-""")
-        fake.chmod(0o755)
+        (self.bin / "bw").symlink_to(ROOT / "tests/fixtures/bw/fake_bw.py")
         self.environment = dict(os.environ)
         for name in (
             "BW_SESSION",
@@ -77,12 +61,14 @@ print(json.dumps(items[sys.argv[3]]))
             "GH_TOKEN",
             "DIGITALOCEAN_API_TOKEN",
             "Brevo_smtp_key",
+            "XDG_RUNTIME_DIR",
         ):
             self.environment.pop(name, None)
         self.environment.update(
             PATH=f"{self.bin}:/usr/bin",
             XDG_RUNTIME_DIR=str(self.root),
             FAKE_BW_CALLS=str(self.calls_file),
+            FAKE_BW_ITEMS=str(ROOT / "tests/fixtures/bw/items.json"),
         )
 
     def run_vault(self, *args):
@@ -101,7 +87,8 @@ print(json.dumps(items[sys.argv[3]]))
                 os.dup2(child_stderr.fileno(), 2)
                 with (
                     patch.dict(os.environ, self.environment, clear=True),
-                    patch.object(vault_run, "CONTAINER_MARKER", self.marker),
+                    patch.object(vault_item, "CONTAINER_MARKER", self.marker),
+                    patch.object(os, "getuid", return_value=4294967294),
                     redirect_stdout(stdout),
                     redirect_stderr(stderr),
                 ):
@@ -181,7 +168,7 @@ print(json.dumps(items[sys.argv[3]]))
             self.calls(),
             [
                 {
-                    "args": ["get", "item", TOKEN_ITEM],
+                    "args": ["list", "items", "--search", TOKEN_ITEM],
                     "session": "dummy-session",
                     "nointeraction": "true",
                 }
@@ -216,7 +203,7 @@ print(json.dumps(items[sys.argv[3]]))
             self.calls(),
             [
                 {
-                    "args": ["get", "item", SUDO_ITEM],
+                    "args": ["list", "items", "--search", SUDO_ITEM],
                     "session": "dummy-session",
                     "nointeraction": "true",
                 }
@@ -235,7 +222,10 @@ print(json.dumps(items[sys.argv[3]]))
         )
         self.assertEqual(
             [call["args"] for call in self.calls()],
-            [["get", "item", TOKEN_ITEM], ["get", "item", SUDO_ITEM]],
+            [
+                ["list", "items", "--search", TOKEN_ITEM],
+                ["list", "items", "--search", SUDO_ITEM],
+            ],
         )
 
     def test_child_exit_and_signal(self):
@@ -285,8 +275,15 @@ print(json.dumps(items[sys.argv[3]]))
             (
                 1,
                 "",
-                'vault-run: nothing from the vault for "no such item zz". Is the vault unlocked, and does the item exist? Run vu.\n',
+                'vault-run: no vault item is named exactly "no such item zz"\n',
             ),
+        )
+        self.assertFalse((self.root / "ran").exists())
+
+    def test_search_matches_but_no_exact_item(self):
+        self.assertEqual(
+            self.run_vault("--stdin", "keepbreath0 sudo", "--", *CREATE),
+            (1, "", 'vault-run: no vault item is named exactly "keepbreath0 sudo"\n'),
         )
         self.assertFalse((self.root / "ran").exists())
 
@@ -297,7 +294,7 @@ print(json.dumps(items[sys.argv[3]]))
             (
                 1,
                 "",
-                f'vault-run: nothing from the vault for "{TOKEN_ITEM}". Is the vault unlocked, and does the item exist? Run vu.\n',
+                f'vault-run: nothing from the vault for "{TOKEN_ITEM}". Is it unlocked? Run vu.\n',
             ),
         )
         self.assertEqual(self.calls()[0]["session"], None)
@@ -323,7 +320,7 @@ print(json.dumps(items[sys.argv[3]]))
             (
                 1,
                 "",
-                f'vault-run: nothing from the vault for "{TOKEN_ITEM}". Is the vault unlocked, and does the item exist? Run vu.\n',
+                f'vault-run: nothing from the vault for "{TOKEN_ITEM}". Is it unlocked? Run vu.\n',
             ),
         )
         self.assertFalse((self.root / "ran").exists())
@@ -389,10 +386,14 @@ print(json.dumps(items[sys.argv[3]]))
     def test_main_uses_process_arguments(self):
         output = io.StringIO()
         with (
+            patch.dict(os.environ, self.environment, clear=True),
+            patch.object(os, "getuid", return_value=4294967294),
+            patch.object(vault_item, "CONTAINER_MARKER", self.marker),
             patch.object(sys, "argv", ["vault-run", "--help"]),
             redirect_stdout(output),
         ):
             self.assertEqual(vault_run.main(), 0)
+        self.assertEqual(self.calls(), [])
         self.assertTrue(output.getvalue().startswith("usage: vault-run"))
 
     def test_child_output_passes_through(self):

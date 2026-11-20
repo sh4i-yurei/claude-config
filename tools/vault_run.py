@@ -2,14 +2,12 @@
 """Run a command with selected Bitwarden fields or one password."""
 
 import argparse
-import json
 import os
-from pathlib import Path
 import subprocess
 import sys
 
+import vault_item
 
-CONTAINER_MARKER = Path("/run/.containerenv")
 TOKEN_ITEM = "API tokens (keepbreath.ing)"
 
 
@@ -21,26 +19,6 @@ def _parser():
     parser.add_argument("--env", action="append", metavar="NAME")
     parser.add_argument("--stdin", action="append", metavar="ITEM", default=[])
     return parser
-
-
-def _read_item(name, environment):
-    try:
-        result = subprocess.run(
-            ["bw", "get", "item", name],
-            env=environment,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-        )
-        if result.returncode == 0 and result.stdout:
-            return json.loads(result.stdout)
-    except (OSError, ValueError):
-        pass
-    print(
-        f'vault-run: nothing from the vault for "{name}". '
-        "Is the vault unlocked, and does the item exist? Run vu.",
-        file=sys.stderr,
-    )
-    return None
 
 
 def main(argv=None):
@@ -63,30 +41,13 @@ def main(argv=None):
     except SystemExit as error:
         return error.code
 
-    if not CONTAINER_MARKER.is_file():
-        print(
-            "vault-run: bw runs only inside the dev container (distrobox enter dev)",
-            file=sys.stderr,
-        )
-        return 1
-
-    bw_environment = os.environ.copy()
-    bw_environment["BW_NOINTERACTION"] = "true"
-    if not bw_environment.get("BW_SESSION"):
-        session_file = (
-            Path(os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}")
-            / "bw-session"
-        )
-        try:
-            bw_environment["BW_SESSION"] = session_file.read_text()
-        except OSError:
-            bw_environment.pop("BW_SESSION", None)
-
     child_environment = os.environ.copy()
     child_environment.pop("BW_SESSION", None)
     if options.env:
-        item = _read_item(TOKEN_ITEM, bw_environment)
-        if item is None:
+        try:
+            item = vault_item.read_item(TOKEN_ITEM)
+        except vault_item.VaultItemError as error:
+            print(f"vault-run: {error}", file=sys.stderr)
             return 1
         fields = {
             field.get("name"): field.get("value") for field in item.get("fields", [])
@@ -100,8 +61,10 @@ def main(argv=None):
     password = None
     if options.stdin:
         name = options.stdin[0]
-        item = _read_item(name, bw_environment)
-        if item is None:
+        try:
+            item = vault_item.read_item(name)
+        except vault_item.VaultItemError as error:
+            print(f"vault-run: {error}", file=sys.stderr)
             return 1
         password = item.get("login", {}).get("password")
         if password is None:
