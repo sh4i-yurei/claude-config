@@ -13,7 +13,12 @@ import unittest
 
 import test_vault_item as fixture
 
-ROOT, TOKEN, FIXTURE, VALUES = fixture.ROOT, fixture.TOKEN, fixture.FIXTURE, fixture.VALUES
+ROOT, TOKEN, FIXTURE, VALUES = (
+    fixture.ROOT,
+    fixture.TOKEN,
+    fixture.FIXTURE,
+    fixture.VALUES,
+)
 from tools import vault_item
 
 sys.modules["vault_item"] = vault_item
@@ -132,6 +137,9 @@ class CredentialTests(unittest.TestCase):
         )
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
         with (
+            patch.dict(os.environ, self.environment, clear=True),
+            patch.object(os, "getuid", return_value=4294967294),
+            patch.object(vault_item, "CONTAINER_MARKER", self.marker),
             patch.object(
                 sys, "argv", [str(ROOT / "tools/git_credential_bw.py"), "store"]
             ),
@@ -141,3 +149,21 @@ class CredentialTests(unittest.TestCase):
                 str(ROOT / "tools/git_credential_bw.py"), run_name="__main__"
             )
         self.assertEqual(raised.exception.code, 0)
+        self.assertEqual(self.calls(), [])
+
+    def test_main_reads_process_arguments(self):
+        self.environment["BW_SESSION"] = "dummy-session"
+        out, err = io.StringIO(), io.StringIO()
+        with (
+            patch.dict(os.environ, self.environment, clear=True),
+            patch.object(os, "getuid", return_value=4294967294),
+            patch.object(vault_item, "CONTAINER_MARKER", self.marker),
+            patch.object(sys, "argv", ["git-credential-bw", "get"]),
+            redirect_stdout(out),
+            redirect_stderr(err),
+        ):
+            code = git_credential_bw.main()
+        self.assertEqual(
+            (code, out.getvalue(), err.getvalue()),
+            (0, "username=sh4i-yurei\npassword=dummy-gh\n", ""),
+        )

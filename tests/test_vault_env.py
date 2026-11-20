@@ -13,7 +13,12 @@ import unittest
 
 import test_vault_item as fixture
 
-ROOT, TOKEN, FIXTURE, VALUES = fixture.ROOT, fixture.TOKEN, fixture.FIXTURE, fixture.VALUES
+ROOT, TOKEN, FIXTURE, VALUES = (
+    fixture.ROOT,
+    fixture.TOKEN,
+    fixture.FIXTURE,
+    fixture.VALUES,
+)
 from tools import vault_item
 
 sys.modules["vault_item"] = vault_item
@@ -181,8 +186,29 @@ class VaultEnvTests(unittest.TestCase):
             (2, "", 'usage: eval "$(vault-env)"\n'),
         )
         with (
+            patch.dict(os.environ, self.environment, clear=True),
+            patch.object(os, "getuid", return_value=4294967294),
+            patch.object(vault_item, "CONTAINER_MARKER", self.marker),
             patch.object(sys, "argv", [str(ROOT / "tools/vault_env.py"), "--help"]),
             self.assertRaises(SystemExit) as raised,
         ):
             runpy.run_path(str(ROOT / "tools/vault_env.py"), run_name="__main__")
         self.assertEqual(raised.exception.code, 2)
+        self.assertEqual(self.calls(), [])
+
+    def test_main_reads_process_arguments(self):
+        out, err = io.StringIO(), io.StringIO()
+        with (
+            patch.dict(os.environ, self.environment, clear=True),
+            patch.object(os, "getuid", return_value=4294967294),
+            patch.object(vault_item, "CONTAINER_MARKER", self.marker),
+            patch.object(sys, "argv", ["vault-env", "--help"]),
+            redirect_stdout(out),
+            redirect_stderr(err),
+        ):
+            code = vault_env.main()
+        self.assertEqual(
+            (code, out.getvalue(), err.getvalue()),
+            (2, "", 'usage: eval "$(vault-env)"\n'),
+        )
+        self.assertEqual(self.calls(), [])

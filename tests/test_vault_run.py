@@ -386,10 +386,14 @@ class VaultRunTests(unittest.TestCase):
     def test_main_uses_process_arguments(self):
         output = io.StringIO()
         with (
+            patch.dict(os.environ, self.environment, clear=True),
+            patch.object(os, "getuid", return_value=4294967294),
+            patch.object(vault_item, "CONTAINER_MARKER", self.marker),
             patch.object(sys, "argv", ["vault-run", "--help"]),
             redirect_stdout(output),
         ):
             self.assertEqual(vault_run.main(), 0)
+        self.assertEqual(self.calls(), [])
         self.assertTrue(output.getvalue().startswith("usage: vault-run"))
 
     def test_child_output_passes_through(self):
