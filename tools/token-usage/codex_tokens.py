@@ -6,6 +6,7 @@ cx_items.jsonl and cx_calls.jsonl.
 """
 
 import argparse
+import datetime
 import json, glob, os, re
 import sys
 
@@ -92,6 +93,15 @@ def user_kind(text):
 
 
 def main(argv=None):
+    def window_time(value):
+        try:
+            moment = datetime.datetime.fromisoformat(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"not an ISO 8601 date or date and time: {value!r}"
+            ) from None
+        return moment.astimezone() if moment.tzinfo is None else moment
+
     parser = argparse.ArgumentParser(
         prog="codex_tokens.py", description=__doc__.splitlines()[0]
     )
@@ -101,12 +111,48 @@ def main(argv=None):
         default=os.path.expanduser("~/.codex/sessions"),
         help="folder of Codex session files to read (default: ~/.codex/sessions)",
     )
+    parser.add_argument(
+        "--since",
+        metavar="WHEN",
+        type=window_time,
+        help="keep only sessions that started at or after WHEN, an ISO 8601 date or date and time read in local time when it has no offset",
+    )
+    parser.add_argument(
+        "--until",
+        metavar="WHEN",
+        type=window_time,
+        help="keep only sessions that started before WHEN, given the same way as --since",
+    )
     args = parser.parse_args(argv)
+    if args.since is not None and args.until is not None and args.since >= args.until:
+        parser.error("--since must be before --until")
     out = os.environ.get("TOKEN_USAGE_OUT", os.getcwd())
     files = sorted(glob.glob(args.sessions + "/**/*.jsonl", recursive=True))
     io = open(os.path.join(out, "cx_items.jsonl"), "w")
     co = open(os.path.join(out, "cx_calls.jsonl"), "w")
+    unreadable = 0
     for f in files:
+        if args.since is not None or args.until is not None:
+            start = None
+            with open(f) as session:
+                for line in session:
+                    record = json.loads(line)
+                    if record.get("type") == "session_meta":
+                        payload = record.get("payload") or {}
+                        value = payload.get("timestamp")
+                        if isinstance(value, str):
+                            try:
+                                start = datetime.datetime.fromisoformat(value)
+                            except ValueError:
+                                pass
+                        break
+            if start is None or start.tzinfo is None:
+                unreadable += 1
+                continue
+            if (args.since is not None and start < args.since) or (
+                args.until is not None and start >= args.until
+            ):
+                continue
         sess = os.path.basename(f)
         stype = "?"
         live, pending, calls = [], [], 0
@@ -269,6 +315,11 @@ def main(argv=None):
         flush("end")
     io.close()
     co.close()
+    if unreadable:
+        print(
+            f"left out {unreadable} session file(s) with no readable start",
+            file=sys.stderr,
+        )
     return 0
 
 
