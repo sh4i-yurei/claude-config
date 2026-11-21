@@ -1235,6 +1235,30 @@ class VaultGuardInProcessTests(VaultGuardTests):
                             in_process_decision("git commit -h", agent, str(feature))
                         )
 
+    def test_commit_in_missing_directory_denies(self):
+        with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
+            feature = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "-b", "feature/test", str(feature)], check=True
+            )
+            event = {
+                "tool_name": "Bash",
+                "cwd": str(feature),
+                "tool_input": {"command": "git -C does-not-exist-56a commit -m Fix"},
+            }
+            for agent in ("claude", "codex"):
+                with self.subTest(agent=agent):
+                    output = io.StringIO()
+                    argv = ["git-guard.py"]
+                    if agent == "claude":
+                        argv += ["--agent", "claude"]
+                    with patch("sys.stdin", io.StringIO(json.dumps(event))):
+                        with patch.object(sys, "argv", argv):
+                            with contextlib.redirect_stdout(output):
+                                self.assertEqual(GUARD.main(), 0)
+                    decision = json.loads(output.getvalue())["hookSpecificOutput"]
+                    self.assertEqual(decision["permissionDecision"], "deny")
+
     def test_commit_option_parser_timeout_denies(self):
         with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
             feature = Path(root) / "feature"
