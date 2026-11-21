@@ -88,6 +88,7 @@ creation through `tools/workflow/issue.py open` in [Opening an issue from a file
 Issue reads, issue comments, edits and closes, and writes to other API endpoints remain
 available under each agent's other guard rules.
 For every agent, the guard also refuses `git commit` in the shared vault checkout, found at `SECOND_BRAIN` or `~/Documents/Second_Brain`, and names `vault-commit`, because every session shares that checkout's index; worktrees and clones of the vault have their own index and stay allowed.
+The guard refuses AI attribution in a commit message it can read.
 The guard reads built-in `gh` commands and aliases from
 `hooks/gh-command-tree-2.97.0.json`. It resolves each command word to its canonical
 name before checking the strict read list, pull request merges, and issue creation.

@@ -1,0 +1,44 @@
+git commit [<options>] [--] <pathspec>...
+--
+q,quiet suppress summary after successful commit
+v,verbose show diff in commit message template
+F,file= read message from file
+author= override author for commit
+date= override date for commit
+m,message= commit message
+c,reedit-message= reuse and edit message from specified commit
+C,reuse-message= reuse message from specified commit
+fixup= use autosquash formatted message
+squash= use autosquash formatted message
+reset-author the commit is authored by me now
+trailer= add custom trailer
+s,signoff add a Signed-off-by trailer
+t,template= use specified template file
+e,edit force edit of commit
+cleanup= how to strip spaces and comments
+status include status in commit message template
+S,gpg-sign? GPG sign commit
+a,all commit all changed files
+i,include add specified files to index
+interactive interactively add files
+p,patch interactively add changes
+U,unified= generate diffs with n lines context
+inter-hunk-context= show context between diff hunks
+o,only commit only specified files
+n,no-verify bypass pre-commit and commit-msg hooks
+verify opposite of no-verify
+dry-run show what would be committed
+short show status concisely
+branch show branch information
+ahead-behind compute full ahead/behind values
+porcelain machine-readable output
+long show status in long format
+z,null terminate entries with NUL
+amend amend previous commit
+no-post-rewrite bypass post-rewrite hook
+post-rewrite opposite of no-post-rewrite
+u,untracked-files? show untracked files
+pathspec-from-file= read pathspec from file
+pathspec-file-nul pathspec elements are separated with NUL
+allow-empty ok to record an empty change
+allow-empty-message ok to record a change with an empty message

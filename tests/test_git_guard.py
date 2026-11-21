@@ -19,6 +19,45 @@ def help_flags(output):
     return flags
 
 
+def commit_help_options(output):
+    options = {}
+    for line in output.splitlines():
+        match = re.match(r"^    (?:(-[A-Za-z]), )?(--(?:\[no-\])?[\w-]+)(.*)$", line)
+        if not match:
+            continue
+        short, long, rest = match.groups()
+        long = long.replace("[no-]", "")
+        kind = (
+            "?"
+            if rest.startswith("[=<")
+            else "="
+            if rest.startswith((" <", " [("))
+            else ""
+        )
+        options[long] = (short, kind)
+    return options
+
+
+def commit_spec_options(output):
+    lines = output.splitlines()
+    assert lines[:2] == ["git commit [<options>] [--] <pathspec>...", "--"]
+    options = {}
+    for line in lines[2:]:
+        match = re.fullmatch(r"(\w,)?([\w-]+)([=?]?)\s+\S.*", line)
+        assert match, line
+        short, long, kind = match.groups()
+        options["--" + long] = ("-" + short[0] if short else None, kind)
+    return options
+
+
+def test_commit_option_spec_matches_frozen_help():
+    fixture = Path(__file__).with_name("fixtures") / "git-commit-help-2.54.0.txt"
+    spec = Path(HOOK).with_name("git-commit-options-2.54.0.txt")
+    assert commit_spec_options(spec.read_text()) == commit_help_options(
+        fixture.read_text()
+    )
+
+
 def reference_nodes(output, root_help):
     local_aliases = set()
     in_aliases = False
@@ -339,6 +378,21 @@ for cwd, cmd, who, reason in issue_tool_reason_cases:
     if reason == "issue tool":
         assert decision["permissionDecisionReason"] == (
             "Use tools/workflow/issue.py open; see README.md, Opening an issue from a file."
+        ), (cmd, decision)
+    elif reason == "attribution":
+        assert decision["permissionDecisionReason"] == (
+            "Commits and pull requests carry no AI attribution: remove the Co-authored-by "
+            "trailer or Generated with line (Operating model decision 12)."
+        ), (cmd, decision)
+    elif reason == "commit parse":
+        assert decision["permissionDecisionReason"].startswith(
+            "The guard can't judge this git commit: "
+        ), (cmd, decision)
+    elif reason.startswith("message file "):
+        assert decision["permissionDecisionReason"] == (
+            "The guard can't read the commit message file "
+            + reason.removeprefix("message file ")
+            + "."
         ), (cmd, decision)
     elif reason.startswith("unknown gh flag "):
         flag = reason.removeprefix("unknown gh flag ")

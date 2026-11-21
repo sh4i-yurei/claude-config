@@ -1,8 +1,11 @@
 """Command decisions for direct vault reads and the vault-run wrapper."""
 
+import contextlib
+import io
 import json
 import importlib.util
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -26,6 +29,10 @@ GUARD.bashlex = bashlex
 GUARD.bashlex_compat = bashlex_compat
 SECRET = "Secrets stay out of transcripts: "
 ISSUE = "Use tools/workflow/issue.py open; see README.md, Opening an issue from a file."
+ATTRIBUTION = (
+    "Commits and pull requests carry no AI attribution: remove the Co-authored-by "
+    "trailer or Generated with line (Operating model decision 12)."
+)
 
 
 def decision(command, agent, cwd="/tmp"):
@@ -1077,6 +1084,22 @@ class VaultGuardInProcessTests(VaultGuardTests):
                             label = case["reason"]
                             if label == "issue tool":
                                 expected = ISSUE
+                            elif label == "attribution":
+                                expected = ATTRIBUTION
+                            elif label == "commit parse":
+                                self.assertTrue(
+                                    reason.startswith(
+                                        "The guard can't judge this git commit: "
+                                    ),
+                                    reason,
+                                )
+                                continue
+                            elif label.startswith("message file "):
+                                expected = (
+                                    "The guard can't read the commit message file "
+                                    + label.removeprefix("message file ")
+                                    + "."
+                                )
                             elif label == "strict rules":
                                 expected = (
                                     "Allowed gh commands: run list/view/watch; pr view/list/diff/checks/status; "
@@ -1089,6 +1112,78 @@ class VaultGuardInProcessTests(VaultGuardTests):
                                 flag = label.removeprefix("unknown gh flag ")
                                 expected = f"The guard can't judge this gh command: it doesn't know the flag {flag}."
                             self.assertEqual(reason, expected)
+
+    def test_commit_message_file_in_feature_repository(self):
+        with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
+            feature = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "-b", "feature/test", str(feature)], check=True
+            )
+            message_file = feature / "msg.txt"
+            for content, expected in (
+                ("Fix the merge\n\nGenerated with Claude Code\n", ATTRIBUTION),
+                ("Fix the merge\n", None),
+            ):
+                message_file.write_text(content)
+                for agent in ("claude", "codex"):
+                    with self.subTest(content=content, agent=agent):
+                        self.assertEqual(
+                            in_process_decision(
+                                "git commit -F msg.txt", agent, str(feature)
+                            ),
+                            expected,
+                        )
+            pipe = feature / "message.pipe"
+            os.mkfifo(pipe)
+            for agent in ("claude", "codex"):
+                with self.subTest(file="pipe", agent=agent):
+                    started = time.monotonic()
+                    self.assertEqual(
+                        in_process_decision(
+                            "git commit -F message.pipe", agent, str(feature)
+                        ),
+                        "The guard can't read the commit message file message.pipe.",
+                    )
+                    self.assertLess(time.monotonic() - started, 0.5)
+
+    def test_commit_option_parser_timeout_denies(self):
+        with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
+            feature = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "-b", "feature/test", str(feature)], check=True
+            )
+            fake_bin = Path(root) / "bin"
+            fake_bin.mkdir()
+            git = shutil.which("git")
+            wrapper = fake_bin / "git"
+            wrapper.write_text(
+                "#!/bin/sh\n"
+                'if [ "$1" = rev-parse ] && [ "$2" = --parseopt ]; then\n'
+                "    sleep 3\n"
+                "    exit 1\n"
+                "fi\n"
+                f'exec "{git}" "$@"\n'
+            )
+            wrapper.chmod(0o755)
+            event = {
+                "tool_name": "Bash",
+                "cwd": str(feature),
+                "tool_input": {"command": "git commit -m Fix"},
+            }
+            output = io.StringIO()
+            with patch.dict(
+                os.environ, {"PATH": str(fake_bin) + os.pathsep + os.environ["PATH"]}
+            ):
+                with patch("sys.stdin", io.StringIO(json.dumps(event))):
+                    with patch.object(sys, "argv", ["git-guard.py"]):
+                        with contextlib.redirect_stdout(output):
+                            self.assertEqual(GUARD.main(), 0)
+            decision = json.loads(output.getvalue())["hookSpecificOutput"]
+            self.assertEqual(decision["permissionDecision"], "deny")
+            self.assertEqual(
+                decision["permissionDecisionReason"],
+                "Guard error: TimeoutError: Command was too complex to judge in time.",
+            )
 
 
 if __name__ == "__main__":
