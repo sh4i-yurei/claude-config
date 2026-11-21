@@ -1,0 +1,2 @@
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"A session file whose first record is not session_meta."}]}}
+{"type":"token_usage_record","payload":{"usage":{"input_tokens":400,"output_tokens":5,"reasoning_output_tokens":0}}}
