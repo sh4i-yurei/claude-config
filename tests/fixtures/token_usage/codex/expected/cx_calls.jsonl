@@ -15,3 +15,4 @@
 {"f": "rollout-2026-11-21T01-02-03-01a1fc00-5d1e-7c20-9a41-3b6f2e8d4c11.jsonl", "stype": "interactive build session", "ts": "", "ctx": 700, "cached": 0, "out": 10, "rs": 0, "est": 0.4081632653061224}
 {"f": "rollout-2026-11-21T01-02-03-01a1fc00-5d1e-7c20-9a41-3b6f2e8d4c11.jsonl", "stype": "interactive build session", "ts": "", "ctx": 900, "cached": 0, "out": 30, "rs": 0, "est": 30.408163265306122}
 {"f": "rollout-2026-11-21T02-10-44-01a1fc3e-8a07-7b52-b1c9-6d0e4f2a7e93.jsonl", "stype": "?", "ts": "", "ctx": 400, "cached": 0, "out": 5, "rs": 0, "est": 11.020408163265305}
+{"f": "rollout-2026-11-21T03-59-06-01a1fd8b-97ca-77e0-b746-e0b415f733d7.jsonl", "stype": "one-off codex exec", "ts": "2026-11-21T09:59:10.910Z", "ctx": 20400, "cached": 11776, "out": 260, "rs": 120, "est": 286.9387755102041}
