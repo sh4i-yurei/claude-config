@@ -595,7 +595,7 @@ class IssueOpen(unittest.TestCase):
             [
                 "no board mapping for sh4i-yurei/new-repo; add to workflow.toml [boards], naming its product:",
                 '"sh4i-yurei/new-repo" = "<product>"',
-                "products: keepbreath.ing, Tooling, Platform",
+                "products: keepbreath.ing, Tooling, Platform, Workflow engine",
             ],
         )
         self.assertFalse(self.calls())
@@ -611,7 +611,7 @@ class IssueOpen(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertEqual(
             result.stdout.splitlines()[-1],
-            "products: keepbreath.ing, Tooling, Platform, Pong",
+            "products: keepbreath.ing, Tooling, Platform, Workflow engine, Pong",
         )
         self.assertFalse(self.calls())
 
@@ -684,6 +684,7 @@ class IssueOpen(unittest.TestCase):
                     "sh4i-yurei/keepbreathing": 1,
                     "sh4i-yurei/keepbreathing-infra": 3,
                     "sh4i-yurei/platform-tickets": 3,
+                    "sh4i-yurei/workflow-engine": 4,
                 }.items()
             },
         )
@@ -756,7 +757,7 @@ class IssueOpen(unittest.TestCase):
                 "kind must be a nonempty string",
                 "no board mapping for sh4i-yurei/new-repo; add to workflow.toml [boards], naming its product:",
                 '"sh4i-yurei/new-repo" = "<product>"',
-                "products: keepbreath.ing, Tooling, Platform",
+                "products: keepbreath.ing, Tooling, Platform, Workflow engine",
             ],
         )
         self.assertFalse(self.calls())
@@ -942,6 +943,21 @@ class IssueOpen(unittest.TestCase):
         self.assertEqual(len(reads), 1)
         self.assertIn("number=2", reads[0])
         self.assertIn("owner=sh4i-yurei", reads[0])
+
+    def test_dry_run_uses_workflow_engine_board(self):
+        data = (
+            'repo = "sh4i-yurei/workflow-engine"\n'
+            'kind = "feature"\n'
+            'title = "A feature"\n'
+            "\n[body]\n"
+            'done = "It works"\n'
+        )
+        result = self.run_open(data, "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn(
+            "Would call: project item-add 4 --owner sh4i-yurei --url NEW_ISSUE_URL\n",
+            result.stdout,
+        )
 
     def test_required_field_empty_and_extra_field_both_named(self):
         result = self.run_open(
