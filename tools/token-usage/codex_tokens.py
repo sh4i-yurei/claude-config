@@ -5,16 +5,17 @@ sized and counted against each later model call that re-sent it. Writes
 cx_items.jsonl and cx_calls.jsonl.
 """
 
+import argparse
 import json, glob, os, re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from claude_tokens import bash_kind, area  # noqa: E402
 
-ROOT = os.path.expanduser("~/.codex/sessions")
-OUT = os.environ.get("TOKEN_USAGE_OUT", os.getcwd())
 CPT_OUT = float(os.environ.get("CX_CPT_OUT", "3.7"))  # tool output, fitted 2026-10-01
-CPT_TXT = float(os.environ.get("CX_CPT_TXT", "4.9"))  # instructions and messages, fitted 2026-10-01
+CPT_TXT = float(
+    os.environ.get("CX_CPT_TXT", "4.9")
+)  # instructions and messages, fitted 2026-10-01
 
 STR_RE = r'"((?:[^"\\]|\\.)*)"'
 
@@ -90,10 +91,21 @@ def user_kind(text):
     return "prompt / goal text"
 
 
-def main():
-    files = sorted(glob.glob(ROOT + "/**/*.jsonl", recursive=True))
-    io = open(os.path.join(OUT, "cx_items.jsonl"), "w")
-    co = open(os.path.join(OUT, "cx_calls.jsonl"), "w")
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="codex_tokens.py", description=__doc__.splitlines()[0]
+    )
+    parser.add_argument(
+        "--sessions",
+        metavar="FOLDER",
+        default=os.path.expanduser("~/.codex/sessions"),
+        help="folder of Codex session files to read (default: ~/.codex/sessions)",
+    )
+    args = parser.parse_args(argv)
+    out = os.environ.get("TOKEN_USAGE_OUT", os.getcwd())
+    files = sorted(glob.glob(args.sessions + "/**/*.jsonl", recursive=True))
+    io = open(os.path.join(out, "cx_items.jsonl"), "w")
+    co = open(os.path.join(out, "cx_calls.jsonl"), "w")
     for f in files:
         sess = os.path.basename(f)
         stype = "?"
@@ -257,7 +269,8 @@ def main():
         flush("end")
     io.close()
     co.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

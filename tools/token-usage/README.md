@@ -24,6 +24,8 @@ python3 ~/Documents/claude-config/tools/token-usage/simulate.py claude
 python3 ~/Documents/claude-config/tools/token-usage/simulate.py codex
 ```
 
+`codex_tokens.py --sessions FOLDER` reads Codex session files from `FOLDER`; without this option it reads `~/.codex/sessions`.
+
 - `claude_tokens.py` and `codex_tokens.py` parse the session files into `items.jsonl`,
   `calls.jsonl`, `cx_items.jsonl` and `cx_calls.jsonl`.
 - `analyze_claude.py` ranks what put tokens into Claude's context. Its modes are `top`, `tools`,

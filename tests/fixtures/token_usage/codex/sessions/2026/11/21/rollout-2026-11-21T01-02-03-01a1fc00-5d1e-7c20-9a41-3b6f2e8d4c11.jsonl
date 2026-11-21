@@ -1,0 +1,17 @@
+{"type":"session_meta","payload":{"source":{"subagent":"compact"}}}
+{"type":"response_item","payload":{"type":"message"}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text"},"stray text part",{"type":"output_text","text":"Checked the sparse records."}]}}
+{"type":"response_item","payload":{"type":"custom_tool_call","call_id":"call_s1"}}
+{"type":"token_usage_record","payload":{"usage":{"output_tokens":50,"reasoning_output_tokens":80}}}
+{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call_s1"}}
+{"type":"response_item","payload":{"type":"function_call_output","output":[{"type":"input_text"},{"type":"input_text","text":"done"}]}}
+{"type":"compacted","payload":{}}
+{"type":"compacted"}
+{"type":"token_usage_record","payload":{}}
+{"type":"token_usage_record"}
+{"type":"event_msg"}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":""}]}}
+{"type":"token_usage_record","payload":{"usage":{"input_tokens":700,"output_tokens":10,"reasoning_output_tokens":0}}}
+{"type":"response_item","payload":{"type":"function_call","name":"wait","arguments":"{\"cell_id\":\"7\",\"yield_time_ms\":3600000,\"max_tokens\":1000,\"note\":\"the full suite under coverage\"}","call_id":"call_s2"}}
+{"type":"response_item","payload":{"type":"function_call","name":"sleep","arguments":"{\"duration_ms\":45000,\"reason\":\"giving the CI run on the pushed branch time to start its jobs\"}","call_id":"call_s3"}}
+{"type":"token_usage_record","payload":{"usage":{"input_tokens":900,"output_tokens":30,"reasoning_output_tokens":0}}}
