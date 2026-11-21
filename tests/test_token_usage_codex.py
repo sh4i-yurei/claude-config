@@ -123,6 +123,11 @@ def copy_session(folder, key, name=None, start=None, before=None, after=None):
         ),
         ("CST6", ["--since", "2026-11-20"], {"S20", "S21"}),
         ("CST6", ["--until", "2026-11-19T12:40:24.501-06:00"], {"S18"}),
+        (
+            "CST6",
+            ["--since", "0001-01-01T00:00:00+00:00"],
+            {"S18", "S19", "S20", "S21"},
+        ),
     ],
 )
 def test_window_fixture_sessions(
