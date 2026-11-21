@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import re
 import shlex
+import stat
 import subprocess
 import sys
 import time
@@ -22,10 +23,13 @@ PROTECTED_BRANCHES = {"main", "master"}
 BRANCH = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]*\Z")
 GUARDED_PROGRAMS = ("git", "gh", "bw", "vault-env")
 GIT, GH, BW, VAULT_ENV = GUARDED_PROGRAMS
+VAULT_COMMIT = "vault-commit"
 SESSION_FILE = "bw-session"
 FALLBACK_WORD = re.compile(
     r"(?<![A-Za-z0-9_])(?:"
-    + "|".join(re.escape(name) for name in (*GUARDED_PROGRAMS, SESSION_FILE))
+    + "|".join(
+        re.escape(name) for name in (*GUARDED_PROGRAMS, VAULT_COMMIT, SESSION_FILE)
+    )
     + r")(?![A-Za-z0-9_])"
 )
 PFLAG_BOOLEAN_VALUES = frozenset(
@@ -151,6 +155,12 @@ ISSUE_REASON = (
 )
 DEADLINE = None
 MAX_COMMAND_BYTES = 64 * 1024
+ATTRIBUTION_REASON = (
+    "Commits and pull requests carry no AI attribution: remove the Co-authored-by "
+    "trailer or Generated with line (Operating model decision 12)."
+)
+COMMIT_OPTIONS = Path(__file__).with_name("git-commit-options-2.54.0.txt")
+MAX_MESSAGE_BYTES = 1024 * 1024
 
 
 def check_budget():
@@ -192,6 +202,80 @@ def run_git(directory, *args):
     value = result.stdout.strip() if result.returncode == 0 else ""
     GIT_CACHE[key] = value
     return value
+
+
+def commit_options(args, directory):
+    """Ask Git to canonicalize commit options, preserving attached values."""
+    check_budget()
+    remaining = DEADLINE - time.monotonic() if DEADLINE is not None else 2
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--parseopt", "--stuck-long", "--", *args],
+            cwd=directory,
+            input=COMMIT_OPTIONS.read_text(),
+            capture_output=True,
+            text=True,
+            timeout=min(2, remaining),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise TimeoutError("Command was too complex to judge in time.") from exc
+    if not result.stderr and result.stdout.startswith("cat <<"):
+        return []
+    if result.returncode:
+        first_error = (
+            result.stderr.splitlines()[0]
+            if result.stderr
+            else "Git rejected the arguments."
+        )
+        raise ValueError("The guard can't judge this git commit: " + first_error)
+    return shlex.split(result.stdout)[2:]
+
+
+def has_attribution(message, trailer=False):
+    if trailer and message.lower().startswith("co-authored-by"):
+        return True
+    message = message.replace("\\n", "\n")
+    return bool(
+        re.search(r"(?im)^\s*co-authored-by:", message)
+        or re.search(r"(?im)^[^A-Za-z]*generated with", message)
+    )
+
+
+def message_file_text(name, directory):
+    path = Path(os.path.expanduser(name))
+    path = path if path.is_absolute() else Path(directory) / path
+    try:
+        with os.fdopen(
+            os.open(path, os.O_RDONLY | os.O_NONBLOCK), "rb"
+        ) as message_file:
+            info = os.fstat(message_file.fileno())
+            if not stat.S_ISREG(info.st_mode) or info.st_size > MAX_MESSAGE_BYTES:
+                raise OSError("not a regular message file within the size limit")
+            content = message_file.read(MAX_MESSAGE_BYTES)
+    except OSError as exc:
+        raise ValueError(
+            f"The guard can't read the commit message file {name}."
+        ) from exc
+    return content.decode("utf-8", errors="replace")
+
+
+def vault_commit_problem(args):
+    before_paths = args[: args.index("--")] if "--" in args else args
+    index = 0
+    while index < len(before_paths):
+        arg = before_paths[index]
+        if arg == "-m" and index + 1 < len(before_paths):
+            index += 1
+            message = before_paths[index]
+        elif arg.startswith("-m") and len(arg) > 2:
+            message = arg[3:] if arg[2] == "=" else arg[2:]
+        else:
+            index += 1
+            continue
+        if has_attribution(message):
+            return ATTRIBUTION_REASON
+        index += 1
+    return None
 
 
 GIT_CACHE = {}
@@ -352,6 +436,25 @@ def git_problem(args, cwd, agent):
                 "Commit vault work with vault-commit -m MESSAGE -- PATH...: a plain git "
                 "commit in the shared vault checkout can take another session's staged files."
             )
+        try:
+            parsed = commit_options(args[1:], directory)
+            for option in parsed:
+                if option == "--":
+                    break
+                if option.startswith("--message="):
+                    if has_attribution(option.partition("=")[2]):
+                        return ATTRIBUTION_REASON
+                elif option.startswith("--trailer="):
+                    if has_attribution(option.partition("=")[2], trailer=True):
+                        return ATTRIBUTION_REASON
+                elif option.startswith("--file="):
+                    name = option.partition("=")[2]
+                    if name != "-" and has_attribution(
+                        message_file_text(name, directory)
+                    ):
+                        return ATTRIBUTION_REASON
+        except ValueError as exc:
+            return str(exc)
     if unknown and action in ("push", "merge", "pull"):
         return "Unknown git global option for " + action + ": " + unknown
     if action in ("merge", "pull"):
@@ -724,6 +827,8 @@ def command(node, cwd, agent, source, pipeline_input=()):
     name = os.path.basename(args[0])
     if name in (VAULT_ENV, "vault_env.py"):
         return cwd, "Secrets stay out of transcripts: use vault-run to fetch secrets."
+    if name in (VAULT_COMMIT, "vault_commit.py"):
+        return cwd, vault_commit_problem(args[1:])
     if (
         name == BW
         and args[1:]
@@ -814,8 +919,10 @@ def script_problem(script, cwd, agent):
         return (
             "Cannot parse a command mentioning "
             + ", ".join(GUARDED_PROGRAMS[:-1])
-            + " or "
+            + ", "
             + GUARDED_PROGRAMS[-1]
+            + " or "
+            + VAULT_COMMIT
             + ": "
             + str(exc)
             if FALLBACK_WORD.search(normalized)
