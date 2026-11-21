@@ -1120,6 +1120,12 @@ class VaultGuardInProcessTests(VaultGuardTests):
                             elif label.startswith("unknown gh command "):
                                 word = label.removeprefix("unknown gh command ")
                                 expected = f"The guard can't judge this gh command: it doesn't know the command {word}."
+                            elif label.startswith("unknown sudo option "):
+                                word = label.removeprefix("unknown sudo option ")
+                                expected = f"The guard can't judge this sudo command: it doesn't know the option {word}."
+                            elif label.startswith("sudo option without value "):
+                                word = label.removeprefix("sudo option without value ")
+                                expected = f"The guard can't judge this sudo command: the option {word} has no value."
                             else:
                                 flag = label.removeprefix("unknown gh flag ")
                                 expected = f"The guard can't judge this gh command: it doesn't know the flag {flag}."
