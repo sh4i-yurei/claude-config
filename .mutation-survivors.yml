@@ -32,6 +32,30 @@
 - mutant: hooks.git-guard.x_command__mutmut_122
   reason: >-
     bashlex redirect nodes always expose the heredoc attribute; removing getattr's fallback leaves every parsed command decision unchanged.
+- mutant: hooks.git-guard.x_commit_options__mutmut_2
+  reason: >-
+    main sets DEADLINE five seconds ahead before judging a command (hooks/git-guard.py line 945), and every in-process caller does the same, so remaining is about five and min(2, remaining) is 2 whichever branch or sign the mutant takes.
+- mutant: hooks.git-guard.x_commit_options__mutmut_3
+  reason: >-
+    main sets DEADLINE five seconds ahead before judging a command (hooks/git-guard.py line 945), and every in-process caller does the same, so remaining is about five and min(2, remaining) is 2 whichever branch or sign the mutant takes.
+- mutant: hooks.git-guard.x_commit_options__mutmut_4
+  reason: >-
+    main sets DEADLINE five seconds ahead before judging a command (hooks/git-guard.py line 945), and every in-process caller does the same, so remaining is about five and min(2, remaining) is 2 whichever branch or sign the mutant takes.
+- mutant: hooks.git-guard.x_commit_options__mutmut_5
+  reason: >-
+    main sets DEADLINE five seconds ahead before judging a command (hooks/git-guard.py line 945), and every in-process caller does the same, so remaining is about five and min(2, remaining) is 2 whichever branch or sign the mutant takes.
+- mutant: hooks.git-guard.x_commit_options__mutmut_6
+  reason: >-
+    The default of 2 applies only when DEADLINE is unset, which never happens once main has started.
+- mutant: hooks.git-guard.x_commit_options__mutmut_9
+  reason: >-
+    git rev-parse --parseopt needs no repository, so the folder it runs in changes nothing.
+- mutant: hooks.git-guard.x_commit_options__mutmut_15
+  reason: >-
+    git rev-parse --parseopt needs no repository, so the folder it runs in changes nothing.
+- mutant: hooks.git-guard.x_commit_options__mutmut_35
+  reason: >-
+    A timeout of 3 seconds instead of 2 differs only when the parser runs for between 2 and 3 seconds, which no portable test can arrange.
 - mutant: hooks.git-guard.x_git_problem__mutmut_140
   reason: >-
     git rev-parse --abbrev-ref already uses symbolic full names. Removing

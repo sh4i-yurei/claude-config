@@ -1206,6 +1206,35 @@ class VaultGuardInProcessTests(VaultGuardTests):
                             "The guard can't judge this git commit: Git rejected the arguments.",
                         )
 
+    def test_commit_option_parser_help_on_success_allows(self):
+        with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
+            feature = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "-b", "feature/test", str(feature)], check=True
+            )
+            fake_bin = Path(root) / "bin"
+            fake_bin.mkdir()
+            git = shutil.which("git")
+            wrapper = fake_bin / "git"
+            wrapper.write_text(
+                "#!/bin/sh\n"
+                'for arg do if [ "$arg" = --parseopt ]; then\n'
+                "    printf '%s\\n' 'cat <<\\EOF' 'usage: git commit' "
+                '"    -m, --message <message>  the commit\x27s message" EOF\n'
+                "    exit 0\n"
+                "fi; done\n"
+                f'exec "{git}" "$@"\n'
+            )
+            wrapper.chmod(0o755)
+            with patch.dict(
+                os.environ, {"PATH": str(fake_bin) + os.pathsep + os.environ["PATH"]}
+            ):
+                for agent in ("claude", "codex"):
+                    with self.subTest(agent=agent):
+                        self.assertIsNone(
+                            in_process_decision("git commit -h", agent, str(feature))
+                        )
+
     def test_commit_option_parser_timeout_denies(self):
         with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
             feature = Path(root) / "feature"
