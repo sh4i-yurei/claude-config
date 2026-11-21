@@ -404,7 +404,9 @@ class VaultGuardTests(unittest.TestCase):
             "git status; echo $((1+1))",
             "b'w' get item x; echo $((1+1))",
         )
-        prefix = "Cannot parse a command mentioning git, gh, bw or vault-env: "
+        prefix = (
+            "Cannot parse a command mentioning git, gh, bw, vault-env or vault-commit: "
+        )
         for agent in ("claude", "strict"):
             for command in cases:
                 with self.subTest(command=command, agent=agent):
@@ -1094,6 +1096,16 @@ class VaultGuardInProcessTests(VaultGuardTests):
                                     reason,
                                 )
                                 continue
+                            elif label == "commit parse bogus":
+                                expected = "The guard can't judge this git commit: error: unknown option `bogus'"
+                            elif label == "parse fallback":
+                                self.assertTrue(
+                                    reason.startswith(
+                                        "Cannot parse a command mentioning git, gh, bw, vault-env or vault-commit: "
+                                    ),
+                                    reason,
+                                )
+                                continue
                             elif label.startswith("message file "):
                                 expected = (
                                     "The guard can't read the commit message file "
@@ -1146,6 +1158,54 @@ class VaultGuardInProcessTests(VaultGuardTests):
                     )
                     self.assertLess(time.monotonic() - started, 0.5)
 
+    def test_commit_clean_message_file_boundaries(self):
+        with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
+            feature = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "-b", "feature/test", str(feature)], check=True
+            )
+            for name, content in (
+                ("million.txt", b"a" * 1_048_576),
+                ("invalid.txt", b"Fix \xff"),
+                ("a=b.txt", b"Fix"),
+            ):
+                (feature / name).write_bytes(content)
+                for agent in ("claude", "codex"):
+                    with self.subTest(name=name, agent=agent):
+                        self.assertIsNone(
+                            in_process_decision(
+                                f"git commit -F {name}", agent, str(feature)
+                            )
+                        )
+
+    def test_commit_option_parser_silent_failure_denies(self):
+        with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
+            feature = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "-b", "feature/test", str(feature)], check=True
+            )
+            fake_bin = Path(root) / "bin"
+            fake_bin.mkdir()
+            git = shutil.which("git")
+            wrapper = fake_bin / "git"
+            wrapper.write_text(
+                "#!/bin/sh\n"
+                'for arg do [ "$arg" = --parseopt ] && exit 1; done\n'
+                f'exec "{git}" "$@"\n'
+            )
+            wrapper.chmod(0o755)
+            with patch.dict(
+                os.environ, {"PATH": str(fake_bin) + os.pathsep + os.environ["PATH"]}
+            ):
+                for agent in ("claude", "codex"):
+                    with self.subTest(agent=agent):
+                        self.assertEqual(
+                            in_process_decision(
+                                "git commit -m Fix", agent, str(feature)
+                            ),
+                            "The guard can't judge this git commit: Git rejected the arguments.",
+                        )
+
     def test_commit_option_parser_timeout_denies(self):
         with tempfile.TemporaryDirectory(dir=HOOK.parent.parent) as root:
             feature = Path(root) / "feature"
@@ -1158,10 +1218,10 @@ class VaultGuardInProcessTests(VaultGuardTests):
             wrapper = fake_bin / "git"
             wrapper.write_text(
                 "#!/bin/sh\n"
-                'if [ "$1" = rev-parse ] && [ "$2" = --parseopt ]; then\n'
+                'for arg do if [ "$arg" = --parseopt ]; then\n'
                 "    sleep 3\n"
                 "    exit 1\n"
-                "fi\n"
+                "fi; done\n"
                 f'exec "{git}" "$@"\n'
             )
             wrapper.chmod(0o755)

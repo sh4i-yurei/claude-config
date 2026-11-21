@@ -336,5 +336,17 @@
   {"name": "vault commit repeated messages attribution", "cwd": "main", "claude": "deny", "codex": "deny", "reason": "attribution", "command": "vault-commit -m 'Fix' -m 'Co-authored-by: Claude' -- 10_Projects/x.md"},
   {"name": "vault commit python basename attribution", "cwd": "main", "claude": "deny", "codex": "deny", "reason": "attribution", "command": "tools/vault_commit.py -m 'Co-authored-by: Claude' -- 10_Projects/x.md"},
   {"name": "vault commit ordinary message", "cwd": "main", "claude": "allow", "codex": "allow", "command": "vault-commit -m \"Note it\" -- 10_Projects/x.md"},
-  {"name": "vault commit ignores an unrelated option", "cwd": "main", "claude": "allow", "codex": "allow", "command": "vault-commit -m \"Note it\" --unknown -- 10_Projects/x.md"}
+  {"name": "vault commit ignores an unrelated option", "cwd": "main", "claude": "allow", "codex": "allow", "command": "vault-commit -m \"Note it\" --unknown -- 10_Projects/x.md"},
+  {"name": "commit exact bogus parse reason", "cwd": "feature", "claude": "deny", "codex": "deny", "reason": "commit parse bogus", "command": "git commit --bogus -m Fix"},
+  {"name": "commit equals trailer attribution", "cwd": "feature", "claude": "deny", "codex": "deny", "reason": "attribution", "command": "git commit --trailer \"Co-authored-by=Claude\" -m Fix"},
+  {"name": "commit no-colon phrase", "cwd": "feature", "claude": "allow", "codex": "allow", "command": "git commit -m \"Co-authored-by work is reviewed separately\""},
+  {"name": "vault commit option shaped path", "cwd": "main", "claude": "allow", "codex": "allow", "command": "vault-commit -m \"Note it\" -- -m Co-authored-by:x.md"},
+  {"name": "vault commit no separator attribution", "cwd": "main", "claude": "deny", "codex": "deny", "reason": "attribution", "command": "vault-commit -m \"Co-authored-by: X\""},
+  {"name": "vault commit missing message", "cwd": "main", "claude": "allow", "codex": "allow", "command": "vault-commit -m"},
+  {"name": "vault commit two clean messages", "cwd": "main", "claude": "allow", "codex": "allow", "command": "vault-commit -m ok -m fine -- p"},
+  {"name": "vault commit stray word attribution", "cwd": "main", "claude": "deny", "codex": "deny", "reason": "attribution", "command": "vault-commit stray -m \"Co-authored-by: X\" -- p"},
+  {"name": "commit option shaped path", "cwd": "feature", "claude": "allow", "codex": "allow", "command": "git commit -m Fix -- --message=Co-authored-by:x"},
+  {"name": "commit equals inside message", "cwd": "feature", "claude": "allow", "codex": "allow", "command": "git commit -m \"a=Co-authored-by: Y\""},
+  {"name": "commit equals inside trailer", "cwd": "feature", "claude": "allow", "codex": "allow", "command": "git commit --trailer \"x=Co-authored-by: Z\" -m Fix"},
+  {"name": "vault commit malformed script fallback", "cwd": "main", "claude": "deny", "codex": "deny", "reason": "parse fallback", "command": "vault-commit -m ok; echo $((1+1))"}
 ]

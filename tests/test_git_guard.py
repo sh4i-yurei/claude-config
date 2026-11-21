@@ -388,6 +388,14 @@ for cwd, cmd, who, reason in issue_tool_reason_cases:
         assert decision["permissionDecisionReason"].startswith(
             "The guard can't judge this git commit: "
         ), (cmd, decision)
+    elif reason == "commit parse bogus":
+        assert decision["permissionDecisionReason"] == (
+            "The guard can't judge this git commit: error: unknown option `bogus'"
+        ), (cmd, decision)
+    elif reason == "parse fallback":
+        assert decision["permissionDecisionReason"].startswith(
+            "Cannot parse a command mentioning git, gh, bw, vault-env or vault-commit: "
+        ), (cmd, decision)
     elif reason.startswith("message file "):
         assert decision["permissionDecisionReason"] == (
             "The guard can't read the commit message file "

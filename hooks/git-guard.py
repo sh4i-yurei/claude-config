@@ -219,11 +219,7 @@ def commit_options(args, directory):
         )
     except subprocess.TimeoutExpired as exc:
         raise TimeoutError("Command was too complex to judge in time.") from exc
-    if (
-        result.returncode == 129
-        and not result.stderr
-        and result.stdout.startswith("cat <<")
-    ):
+    if not result.stderr and result.stdout.startswith("cat <<"):
         return []
     if result.returncode:
         first_error = (
@@ -923,8 +919,10 @@ def script_problem(script, cwd, agent):
         return (
             "Cannot parse a command mentioning "
             + ", ".join(GUARDED_PROGRAMS[:-1])
-            + " or "
+            + ", "
             + GUARDED_PROGRAMS[-1]
+            + " or "
+            + VAULT_COMMIT
             + ": "
             + str(exc)
             if FALLBACK_WORD.search(normalized)
