@@ -252,9 +252,9 @@ page and a search 2 credits per 10 results, and each response reports its cost i
 `GET https://api.firecrawl.dev/v2/team/credit-usage` returns the remaining and plan credits and
 costs nothing. The claude.ai Firecrawl connector spends from the same balance.
 Fuzzy Vaultwarden lookup finds both Firecrawl and Bright Data because the latter's notes mention
-Firecrawl. The gateway resolves the one exact item name before reading it. Read from
-`firecrawl/firecrawl-docs` (`billing.mdx`, `rate-limits.mdx`) and a live credit check on
-2026-09-26.
+Firecrawl. The gateway reads each key through `tools/vault_item.py`, which finds the one item
+with exactly that name. Read from `firecrawl/firecrawl-docs` (`billing.mdx`, `rate-limits.mdx`)
+and a live credit check on 2026-09-26.
 
 **Bright Data, the third rung for web content.** When Firecrawl credits are gone or a page
 defeats it, this reads the page from Bright Data's infrastructure rather than this

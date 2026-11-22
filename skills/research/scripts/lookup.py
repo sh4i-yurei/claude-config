@@ -24,7 +24,7 @@ from typing import Any
 from urllib.parse import quote, urlencode, urljoin, urlsplit
 
 from common import append_log, load_config, repository_name, vault_root
-from gw import credential_item_id, normalize_url, public_address, session_token
+from gw import credential, normalize_url, public_address, session_token
 
 EXIT_STATUS = {"found": 0, "not found": 3, "refused": 4, "error": 1}
 LOCAL_KINDS = {"vault", "ansible", "help", "doctor"}
@@ -642,22 +642,11 @@ def credential_statuses(
     statuses = {}
     for item in items:
         try:
-            item_id = credential_item_id(item, env)
+            credential(item)
         except ValueError:
             statuses[item] = {"available": False, "reason": "item unavailable"}
-            continue
-        completed = subprocess.run(
-            ["bw", "get", "password", item_id],
-            env=env,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        available = completed.returncode == 0 and bool(completed.stdout.strip())
-        statuses[item] = {
-            "available": available,
-            "reason": None if available else "item unavailable",
-        }
+        else:
+            statuses[item] = {"available": True, "reason": None}
     return True, statuses
 
 

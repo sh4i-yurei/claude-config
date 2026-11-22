@@ -28,8 +28,8 @@ AbuseIPDB API key
 Matching the existing style in the vault, which is descriptive and unpunctuated —
 `Cloudflare DNS token`, `control plane SSH key passphrase`.
 
-The gateway loads the established runtime session, resolves exactly one item whose name matches,
-and reads that item by ID. `lookup.py doctor` reports whether the session and configured keys are
+The gateway reads each key through `tools/vault_item.py`, which loads the established runtime
+session and finds exactly one item whose name matches, in one search. `lookup.py doctor` reports whether the session and configured keys are
 available without exposing their values.
 
 ## Status

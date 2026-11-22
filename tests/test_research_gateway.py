@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -29,6 +29,24 @@ from skills.research.scripts import gw
 from skills.research.scripts.common import verify_log
 
 PUBLIC_ADDRESS = gw.public_address
+
+
+def login(name, password, **extra):
+    """One login item shaped as bw list items --search returns it."""
+    return {
+        "id": f"id-{name}",
+        "name": name,
+        "type": 1,
+        "login": {"username": "research", "password": password},
+        **extra,
+    }
+
+
+def search_answer(*items):
+    """bw's answer to a search, as raw bytes on standard output."""
+    return subprocess.CompletedProcess(
+        ["bw"], 0, stdout=json.dumps(list(items)).encode(), stderr=b""
+    )
 
 
 class GatewayTests(unittest.TestCase):
@@ -59,35 +77,157 @@ class GatewayTests(unittest.TestCase):
         self.retry_after = None
         self.expect_key = True
 
-    def test_credential_resolves_exact_item_name_before_password(self):
-        self.patches[3].stop()
-        self.addCleanup(self.patches[3].start)
-        listed = subprocess.CompletedProcess(
-            [],
-            0,
-            stdout=json.dumps(
-                [
-                    {"id": "exact-id", "name": "Firecrawl API key"},
-                    {"id": "notes-match", "name": "Bright Data API key"},
-                ]
-            ),
-            stderr="",
-        )
-        password = subprocess.CompletedProcess(
-            [], 0, stdout="TEST_ONLY_FIRECRAWL_SECRET\n", stderr=""
-        )
+    @contextmanager
+    def bitwarden(self, answer, *, container=True):
+        """Run gw.credential against a bw stand-in and yield the calls it got."""
+        if not getattr(self, "credential_restored", False):
+            self.patches[3].stop()
+            self.addCleanup(self.patches[3].start)
+            self.credential_restored = True
+        marker = self.root / "containerenv"
+        marker.unlink(missing_ok=True)
+        if container:
+            marker.write_text("")
+        calls = []
+
+        def run(command, **_kwargs):
+            calls.append(command)
+            return answer
+
         with (
-            patch.object(gw, "session_token", return_value="session"),
-            patch.object(gw.subprocess, "run", side_effect=[listed, password]) as run,
+            patch.object(gw.vault_item, "CONTAINER_MARKER", marker),
+            patch.dict(os.environ, {"BW_SESSION": "dummy-session"}),
+            patch.object(gw.subprocess, "run", side_effect=run),
         ):
+            yield calls
+
+    def test_credential_reads_the_exact_item_in_one_search(self):
+        listed = search_answer(
+            login("Firecrawl API key (old)", "TEST_ONLY_OLD"),
+            login("Firecrawl API key", "TEST_ONLY_FIRECRAWL_SECRET"),
+            login(
+                "Bright Data API key",
+                "TEST_ONLY_BRIGHT",
+                notes="Firecrawl API key is the fallback",
+            ),
+        )
+        with self.bitwarden(listed) as calls:
             value = gw.credential("Firecrawl API key")
         self.assertEqual(value, "TEST_ONLY_FIRECRAWL_SECRET")
         self.assertEqual(
-            run.call_args_list[0].args[0],
-            ["bw", "list", "items", "--search", "Firecrawl API key"],
+            calls, [["bw", "list", "items", "--search", "Firecrawl API key"]]
         )
+
+    def test_credential_refuses_no_exact_item_or_several(self):
+        cases = {
+            "none": (
+                search_answer(login("Firecrawl API key (old)", "TEST_ONLY_OLD")),
+                'Vaultwarden item unavailable: Firecrawl API key; no vault item is named exactly "Firecrawl API key"',
+            ),
+            "two": (
+                search_answer(
+                    login("Firecrawl API key", "TEST_ONLY_ONE"),
+                    login("Firecrawl API key", "TEST_ONLY_TWO"),
+                ),
+                'Vaultwarden item unavailable: Firecrawl API key; 2 vault items are named exactly "Firecrawl API key"',
+            ),
+        }
+        for label, (listed, message) in cases.items():
+            with self.subTest(label):
+                with (
+                    self.bitwarden(listed),
+                    self.assertRaises(ValueError) as raised,
+                ):
+                    gw.credential("Firecrawl API key")
+                self.assertEqual(str(raised.exception), message)
+
+    def test_credential_refuses_an_item_without_a_password(self):
+        note = {
+            "id": "id-note",
+            "name": "Firecrawl API key",
+            "type": 2,
+            "notes": "kept as a secure note",
+        }
+        cases = {
+            "empty password": search_answer(login("Firecrawl API key", "")),
+            "secure note": search_answer(note),
+        }
+        for label, listed in cases.items():
+            with self.subTest(label):
+                with (
+                    self.bitwarden(listed),
+                    self.assertRaises(ValueError) as raised,
+                ):
+                    gw.credential("Firecrawl API key")
+                self.assertEqual(
+                    str(raised.exception),
+                    "Vaultwarden item unavailable: Firecrawl API key; it has no password",
+                )
+
+    def test_credential_returns_the_password_exactly(self):
+        listed = search_answer(login("Firecrawl API key", " TEST_ONLY_SPACED "))
+        with self.bitwarden(listed):
+            value = gw.credential("Firecrawl API key")
+        self.assertEqual(value, " TEST_ONLY_SPACED ")
+
+    def test_credential_refuses_outside_the_container_without_calling_bw(self):
+        listed = search_answer(login("Firecrawl API key", "TEST_ONLY_FIRECRAWL"))
+        with (
+            self.bitwarden(listed, container=False) as calls,
+            self.assertRaises(ValueError) as raised,
+        ):
+            gw.credential("Firecrawl API key")
         self.assertEqual(
-            run.call_args_list[1].args[0], ["bw", "get", "password", "exact-id"]
+            str(raised.exception),
+            "Vaultwarden item unavailable: Firecrawl API key; "
+            "bw runs only inside the dev container (distrobox enter dev)",
+        )
+        self.assertEqual(calls, [])
+
+    def test_credential_refuses_a_locked_vault(self):
+        locked = subprocess.CompletedProcess(
+            ["bw"], 1, stdout=b"", stderr=b"Vault is locked."
+        )
+        with self.bitwarden(locked), self.assertRaises(ValueError) as raised:
+            gw.credential("Firecrawl API key")
+        self.assertEqual(
+            str(raised.exception),
+            "Vaultwarden item unavailable: Firecrawl API key; "
+            'nothing from the vault for "Firecrawl API key". Is it unlocked? Run vu.',
+        )
+
+    def test_request_config_passes_a_credential_refusal_on_unchanged(self):
+        config = gw.load_config()
+        provider = config["providers"]["api.firecrawl.dev"]
+        self.assertEqual(provider["key_item"], "Firecrawl API key")
+        refusal = ValueError(
+            "Vaultwarden item unavailable: Firecrawl API key; "
+            'no vault item is named exactly "Firecrawl API key"'
+        )
+        with (
+            patch.object(gw, "credential", side_effect=refusal),
+            self.assertRaises(ValueError) as raised,
+        ):
+            gw.request_config("https://api.firecrawl.dev/v2/search", provider, config)
+        self.assertIs(raised.exception, refusal)
+
+    def test_gateway_runs_as_its_own_program(self):
+        source_root = ROOT.parent if ROOT.name == "mutants" else ROOT
+        with tempfile.TemporaryDirectory() as home:
+            environment = {"PATH": "/usr/bin:/bin", "HOME": home}
+            result = subprocess.run(
+                [sys.executable, str(source_root / "skills/research/scripts/gw.py")],
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertTrue(
+            result.stderr.startswith(
+                "Paced, logged gateway for one HTTPS research request at a time."
+            ),
+            result.stderr,
         )
 
     def test_context7_uses_exact_key_name_and_bearer_header(self):
