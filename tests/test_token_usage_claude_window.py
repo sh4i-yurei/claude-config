@@ -90,7 +90,6 @@ def run_window(
 @pytest.mark.parametrize(
     ("options", "sessions"),
     [
-        (["--since", "2026-11-20T10:30:00Z"], {W2, W2_SUB, W3}),
         (
             ["--since", "2026-11-20T11:00:00.000Z", "--until", "2026-11-20T11:15:00Z"],
             {W2, W2_SUB},
@@ -102,6 +101,25 @@ def run_window(
 )
 def test_window(claude, monkeypatch, tmp_path, capsys, options, sessions):
     run_window(claude, monkeypatch, tmp_path, capsys, "window", options, sessions, 3)
+
+
+def test_window_without_zone(claude, monkeypatch, tmp_path, capsys):
+    monkeypatch.delenv("TZ", raising=False)
+    time.tzset()
+    try:
+        run_window(
+            claude,
+            monkeypatch,
+            tmp_path,
+            capsys,
+            "window",
+            ["--since", "2026-11-20T10:30:00Z"],
+            {W2, W2_SUB, W3},
+            3,
+        )
+    finally:
+        monkeypatch.undo()
+        time.tzset()
 
 
 @pytest.mark.parametrize(
