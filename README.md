@@ -90,6 +90,7 @@ available under each agent's other guard rules.
 For every agent, the guard also refuses `git commit` in the shared vault checkout, found at `SECOND_BRAIN` or `~/Documents/Second_Brain`, and names `vault-commit`, because every session shares that checkout's index; worktrees and clones of the vault have their own index and stay allowed.
 The guard refuses AI attribution in a commit message it can read.
 The guard refuses a new queue task without a project tag and an item tag.
+For an `rtk` command, the guard judges every command RTK could run.
 The guard reads built-in `gh` commands and aliases from
 `hooks/gh-command-tree-2.97.0.json`. It resolves each command word to its canonical
 name before checking the strict read list, pull request merges, and issue creation.
@@ -106,7 +107,7 @@ The guard parses simple commands, lists, pipelines, groups, loops, substitutions
 and redirects. It follows scripts passed to `bash` or `sh` with a short `-c`
 option, direct heredocs and here-strings fed to those shells, and the named
 options of `distrobox enter`, `flatpak-spawn --host`, `env`, `sudo`, `timeout`,
-`command`, `exec`, `nohup`, and `xargs`. It checks commands up to 64 KB and
+`command`, `exec`, `nohup`, `xargs`, and `rtk`. It checks commands up to 64 KB and
 refuses a command when its five-second judgement budget expires.
 For `sudo`, it reads options and variable assignments as sudo 1.9.17p2 does
 before checking the command sudo would run.

@@ -410,6 +410,31 @@ for cwd, cmd, who, reason in issue_tool_reason_cases:
         assert decision["permissionDecisionReason"] == (
             f"The guard can't judge this rig command: the option {word} has no value."
         ), (cmd, decision)
+    elif reason.startswith("unknown rtk option "):
+        word = reason.removeprefix("unknown rtk option ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this rtk command: it doesn't know the option {word}."
+        ), (cmd, decision)
+    elif reason.startswith("rtk option without value "):
+        word = reason.removeprefix("rtk option without value ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this rtk command: the option {word} has no value."
+        ), (cmd, decision)
+    elif reason.startswith("rtk shell "):
+        shell = reason.removeprefix("rtk shell ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this rtk command: it can't read a {shell} script."
+        ), (cmd, decision)
+    elif reason.startswith("rtk split "):
+        word = reason.removeprefix("rtk split ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this rtk command: it can't split the word {word}."
+        ), (cmd, decision)
+    elif reason.startswith("rtk pipeline "):
+        word = reason.removeprefix("rtk pipeline ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge rtk pipeline {word}: it runs gh with arguments that aren't on the command line."
+        ), (cmd, decision)
     elif reason.startswith("message file "):
         assert decision["permissionDecisionReason"] == (
             "The guard can't read the commit message file "
