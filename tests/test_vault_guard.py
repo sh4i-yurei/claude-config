@@ -1117,6 +1117,14 @@ class VaultGuardInProcessTests(VaultGuardTests):
                                     "Allowed gh commands: run list/view/watch; pr view/list/diff/checks/status; "
                                     "issue view/list; repo view; api GET."
                                 )
+                            elif label == "queue tags":
+                                expected = "Every queue task carries a project: tag and an item: tag, so it can be found by project and item (OpenRig team decision 16)."
+                            elif label.startswith("unknown rig option "):
+                                word = label.removeprefix("unknown rig option ")
+                                expected = f"The guard can't judge this rig command: it doesn't know the option {word}."
+                            elif label.startswith("rig option without value "):
+                                word = label.removeprefix("rig option without value ")
+                                expected = f"The guard can't judge this rig command: the option {word} has no value."
                             elif label.startswith("unknown gh command "):
                                 word = label.removeprefix("unknown gh command ")
                                 expected = f"The guard can't judge this gh command: it doesn't know the command {word}."
