@@ -124,7 +124,7 @@ def test_bad_option(claude, monkeypatch, tmp_path, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == (
-        "usage: claude_tokens.py [-h] [--projects FOLDER]\n"
+        "usage: claude_tokens.py [-h] [--projects FOLDER] [--since WHEN] [--until WHEN]\n"
         "claude_tokens.py: error: unrecognized arguments: --bogus\n"
     )
     assert list(out.iterdir()) == []
@@ -137,12 +137,17 @@ def test_help(claude, capsys):
     captured = capsys.readouterr()
     assert captured.err == ""
     assert captured.out == (
-        "usage: claude_tokens.py [-h] [--projects FOLDER]\n\n"
+        "usage: claude_tokens.py [-h] [--projects FOLDER] [--since WHEN] [--until WHEN]\n\n"
         "Attribute Claude Code context tokens to the action that put them there.\n\n"
         "options:\n"
         "  -h, --help         show this help message and exit\n"
         "  --projects FOLDER  folder of Claude Code project folders to read (default:\n"
         "                     ~/.claude/projects)\n"
+        "  --since WHEN       keep only sessions that started at or after WHEN, an ISO\n"
+        "                     8601 date or date and time read in local time when it has\n"
+        "                     no offset\n"
+        "  --until WHEN       keep only sessions that started before WHEN, given the\n"
+        "                     same way as --since\n"
     )
 
 

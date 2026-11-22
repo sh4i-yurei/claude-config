@@ -1,0 +1,4 @@
+{"type":"file-history-snapshot","messageId":"snap-01","snapshot":{"messageId":"snap-01","trackedFileBackups":{},"timestamp":"2026-11-20T09:00:00.000Z"},"isSnapshotUpdate":false}
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-20T12:00:00.000Z"}
+{"type":"user","message":{"role":"user","content":"Summarise the diff."},"timestamp":"2026-11-20T12:00:01.007Z","origin":{"kind":"human"}}
+{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_W3_Own","role":"assistant","content":[{"type":"text","text":"Three files changed."}],"usage":{"input_tokens":3,"cache_creation_input_tokens":700,"cache_read_input_tokens":0,"output_tokens":18,"output_tokens_details":{"thinking_tokens":0}}},"requestId":"req_W3_Own","timestamp":"2026-11-20T12:00:02.014Z"}

@@ -27,7 +27,7 @@ python3 ~/Documents/claude-config/tools/token-usage/simulate.py codex
 `codex_tokens.py --sessions FOLDER` reads Codex session files from `FOLDER`; without this option it reads `~/.codex/sessions`.
 `--since WHEN` keeps sessions that started at or after WHEN, and `--until WHEN` keeps sessions that started before WHEN. Each accepts an ISO 8601 date or date and time; values without an offset use the machine's local time zone.
 
-`claude_tokens.py --projects FOLDER` reads Claude Code project folders from `FOLDER`; without this option it reads `~/.claude/projects`.
+`claude_tokens.py --projects FOLDER` reads Claude Code project folders from `FOLDER`; without this option it reads `~/.claude/projects`. `--since WHEN` and `--until WHEN` keep the Claude sessions that started in that window, as they do for `codex_tokens.py`; a subagent goes with its session.
 
 - `claude_tokens.py` and `codex_tokens.py` parse the session files into `items.jsonl`,
   `calls.jsonl`, `cx_items.jsonl` and `cx_calls.jsonl`.
