@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Count lines."},"timestamp":"2026-11-20T11:40:00.000Z"}
+{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_09Sub","role":"assistant","content":[{"type":"text","text":"42."}],"usage":{"input_tokens":5,"cache_creation_input_tokens":700,"cache_read_input_tokens":0,"output_tokens":5,"output_tokens_details":{"thinking_tokens":0}}},"timestamp":"2026-11-20T11:40:01.007Z","requestId":"req_09Sub"}

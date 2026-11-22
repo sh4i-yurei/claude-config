@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Hello."}}
+{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_12NoTime","role":"assistant","content":[{"type":"text","text":"Hello."}],"usage":{"input_tokens":3,"cache_creation_input_tokens":100,"cache_read_input_tokens":0,"output_tokens":4}},"requestId":"req_12NoTime"}
