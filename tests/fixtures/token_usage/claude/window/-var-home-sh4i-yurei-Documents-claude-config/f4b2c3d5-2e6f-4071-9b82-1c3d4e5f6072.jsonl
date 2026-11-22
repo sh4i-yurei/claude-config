@@ -1,0 +1,4 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-20T11:00:00.000Z"}
+{"type":"user","message":{"role":"user","content":"Check them again."},"timestamp":"2026-11-20T11:00:01.007Z","origin":{"kind":"human"}}
+{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_W_Shared","role":"assistant","content":[{"type":"text","text":"There are two."}],"usage":{"input_tokens":3,"cache_creation_input_tokens":900,"cache_read_input_tokens":0,"output_tokens":20,"output_tokens_details":{"thinking_tokens":0}}},"requestId":"req_W_Shared","timestamp":"2026-11-20T11:00:02.014Z"}
+{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_W2_Own","role":"assistant","content":[{"type":"text","text":"Still two."}],"usage":{"input_tokens":3,"cache_creation_input_tokens":15,"cache_read_input_tokens":920,"output_tokens":12,"output_tokens_details":{"thinking_tokens":0}}},"requestId":"req_W2_Own","timestamp":"2026-11-20T11:00:03.021Z"}

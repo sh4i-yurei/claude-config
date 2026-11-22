@@ -1,0 +1,3 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-20T13:00:00.000"}
+{"type":"user","message":{"role":"user","content":"Run the linter."},"timestamp":"2026-11-20T13:00:00.000Z","origin":{"kind":"human"}}
+{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_W4_Own","role":"assistant","content":[{"type":"text","text":"No problems."}],"usage":{"input_tokens":3,"cache_creation_input_tokens":400,"cache_read_input_tokens":0,"output_tokens":6,"output_tokens_details":{"thinking_tokens":0}}},"requestId":"req_W4_Own","timestamp":"2026-11-20T13:00:01.007Z"}

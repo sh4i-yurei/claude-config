@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"Find the review notes."},"timestamp":"2026-11-20T11:30:00.000Z","origin":{"kind":"human"}}
+{"type":"assistant","message":{"model":"claude-opus-5-5","id":"msg_W2_Sub","role":"assistant","content":[{"type":"text","text":"Found three."}],"usage":{"input_tokens":3,"cache_creation_input_tokens":500,"cache_read_input_tokens":0,"output_tokens":9,"output_tokens_details":{"thinking_tokens":0}}},"requestId":"req_W2_Sub","timestamp":"2026-11-20T11:30:01.007Z"}

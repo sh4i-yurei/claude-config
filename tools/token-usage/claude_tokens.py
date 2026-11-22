@@ -6,6 +6,7 @@ how many later model calls re-sent it. Writes items.jsonl and calls.jsonl.
 """
 
 import argparse
+import datetime
 import json, glob, os, re, sys, collections
 
 HOME = os.path.expanduser("~")
@@ -229,6 +230,15 @@ def project_of(f):
 
 
 def main(argv=None):
+    def window_time(value):
+        try:
+            moment = datetime.datetime.fromisoformat(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(
+                f"not an ISO 8601 date or date and time: {value!r}"
+            ) from None
+        return moment.astimezone() if moment.tzinfo is None else moment
+
     parser = argparse.ArgumentParser(
         prog="claude_tokens.py", description=__doc__.splitlines()[0]
     )
@@ -238,7 +248,21 @@ def main(argv=None):
         default=os.path.expanduser("~/.claude/projects"),
         help="folder of Claude Code project folders to read (default: ~/.claude/projects)",
     )
+    parser.add_argument(
+        "--since",
+        metavar="WHEN",
+        type=window_time,
+        help="keep only sessions that started at or after WHEN, an ISO 8601 date or date and time read in local time when it has no offset",
+    )
+    parser.add_argument(
+        "--until",
+        metavar="WHEN",
+        type=window_time,
+        help="keep only sessions that started before WHEN, given the same way as --since",
+    )
     args = parser.parse_args(argv)
+    if args.since is not None and args.until is not None and args.since >= args.until:
+        parser.error("--since must be before --until")
     root = args.projects
     out = os.environ.get("TOKEN_USAGE_OUT", os.getcwd())
     files = glob.glob("**/*.jsonl", root_dir=root, recursive=True)
@@ -253,12 +277,42 @@ def main(argv=None):
                         pass
         return ""
 
+    def session_start(f):
+        if "/subagents/" in f:
+            f = f.split("/")[0] + "/" + f.split("/")[1] + ".jsonl"
+        try:
+            with open(os.path.join(root, f)) as fh:
+                for line in fh:
+                    try:
+                        record = json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(record, dict) and isinstance(
+                        record.get("timestamp"), str
+                    ):
+                        moment = datetime.datetime.fromisoformat(record["timestamp"])
+                        return moment if moment.tzinfo is not None else None
+        except (OSError, ValueError):
+            return None
+        return None
+
     files.sort(key=first_ts)
+    unreadable = 0
     seen_calls = set()
     items_out = open(os.path.join(out, "items.jsonl"), "w")
     calls_out = open(os.path.join(out, "calls.jsonl"), "w")
     for f in files:
         path = os.path.join(root, f)
+        write = True
+        if args.since is not None or args.until is not None:
+            start = session_start(f)
+            if start is None:
+                unreadable += 1
+                write = False
+            elif (args.since is not None and start < args.since) or (
+                args.until is not None and start >= args.until
+            ):
+                write = False
         is_sub = "/subagents/" in f
         agent = "main"
         if is_sub:
@@ -310,7 +364,8 @@ def main(argv=None):
             settle()
             for it in live:
                 it["end"] = reason
-                items_out.write(json.dumps(it) + "\n")
+                if write:
+                    items_out.write(json.dumps(it) + "\n")
             live.clear()
 
         for line in open(path):
@@ -432,30 +487,31 @@ def main(argv=None):
                         for it in live:
                             it["rides"] += 1
                         call_ix += 1
-                    calls_out.write(
-                        json.dumps(
-                            {
-                                "f": f,
-                                "sess": sess,
-                                "proj": proj,
-                                "agent": agent,
-                                "ts": ts,
-                                "model": model,
-                                "new": new,
-                                "ctx": ctx,
-                                "in": u.get("input_tokens", 0),
-                                "cw": u.get("cache_creation_input_tokens", 0),
-                                "cr": u.get("cache_read_input_tokens", 0),
-                                "out": u.get("output_tokens", 0),
-                                "think": (u.get("output_tokens_details") or {}).get(
-                                    "thinking_tokens", 0
-                                ),
-                                "est_live": est,
-                                "n_live": len(live),
-                            }
+                    if write:
+                        calls_out.write(
+                            json.dumps(
+                                {
+                                    "f": f,
+                                    "sess": sess,
+                                    "proj": proj,
+                                    "agent": agent,
+                                    "ts": ts,
+                                    "model": model,
+                                    "new": new,
+                                    "ctx": ctx,
+                                    "in": u.get("input_tokens", 0),
+                                    "cw": u.get("cache_creation_input_tokens", 0),
+                                    "cr": u.get("cache_read_input_tokens", 0),
+                                    "out": u.get("output_tokens", 0),
+                                    "think": (u.get("output_tokens_details") or {}).get(
+                                        "thinking_tokens", 0
+                                    ),
+                                    "est_live": est,
+                                    "n_live": len(live),
+                                }
+                            )
+                            + "\n"
                         )
-                        + "\n"
-                    )
                     # output tokens apportioned over this message's blocks below
                     out_tok = u.get("output_tokens", 0)
                     think_tok = (u.get("output_tokens_details") or {}).get(
@@ -515,6 +571,8 @@ def main(argv=None):
         flush("end")
     items_out.close()
     calls_out.close()
+    if unreadable:
+        print(f"left out {unreadable} session file(s) with no readable start", file=sys.stderr)
     return 0
 
 
