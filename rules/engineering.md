@@ -31,11 +31,18 @@ code change in a repository goes to Codex through a handoff in `05_Agents/handof
 `60_Operational_Manual/68_Dev_Workflow/codex-build-loop.md`. That includes `claude-config` and
 `codex-config`: they are code repositories like any other.
 
-**The one exception is the quick fix.** When Mark is editing a file and says "fix it", he means a
+**The first exception is the quick fix.** When Mark is editing a file and says "fix it", he means a
 trivial correction in that one file: an indent, a line pasted in the wrong place, a typo. Make it.
 It is quicker than a handoff and builds nothing.
 
-**Anything more goes to Codex,** unless Mark explicitly says Claude should do it:
+**The second exception is configuration and instructions, which are not code.** Team YAML, role
+and startup files, rules text and documentation are changed by Claude through a pull request that
+Mark merges, with no Codex round. Anything that runs, such as a script, a hook, a test or a
+workflow file, still goes to Codex through the build loop. A change to permissions or to a deny
+list says so in its pull request, so it is seen before the merge. Mark decided this on 2026-11-22,
+and the Workflow engine charter records it.
+
+**Anything else goes to Codex,** unless Mark explicitly says Claude should do it:
 
 - a change that touches more than one file;
 - a change that adds or changes behaviour, even in one file;
@@ -58,7 +65,8 @@ have consistently been finished in an evening. Estimate in:
 
 ## Before writing code
 
-- Is this a one-file trivial fix Mark asked for? If not, it's a Codex handoff.
+- Is this a one-file trivial fix Mark asked for, or configuration and instructions that don't run?
+  If neither, it's a Codex handoff.
 - Is this the design I'd choose if it took ten times as long to build? If not, why not?
 - Am I about to patch the same thing a second time?
 - Did I estimate in agent time, with Mark's steps listed apart?
