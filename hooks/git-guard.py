@@ -52,6 +52,71 @@ GH_REASON = (
     "Allowed gh commands: run list/view/watch; pr view/list/diff/checks/status; "
     "issue view/list; repo view; api GET."
 )
+# OpenRig rig 0.7.19 uses commander 13.1.0. True means the exact option takes a value.
+RIG_QUEUE_CREATE_OPTIONS = {
+    **dict.fromkeys(
+        (
+            "--source",
+            "--destination",
+            "--body",
+            "--body-file",
+            "--body-context",
+            "--mission",
+            "--slice",
+            "--gate",
+            "--priority",
+            "--tier",
+            "--tags",
+            "--expires-at",
+            "--id",
+            "--target-repo",
+            "--summary",
+            "--human-intent",
+            "--human-detail-file",
+            "--reply-to",
+            "--human-questions-file",
+            "--evidence-ref",
+            "--host",
+            "--return-route",
+        ),
+        True,
+    ),
+    **dict.fromkeys(
+        ("--alert", "--no-nudge", "--verify", "--full", "--json", "-h", "--help"), False
+    ),
+}
+RIG_QUEUE_HANDOFF_OPTIONS = {
+    **dict.fromkeys(
+        (
+            "--from",
+            "--to",
+            "--body",
+            "--body-file",
+            "--note",
+            "--priority",
+            "--tier",
+            "--tags",
+            "--gate",
+            "--target-repo",
+            "--summary",
+            "--evidence-ref",
+            "--host",
+        ),
+        True,
+    ),
+    **dict.fromkeys(
+        ("--alert", "--no-nudge", "--full", "--json", "-h", "--help"), False
+    ),
+}
+RIG_QUEUE_OPTIONS = {
+    "create": RIG_QUEUE_CREATE_OPTIONS,
+    "handoff": RIG_QUEUE_HANDOFF_OPTIONS,
+    "handoff-and-complete": RIG_QUEUE_HANDOFF_OPTIONS,
+}
+RIG_QUEUE_TAG_REASON = (
+    "Every queue task carries a project: tag and an item: tag, so it can be "
+    "found by project and item (OpenRig team decision 16)."
+)
 GH_FLAG_TABLES = {
     "auth-status": {
         "-a": False,
@@ -946,6 +1011,45 @@ def session_path(value):
     return "/" in value and value.rsplit("/", 1)[-1] == SESSION_FILE
 
 
+def rig_queue_problem(args):
+    if len(args) < 2 or args[0] != "queue" or args[1] not in RIG_QUEUE_OPTIONS:
+        return None
+    options = RIG_QUEUE_OPTIONS[args[1]]
+    tags_value = ""
+    index = 2
+    while index < len(args):
+        word = args[index]
+        if word == "--":
+            break
+        if word == "-" or not word.startswith("-"):
+            index += 1
+            continue
+        option, equals, attached = word.partition("=")
+        if option not in options or (equals and not options[option]):
+            return f"The guard can't judge this rig command: it doesn't know the option {word}."
+        if options[option]:
+            if equals:
+                value = attached
+            else:
+                if index + 1 >= len(args):
+                    return f"The guard can't judge this rig command: the option {word} has no value."
+                index += 1
+                value = args[index]
+            if option == "--tags":
+                tags_value = value
+        elif option in ("-h", "--help"):
+            return None
+        index += 1
+    tags = [tag.strip() for tag in tags_value.split(",") if tag.strip()]
+    if not any(
+        tag.startswith("project:") and len(tag) > len("project:") for tag in tags
+    ):
+        return RIG_QUEUE_TAG_REASON
+    if not any(tag.startswith("item:") and len(tag) > len("item:") for tag in tags):
+        return RIG_QUEUE_TAG_REASON
+    return None
+
+
 def command(node, cwd, agent, source, pipeline_input=()):
     words = [part for part in node.parts if part.kind == "word"]
     raw_args = [bashlex_compat.word_value(part, source) for part in words]
@@ -996,6 +1100,8 @@ def command(node, cwd, agent, source, pipeline_input=()):
         return cwd, git_problem(args[1:], cwd, agent)
     if name == GH:
         return cwd, gh_problem(args[1:], agent)
+    if name == "rig":
+        return cwd, rig_queue_problem(args[1:])
     return cwd, None
 
 

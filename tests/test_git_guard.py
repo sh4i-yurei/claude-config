@@ -396,6 +396,20 @@ for cwd, cmd, who, reason in issue_tool_reason_cases:
         assert decision["permissionDecisionReason"].startswith(
             "Cannot parse a command mentioning git, gh, bw, vault-env or vault-commit: "
         ), (cmd, decision)
+    elif reason == "queue tags":
+        assert decision["permissionDecisionReason"] == (
+            "Every queue task carries a project: tag and an item: tag, so it can be found by project and item (OpenRig team decision 16)."
+        ), (cmd, decision)
+    elif reason.startswith("unknown rig option "):
+        word = reason.removeprefix("unknown rig option ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this rig command: it doesn't know the option {word}."
+        ), (cmd, decision)
+    elif reason.startswith("rig option without value "):
+        word = reason.removeprefix("rig option without value ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this rig command: the option {word} has no value."
+        ), (cmd, decision)
     elif reason.startswith("message file "):
         assert decision["permissionDecisionReason"] == (
             "The guard can't read the commit message file "
