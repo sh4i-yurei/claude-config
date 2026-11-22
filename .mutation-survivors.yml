@@ -41,9 +41,6 @@
   reason: >-
     A missing or empty sub-issue body becomes either an empty string or XXXX.
     Neither contains an earlier round's review file name or URL, so the refusal and writes agree.
-- mutant: hooks.git-guard.x_command__mutmut_122
-  reason: >-
-    bashlex redirect nodes always expose the heredoc attribute; removing getattr's fallback leaves every parsed command decision unchanged.
 - mutant: hooks.git-guard.x_rig_queue_problem__mutmut_14
   reason: >-
     With no --tags option the starting tags value is never a project: or item: tag, so an
