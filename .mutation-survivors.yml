@@ -178,12 +178,24 @@
 - mutant: hooks.git-guard.x_unwrap__mutmut_111
   reason: >-
     At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
-- mutant: hooks.git-guard.x_unwrap__mutmut_235
+- mutant: hooks.git-guard.x_unwrap__mutmut_208
   reason: >-
     At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
-- mutant: hooks.git-guard.x_unwrap__mutmut_238
+- mutant: hooks.git-guard.x_unwrap__mutmut_211
   reason: >-
     At the boundary changed by this mutant, slicing from index plus one returns an empty list, the same value as the explicit empty branch.
+- mutant: hooks.git-guard.x_sudo_command_index__mutmut_32
+  reason: >-
+    The index returned beside a refusal is never read: unwrap returns the refusal and discards the index, so 0 and 1 give the same decision.
+- mutant: hooks.git-guard.x_sudo_command_index__mutmut_41
+  reason: >-
+    The index returned beside a refusal is never read: unwrap returns the refusal and discards the index, so 0 and 1 give the same decision.
+- mutant: hooks.git-guard.x_sudo_command_index__mutmut_63
+  reason: >-
+    The index returned beside a refusal is never read: unwrap returns the refusal and discards the index, so 0 and 1 give the same decision.
+- mutant: hooks.git-guard.x_sudo_command_index__mutmut_73
+  reason: >-
+    The index returned beside a refusal is never read: unwrap returns the refusal and discards the index, so 0 and 1 give the same decision.
 - mutant: tools.workflow.issue.x_ready_issue__mutmut_242
   reason: >-
     form_files refuses a repository with no forms before ready_issue reaches
