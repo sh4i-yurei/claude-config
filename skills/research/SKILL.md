@@ -15,7 +15,11 @@ library, and `repo` when the repository or file is already known. Preserve the r
 and, when supplied, archive path in the note that uses the fact. A `not found` result does not
 start a survey automatically; decide whether the missing fact warrants broader work.
 
-For a survey or deep investigation, use:
+Survey and deep runs are paused until the research harness runs on local models (Workflow
+upkeep decision 88): they cost too much. Research is lookups only, one at a time: `lookup.py
+search`, `lookup.py page`, `lookup.py docs` and the other typed kinds. When a question needs more
+than lookups, say so on a queue row to the operator seat instead of starting a run. The commands
+below stay documented for when runs resume:
 
 ```text
 python3 ~/.claude/skills/research/scripts/research.py new <topic> --mode survey|deep --question <question>
