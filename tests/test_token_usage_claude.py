@@ -84,8 +84,9 @@ def test_output_folder_at_call_time(claude, monkeypatch, tmp_path):
 
 
 def test_default_projects_at_call_time(claude, monkeypatch, tmp_path):
-    home = tmp_path / "home"
+    home = tmp_path / "later_home"
     shutil.copytree(FIXTURES / "projects", home / ".claude/projects")
+    monkeypatch.setenv("HOME", str(home))
     out = tmp_path / "out"
     out.mkdir()
     monkeypatch.chdir(out)
