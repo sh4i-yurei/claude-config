@@ -32,6 +32,10 @@
 - mutant: hooks.git-guard.x_command__mutmut_122
   reason: >-
     bashlex redirect nodes always expose the heredoc attribute; removing getattr's fallback leaves every parsed command decision unchanged.
+- mutant: hooks.git-guard.x_rig_queue_problem__mutmut_14
+  reason: >-
+    With no --tags option the starting tags value is never a project: or item: tag, so an
+    empty and a placeholder starting value give the same refusal.
 - mutant: hooks.git-guard.x_commit_options__mutmut_2
   reason: >-
     remaining is above 2 in every run a test can arrange: main and every in-process caller set DEADLINE five seconds ahead, and the in-process alarm stops a command after one second, so min(2, remaining) is 2 whichever branch or sign the mutant takes.
