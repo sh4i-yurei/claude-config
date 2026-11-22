@@ -5,10 +5,9 @@ replies, thinking, skill text, reminders, Mark's messages) record its size and
 how many later model calls re-sent it. Writes items.jsonl and calls.jsonl.
 """
 
+import argparse
 import json, glob, os, re, sys, collections
 
-ROOT = os.path.expanduser("~/.claude/projects")
-OUT = os.environ.get("TOKEN_USAGE_OUT", os.getcwd())  # data files go where it is run, never in the repo
 HOME = os.path.expanduser("~")
 CPT = 3.05  # reminders, skill text and other injected text
 CPT_TOOL = {"Bash": 2.65, "Read": 2.23, "MCP": 2.14}  # tool output, fitted against real context growth
@@ -229,11 +228,23 @@ def project_of(f):
     return d or "~"
 
 
-def main():
-    files = glob.glob("**/*.jsonl", root_dir=ROOT, recursive=True)
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        prog="claude_tokens.py", description=__doc__.splitlines()[0]
+    )
+    parser.add_argument(
+        "--projects",
+        metavar="FOLDER",
+        default=os.path.expanduser("~/.claude/projects"),
+        help="folder of Claude Code project folders to read (default: ~/.claude/projects)",
+    )
+    args = parser.parse_args(argv)
+    root = args.projects
+    out = os.environ.get("TOKEN_USAGE_OUT", os.getcwd())
+    files = glob.glob("**/*.jsonl", root_dir=root, recursive=True)
 
     def first_ts(f):
-        with open(os.path.join(ROOT, f)) as fh:
+        with open(os.path.join(root, f)) as fh:
             for line in fh:
                 if '"timestamp"' in line:
                     try:
@@ -244,10 +255,10 @@ def main():
 
     files.sort(key=first_ts)
     seen_calls = set()
-    items_out = open(os.path.join(OUT, "items.jsonl"), "w")
-    calls_out = open(os.path.join(OUT, "calls.jsonl"), "w")
+    items_out = open(os.path.join(out, "items.jsonl"), "w")
+    calls_out = open(os.path.join(out, "calls.jsonl"), "w")
     for f in files:
-        path = os.path.join(ROOT, f)
+        path = os.path.join(root, f)
         is_sub = "/subagents/" in f
         agent = "main"
         if is_sub:
@@ -263,7 +274,6 @@ def main():
         tool_names = {}  # tool_use id -> (tool, kind, target, skill)
         cur_msg = None
         last_skill = None
-        prev_ctx = None
         call_ix = 0
 
         def add(kind, tool, detail, target, chars, tok, ts, extra=None):
@@ -505,7 +515,8 @@ def main():
         flush("end")
     items_out.close()
     calls_out.close()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -361,3 +361,34 @@
   reason: The temporary folder and index file names are private to the attempt; changing their names leaves the commit and cleanup unchanged.
 - mutant: tools.vault_commit.x_main__mutmut_209
   reason: Git add with this pathspec stages tracked removals with or without -A, so the committed tree is unchanged.
+- mutant: tools.token-usage.claude_tokens.x_main__mutmut_107
+  reason: >-
+    This mutant reads a missing agentType as None instead of "?". The label is then
+    "subagent:" + None, which raises TypeError inside the try, and the except sets
+    "subagent:?", the same label the real code writes.
+- mutant: tools.token-usage.claude_tokens.x_main__mutmut_109
+  reason: >-
+    This mutant drops the "?" default of .get("agentType"), so a missing agentType
+    is None. As for mutant 107, the string join raises inside the try and the
+    except writes "subagent:?".
+- mutant: tools.token-usage.claude_tokens.x_main__mutmut_149
+  reason: >-
+    This mutant starts last_skill as "" instead of None. last_skill is only read
+    by "if last_skill:", where both are false, so no tool input gets a different skill.
+- mutant: tools.token-usage.claude_tokens.x_main__mutmut_902
+  reason: >-
+    This mutant changes the thinking-block test to "XXthinkingXX". A thinking block
+    then falls through to the text and tool_use tests, matches neither, and adds
+    nothing, which is what the real code's continue does.
+- mutant: tools.token-usage.claude_tokens.x_main__mutmut_903
+  reason: >-
+    This mutant changes the thinking-block test to "THINKING". As for mutant 902,
+    the block matches no later test and adds nothing.
+- mutant: tools.token-usage.claude_tokens.x_main__mutmut_954
+  reason: >-
+    This mutant defaults a missing tool input to None instead of {}. The expression
+    is "b.get(...) or {}", so both give {}.
+- mutant: tools.token-usage.claude_tokens.x_main__mutmut_956
+  reason: >-
+    This mutant drops the {} default of b.get("input"). As for mutant 954,
+    "None or {}" is {}.
