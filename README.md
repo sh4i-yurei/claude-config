@@ -107,6 +107,8 @@ option, direct heredocs and here-strings fed to those shells, and the named
 options of `distrobox enter`, `flatpak-spawn --host`, `env`, `sudo`, `timeout`,
 `command`, `exec`, `nohup`, and `xargs`. It checks commands up to 64 KB and
 refuses a command when its five-second judgement budget expires.
+For `sudo`, it reads options and variable assignments as sudo 1.9.17p2 does
+before checking the command sudo would run.
 
 Any other wrapper, shell, interpreter, or `eval` is outside the guard's view.
 This includes a heredoc routed through a compound command into a shell.

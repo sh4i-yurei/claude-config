@@ -417,6 +417,16 @@ for cwd, cmd, who, reason in issue_tool_reason_cases:
             "Allowed gh commands: run list/view/watch; pr view/list/diff/checks/status; "
             "issue view/list; repo view; api GET."
         ), (cmd, decision)
+    elif reason.startswith("unknown sudo option "):
+        word = reason.removeprefix("unknown sudo option ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this sudo command: it doesn't know the option {word}."
+        ), (cmd, decision)
+    elif reason.startswith("sudo option without value "):
+        word = reason.removeprefix("sudo option without value ")
+        assert decision["permissionDecisionReason"] == (
+            f"The guard can't judge this sudo command: the option {word} has no value."
+        ), (cmd, decision)
 # Failures in the hook must be valid deny decisions, including an import failure.
 for raw in ("{}", "[]", "not-json", json.dumps({"cwd": INFRA, "tool_input": {}})):
     run = subprocess.run(

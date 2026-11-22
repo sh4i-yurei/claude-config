@@ -686,6 +686,147 @@ def gh_problem(args, agent):
     return None if tuple(path) in GH_READS else GH_REASON
 
 
+# sudo 1.9.17p2, src/parse_args.c: sudo_short_opts and sudo_long_opts.
+SUDO_SHORT_OPTIONS = {
+    "A": "none",
+    "a": "required",
+    "B": "none",
+    "b": "none",
+    "C": "required",
+    "c": "required",
+    "D": "required",
+    "E": "none",
+    "e": "none",
+    "g": "required",
+    "H": "none",
+    "h": "optional",
+    "i": "none",
+    "K": "none",
+    "k": "none",
+    "l": "none",
+    "N": "none",
+    "n": "none",
+    "P": "none",
+    "p": "required",
+    "R": "required",
+    "r": "required",
+    "S": "none",
+    "s": "none",
+    "T": "required",
+    "t": "required",
+    "U": "required",
+    "u": "required",
+    "V": "none",
+    "v": "none",
+}
+SUDO_LONG_OPTIONS = {
+    "background": "none",
+    "preserve-env": "equals-only",
+    "edit": "none",
+    "set-home": "none",
+    "login": "none",
+    "remove-timestamp": "none",
+    "list": "none",
+    "preserve-groups": "none",
+    "shell": "none",
+    "other-user": "required",
+    "validate": "none",
+    "askpass": "none",
+    "auth-type": "required",
+    "bell": "none",
+    "close-from": "required",
+    "login-class": "required",
+    "chdir": "required",
+    "group": "required",
+    "help": "none",
+    "host": "required",
+    "reset-timestamp": "none",
+    "no-update": "none",
+    "non-interactive": "none",
+    "prompt": "required",
+    "chroot": "required",
+    "role": "required",
+    "stdin": "none",
+    "command-timeout": "required",
+    "type": "required",
+    "user": "required",
+    "version": "none",
+}
+
+
+def sudo_variable(word):
+    return "=" in word and not word.startswith(("/", "="))
+
+
+def sudo_command_index(args):
+    index = 1
+    while index < len(args):
+        word = args[index]
+        if word == "--":
+            return index + 1, None
+        if word.startswith("--"):
+            name, separator, _value = word[2:].partition("=")
+            if name in SUDO_LONG_OPTIONS:
+                option = name
+            else:
+                matches = [
+                    candidate
+                    for candidate in SUDO_LONG_OPTIONS
+                    if candidate.startswith(name)
+                ]
+                option = matches[0] if len(matches) == 1 else None
+            if option is None or separator and SUDO_LONG_OPTIONS[option] == "none":
+                return (
+                    0,
+                    f"The guard can't judge this sudo command: it doesn't know the option {word}.",
+                )
+            if SUDO_LONG_OPTIONS[option] == "required" and not separator:
+                if index + 1 == len(args):
+                    return (
+                        0,
+                        f"The guard can't judge this sudo command: the option {word} has no value.",
+                    )
+                index += 1
+            index += 1
+            continue
+        if word.startswith("-") and len(word) > 1:
+            for offset, letter in enumerate(word[1:], 1):
+                kind = SUDO_SHORT_OPTIONS.get(letter)
+                if kind is None:
+                    return (
+                        0,
+                        f"The guard can't judge this sudo command: it doesn't know the option {word}.",
+                    )
+                if kind == "required":
+                    if offset == len(word) - 1:
+                        if index + 1 == len(args):
+                            return (
+                                0,
+                                f"The guard can't judge this sudo command: the option {word} has no value.",
+                            )
+                        index += 1
+                    break
+                if kind == "optional":
+                    if (
+                        offset == len(word) - 1
+                        and word == "-h"
+                        and index + 1 < len(args)
+                    ):
+                        next_word = args[index + 1]
+                        if not next_word.startswith("-") and not sudo_variable(
+                            next_word
+                        ):
+                            index += 1
+                    break
+            index += 1
+            continue
+        if sudo_variable(word):
+            index += 1
+            continue
+        break
+    return index, None
+
+
 def unwrap(args):
     args = list(args)
     while args:
@@ -757,12 +898,9 @@ def unwrap(args):
                     break
             args = args[index:]
         elif name == "sudo":
-            index = 1
-            while index < len(args) and args[index].startswith("-"):
-                if args[index] == "--":
-                    index += 1
-                    break
-                index += 2 if args[index] in ("-u", "-g", "-h", "-p", "-D") else 1
+            index, problem = sudo_command_index(args)
+            if problem:
+                return [], problem
             args = args[index:]
         elif name == "timeout":
             index = 1
