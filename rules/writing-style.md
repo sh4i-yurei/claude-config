@@ -33,6 +33,12 @@ without already knowing what I was trying to say?**
    said what, who was right — is not content. Keep the decision and the reason, drop the
    conversation. Full rule in `20_Buildlogs/README.md`.
 
+8. **When writing on GitHub, describe the work.** Commit messages, pull requests,
+   issues and review comments describe the change, the problem and the reason.
+   They never refer to Mark in the third person or to any agent or AI, and
+   identifiers in the code stay. Full rule in the writing directive's "Writing
+   on GitHub" section.
+
 Structure is not the problem. Headings, numbered lists and tables earn their place.
 The problem is the writing *inside* them.
 
@@ -43,6 +49,7 @@ The problem is the writing *inside* them.
 - Did I stack too many ideas into one line?
 - Did I say *why*, not only *what*?
 - If this goes in the vault: is it in Mark's first person, with no dialogue in it?
+- If this goes on GitHub: does it describe the work, with no Mark in the third person and no agent or AI?
 
 If any answer is bad, fix it before sending.
 
