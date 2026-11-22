@@ -1,4 +1,16 @@
 # Equivalent mutants confirmed by scoped local mutmut runs.
+- mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_40
+  reason: json.loads accepts bytes as well as text, so changing text=True leaves the status result unchanged.
+- mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_41
+  reason: check=None has the same subprocess behavior as check=False, so the status result is unchanged.
+- mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_45
+  reason: json.loads accepts bytes as well as text, so changing text=True leaves the status result unchanged.
+- mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_46
+  reason: Omitting check uses its False default, so the status result is unchanged.
+- mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_52
+  reason: json.loads accepts bytes as well as text, so dropping text=True leaves the status result unchanged.
+- mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_67
+  reason: None and False both fail the unlocked check, so malformed JSON produces the same status.
 - mutant: tools.workflow.issue.x_review_result__mutmut_5
   reason: >-
     False and None are both false in the only condition that reads in_response

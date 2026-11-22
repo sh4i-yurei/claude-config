@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -27,6 +28,24 @@ class LookupTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+
+    def bw_status_standin(self, name, output, exit_code=0):
+        folder = self.root / name
+        folder.mkdir()
+        calls = folder / "calls"
+        script = folder / "bw"
+        script.write_text(
+            "#!/bin/sh\n"
+            f'printf "%s %s %s\\n" "$*" "$BW_SESSION" "$BW_NOINTERACTION" >> {shlex.quote(str(calls))}\n'
+            f"printf '%s\\n' {shlex.quote(output)}\n"
+            f"exit {exit_code}\n"
+        )
+        script.chmod(0o700)
+        environment = os.environ.copy()
+        environment["PATH"] = f"{folder}:{environment.get('PATH', '')}"
+        environment.pop("BW_SESSION", None)
+        environment.pop("BW_NOINTERACTION", None)
+        return calls, environment
 
     def response(
         self,
@@ -1440,7 +1459,9 @@ class LookupTests(unittest.TestCase):
         def credential(item):
             if item == "First key":
                 return "TEST_ONLY_DOCTOR_SECRET"
-            raise ValueError(f"Vaultwarden item unavailable: {item}; it has no password")
+            raise ValueError(
+                f"Vaultwarden item unavailable: {item}; it has no password"
+            )
 
         with (
             mock.patch.dict(os.environ, {"BW_SESSION": "session"}, clear=False),
@@ -1504,6 +1525,134 @@ class LookupTests(unittest.TestCase):
         ):
             invalid_shape = lookup.doctor_lookup([], root=self.root)
         self.assertFalse(invalid_shape["answer"]["vaultwarden_session"]["available"])
+
+    def test_credential_statuses_reports_unavailable_bw_without_reading_keys(self):
+        config = {
+            "providers": {
+                "one": {"key_item": "First key"},
+                "two": {"key_item": "Second key"},
+            }
+        }
+        with mock.patch.object(lookup, "credential") as read:
+            actual = lookup.credential_statuses(config, bw_available=False)
+        self.assertEqual(
+            actual,
+            (
+                False,
+                {
+                    "First key": {"available": False, "reason": "bw unavailable"},
+                    "Second key": {"available": False, "reason": "bw unavailable"},
+                },
+            ),
+        )
+        read.assert_not_called()
+
+    def test_credential_statuses_reports_missing_session_without_running_bw(self):
+        config = {
+            "providers": {
+                "one": {"key_item": "First key"},
+                "two": {"key_item": "Second key"},
+            }
+        }
+        calls, environment = self.bw_status_standin(
+            "missing-session", '{"status": "unlocked"}'
+        )
+        with (
+            mock.patch.dict(os.environ, environment, clear=True),
+            mock.patch.object(
+                lookup, "session_token", side_effect=ValueError("no session")
+            ),
+            mock.patch.object(lookup, "credential") as read,
+        ):
+            actual = lookup.credential_statuses(config)
+        self.assertEqual(
+            actual,
+            (
+                False,
+                {
+                    "First key": {"available": False, "reason": "session unavailable"},
+                    "Second key": {"available": False, "reason": "session unavailable"},
+                },
+            ),
+        )
+        self.assertFalse(calls.exists())
+        read.assert_not_called()
+
+    def test_credential_statuses_checks_unlocked_bw_and_reads_each_key(self):
+        config = {
+            "providers": {
+                "one": {"key_item": "First key"},
+                "two": {"key_item": "Second key"},
+            }
+        }
+        calls, environment = self.bw_status_standin(
+            "unlocked", '{"status": "unlocked"}'
+        )
+        with (
+            mock.patch.dict(os.environ, environment, clear=True),
+            mock.patch.object(lookup, "session_token", return_value="dummy-session"),
+            mock.patch.object(
+                lookup, "credential", return_value="TEST_ONLY_DOCTOR_SECRET"
+            ) as read,
+        ):
+            actual = lookup.credential_statuses(config)
+        self.assertEqual(
+            actual,
+            (
+                True,
+                {
+                    "First key": {"available": True, "reason": None},
+                    "Second key": {"available": True, "reason": None},
+                },
+            ),
+        )
+        self.assertEqual(calls.read_text(), "status dummy-session true\n")
+        self.assertEqual(
+            [call.args for call in read.call_args_list],
+            [("First key",), ("Second key",)],
+        )
+        self.assertNotIn("TEST_ONLY_DOCTOR_SECRET", json.dumps(actual))
+
+    def test_credential_statuses_refuses_invalid_bw_status(self):
+        config = {
+            "providers": {
+                "one": {"key_item": "First key"},
+                "two": {"key_item": "Second key"},
+            }
+        }
+        for name, output, exit_code in (
+            ("invalid-json", "not json", 0),
+            ("locked-error", '{"status": "locked"}', 1),
+            ("locked", '{"status": "locked"}', 0),
+        ):
+            with self.subTest(name=name):
+                calls, environment = self.bw_status_standin(name, output, exit_code)
+                with (
+                    mock.patch.dict(os.environ, environment, clear=True),
+                    mock.patch.object(
+                        lookup, "session_token", return_value="dummy-session"
+                    ),
+                    mock.patch.object(lookup, "credential") as read,
+                ):
+                    actual = lookup.credential_statuses(config)
+                self.assertEqual(
+                    actual,
+                    (
+                        False,
+                        {
+                            "First key": {
+                                "available": False,
+                                "reason": "session unavailable",
+                            },
+                            "Second key": {
+                                "available": False,
+                                "reason": "session unavailable",
+                            },
+                        },
+                    ),
+                )
+                self.assertEqual(calls.read_text(), "status dummy-session true\n")
+                read.assert_not_called()
 
     def test_parser_errors_are_json_with_exit_two(self):
         with mock.patch("builtins.print") as output:
