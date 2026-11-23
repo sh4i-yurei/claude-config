@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 
 
@@ -106,26 +107,11 @@ class LabelSync(unittest.TestCase):
         result = self.run_sync()
         self.assertEqual(result.returncode, 0, result.stderr)
         labels = {item["name"] for item in self.state["labels"][repo]}
+        with (self.workflow / "labels.toml").open("rb") as file:
+            global_labels = set(tomllib.load(file)["global"])
         self.assertEqual(
             labels,
-            {
-                "type:chore",
-                "type:docs",
-                "type:feature",
-                "type:fix",
-                "deferred",
-                "workflow-exception",
-                "tech-debt",
-                "debt:accidental",
-                "debt:bit-rot",
-                "debt:deliberate",
-                "debt:code",
-                "debt:design",
-                "debt:test",
-                "debt:docs",
-                "debt:infra",
-                "dependencies",
-            },
+            global_labels,
         )
 
     def test_unused_extra_label_is_deleted_with_yes(self):
