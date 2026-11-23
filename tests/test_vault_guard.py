@@ -1125,6 +1125,21 @@ class VaultGuardInProcessTests(VaultGuardTests):
                             elif label.startswith("rig option without value "):
                                 word = label.removeprefix("rig option without value ")
                                 expected = f"The guard can't judge this rig command: the option {word} has no value."
+                            elif label.startswith("unknown rtk option "):
+                                word = label.removeprefix("unknown rtk option ")
+                                expected = f"The guard can't judge this rtk command: it doesn't know the option {word}."
+                            elif label.startswith("rtk option without value "):
+                                word = label.removeprefix("rtk option without value ")
+                                expected = f"The guard can't judge this rtk command: the option {word} has no value."
+                            elif label.startswith("rtk shell "):
+                                shell = label.removeprefix("rtk shell ")
+                                expected = f"The guard can't judge this rtk command: it can't read a {shell} script."
+                            elif label.startswith("rtk split "):
+                                word = label.removeprefix("rtk split ")
+                                expected = f"The guard can't judge this rtk command: it can't split the word {word}."
+                            elif label.startswith("rtk pipeline "):
+                                word = label.removeprefix("rtk pipeline ")
+                                expected = f"The guard can't judge rtk pipeline {word}: it runs gh with arguments that aren't on the command line."
                             elif label.startswith("unknown gh command "):
                                 word = label.removeprefix("unknown gh command ")
                                 expected = f"The guard can't judge this gh command: it doesn't know the command {word}."

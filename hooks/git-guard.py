@@ -35,6 +35,27 @@ FALLBACK_WORD = re.compile(
 PFLAG_BOOLEAN_VALUES = frozenset(
     ("1", "t", "T", "TRUE", "true", "True", "0", "f", "F", "FALSE", "false", "False")
 )
+# RTK v1.2.1 command and option words, read from its clap definitions and dispatch.
+RTK_TOP_LEVEL_SKIP_WORDS = ("--verbose", "--skip-env")
+RTK_HELP_VERSION_WORDS = ("-h", "--help", "-V", "--version")
+RTK_GIT_VALUE_OPTIONS = ("-C", "-c", "--git-dir", "--work-tree")
+RTK_GT_GIT_SUBCOMMANDS = (
+    "status",
+    "diff",
+    "show",
+    "add",
+    "push",
+    "pull",
+    "fetch",
+    "stash",
+    "worktree",
+)
+RTK_PIPELINE_GH_SUBCOMMANDS = ("share", "add", "search")
+RTK_READABLE_SHELLS = ("sh", "bash", "dash")
+RTK_RUN_VALUE_OPTIONS = ("-c", "--command", "--shell")
+RTK_FILTER_VALUE_OPTIONS = ("--shell",)
+RTK_EXECUTABLE_SUBCOMMANDS = ("run", "err", "summary", "test")
+RTK_BYPASS_SUBCOMMANDS = ("bypass", "proxy")
 GH_READS = {
     ("run", "list"),
     ("run", "view"),
@@ -1011,6 +1032,152 @@ def session_path(value):
     return "/" in value and value.rsplit("/", 1)[-1] == SESSION_FILE
 
 
+def rtk_commands(words):
+    """Return possible argument lists, scripts, and an unreadable-form reason."""
+    words = list(words)
+    while words and (
+        words[0] in RTK_TOP_LEVEL_SKIP_WORDS or re.fullmatch(r"-v+", words[0])
+    ):
+        words.pop(0)
+    if not words or words[0] in RTK_HELP_VERSION_WORDS:
+        return [], [], None
+    if words[0].startswith("-"):
+        return [], [], rtk_unknown_option(words[0])
+    subcommand, *args = words
+    if subcommand == "git":
+        # Only options before the git subcommand belong to RTK.
+        index = 0
+        while index < len(args):
+            word = args[index]
+            if word == "--skip-env":
+                args.pop(index)
+                continue
+            if word in RTK_GIT_VALUE_OPTIONS:
+                index += 2
+            elif word.startswith("-"):
+                index += 1
+            else:
+                break
+        return [["git", *args]], [], None
+    if subcommand == "gh":
+        while args and args[0] == "--skip-env":
+            args.pop(0)
+        if args and args[0] == "--":
+            args.pop(0)
+        return [["gh", *args]], [], None
+    if subcommand == "gt":
+        while args and args[0] == "--skip-env":
+            args.pop(0)
+        program = "git" if args and args[0] in RTK_GT_GIT_SUBCOMMANDS else "gt"
+        return [[program, *args]], [], None
+    if subcommand in RTK_EXECUTABLE_SUBCOMMANDS:
+        return rtk_executable_commands(subcommand, args)
+    if subcommand in RTK_BYPASS_SUBCOMMANDS:
+        while args and args[0] == "--skip-env":
+            args.pop(0)
+        if len(args) == 1:
+            try:
+                args = shlex.split(args[0])
+            except ValueError:
+                return (
+                    [],
+                    [],
+                    (
+                        "The guard can't judge this rtk command: "
+                        f"it can't split the word {args[0]}."
+                    ),
+                )
+        return [args] if args else [], [], None
+    if subcommand == "pipeline":
+        while args and args[0] == "--skip-env":
+            args.pop(0)
+        if args and args[0] in RTK_PIPELINE_GH_SUBCOMMANDS:
+            return (
+                [],
+                [],
+                (
+                    f"The guard can't judge rtk pipeline {args[0]}: "
+                    "it runs gh with arguments that aren't on the command line."
+                ),
+            )
+        return [], [], None
+    commands = [[subcommand, *args]]
+    if "--" in args:
+        commands.append(args[args.index("--") + 1 :])
+    return commands, [], None
+
+
+def rtk_unknown_option(word):
+    return f"The guard can't judge this rtk command: it doesn't know the option {word}."
+
+
+def rtk_executable_commands(subcommand, args):
+    script = None
+    shell = None
+    index = 0
+    while index < len(args):
+        word = args[index]
+        if word == "--":
+            index += 1
+            break
+        if not word.startswith("-"):
+            break
+        if word == "--skip-env":
+            index += 1
+            continue
+        if subcommand == "test" and not (
+            word == "--shell" or word.startswith("--shell=")
+        ):
+            break
+        valued = (
+            RTK_FILTER_VALUE_OPTIONS if subcommand != "run" else RTK_RUN_VALUE_OPTIONS
+        )
+        option, equal, value = word.partition("=")
+        if option not in valued or (equal and option == "-c"):
+            return [], [], rtk_unknown_option(word)
+        if not equal:
+            if index + 1 == len(args):
+                return (
+                    [],
+                    [],
+                    (
+                        f"The guard can't judge this rtk command: the option {word} has no value."
+                    ),
+                )
+            value = args[index + 1]
+            index += 1
+        if option == "--shell":
+            shell = value
+        else:
+            script = value
+        index += 1
+    remaining = args[index:]
+    if subcommand == "test":
+        while remaining and remaining[0] == "!":
+            remaining = remaining[1:]
+        if len(remaining) >= 2 and remaining[0] == "(" and remaining[-1] == ")":
+            remaining = remaining[1:-1]
+        if remaining and remaining[0].startswith("-"):
+            return [], [], None
+    if script is not None or (
+        subcommand != "run" and shell is not None and len(remaining) == 1
+    ):
+        if shell is not None and os.path.basename(shell) not in RTK_READABLE_SHELLS:
+            return (
+                [],
+                [],
+                (
+                    f"The guard can't judge this rtk command: it can't read a {shell} script."
+                ),
+            )
+        return [], [script if script is not None else remaining[0]], None
+    commands = [remaining] if remaining else []
+    scripts = []
+    if len(remaining) == 1:
+        scripts.append(remaining[0])
+    return commands, scripts, None
+
+
 def rig_queue_problem(args):
     if len(args) < 2 or args[0] != "queue" or args[1] not in RIG_QUEUE_OPTIONS:
         return None
@@ -1050,9 +1217,13 @@ def rig_queue_problem(args):
     return None
 
 
-def command(node, cwd, agent, source, pipeline_input=()):
+def command(node, cwd, agent, source, pipeline_input=(), candidate_args=None):
     words = [part for part in node.parts if part.kind == "word"]
-    raw_args = [bashlex_compat.word_value(part, source) for part in words]
+    raw_args = (
+        [bashlex_compat.word_value(part, source) for part in words]
+        if candidate_args is None
+        else candidate_args
+    )
     redirect_targets = [
         bashlex_compat.word_value(part.output, source)
         for part in node.parts
@@ -1067,6 +1238,19 @@ def command(node, cwd, agent, source, pipeline_input=()):
     if not args:
         return cwd, None
     name = os.path.basename(args[0])
+    if name == "rtk":
+        commands, scripts, problem = rtk_commands(args[1:])
+        if problem:
+            return cwd, problem
+        for value in commands:
+            reason = command(node, cwd, agent, source, pipeline_input, value)[1]
+            if reason:
+                return cwd, reason
+        for value in scripts:
+            reason = script_problem(value, cwd, agent)
+            if reason:
+                return cwd, reason
+        return cwd, None
     if name in (VAULT_ENV, "vault_env.py"):
         return cwd, "Secrets stay out of transcripts: use vault-run to fetch secrets."
     if name in (VAULT_COMMIT, "vault_commit.py"):
