@@ -405,3 +405,24 @@
   reason: >-
     This mutant drops the {} default of b.get("input"). As for mutant 954,
     "None or {}" is {}.
+- mutant: hooks.git-guard.x_command__mutmut_152
+  reason: >-
+    bashlex redirect nodes always expose the heredoc attribute; removing getattr's fallback leaves every parsed command decision unchanged.
+- mutant: hooks.git-guard.x_rtk_commands__mutmut_111
+  reason: >-
+    With no words after rtk bypass or proxy, an empty argument list judges nothing, so returning one instead of none changes no decision.
+- mutant: hooks.git-guard.x_rtk_executable_commands__mutmut_121
+  reason: >-
+    With no words left after rtk run, err, summary or test's options, an empty argument list judges nothing, so returning one instead of none changes no decision.
+- mutant: hooks.git-guard.x_rtk_commands__mutmut_86
+  reason: >-
+    The guard never judges gt, so the program name for a gt subcommand that doesn't run git changes no decision.
+- mutant: hooks.git-guard.x_rtk_commands__mutmut_87
+  reason: >-
+    The guard never judges gt, so the program name for a gt subcommand that doesn't run git changes no decision.
+- mutant: hooks.git-guard.x_rtk_executable_commands__mutmut_84
+  reason: >-
+    When rtk test's words are exactly ( and ), stripping them leaves no command and keeping them leaves the program (, which the guard doesn't judge, so both give the same decision.
+- mutant: hooks.git-guard.x_rtk_executable_commands__mutmut_85
+  reason: >-
+    When rtk test's words are exactly ( and ), stripping them leaves no command and keeping them leaves the program (, which the guard doesn't judge, so both give the same decision.
