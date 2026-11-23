@@ -10,6 +10,18 @@ description = "Debt in a design decision"
 color = "F9D0C4"
 description = "Debt in the tests"
 
+[global."debt:duplicate"]
+color = "EDEDED"
+description = "Debt already filed elsewhere, closed in triage"
+
+[global."debt:nit"]
+color = "EDEDED"
+description = "A review nit closed in triage, kept searchable"
+
+[global."debt:obsolete"]
+color = "EDEDED"
+description = "Debt the code no longer has, closed in triage"
+
 [global."debt:docs"]
 color = "F9D0C4"
 description = "Debt in the documentation"
