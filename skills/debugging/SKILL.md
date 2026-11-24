@@ -1,6 +1,7 @@
 ---
 name: debugging
-description: Use when a bug, failing test, failing CI job, broken service, flaky result or unexpected behaviour needs explaining, before proposing any fix. Also use when an agent session went wrong, such as repeated work, an ignored plan or a high token cost, and the cause has to be shown from its transcript.
+description: Use when a bug, failing test, failing CI job, broken service, flaky result or unexpected behaviour needs explaining, before proposing any fix, including when something broke after a deploy or change, or works in one place and not another. Also use when an agent session went wrong, such as repeated work, an ignored plan or a high token cost, and the cause has to be shown from its transcript.
+argument-hint: "<error message or problem description>"
 ---
 
 # Debugging
@@ -24,25 +25,39 @@ Three binding rules frame this method:
 ## 1. Investigate
 
 1. **Read the whole error:** every warning, the full stack trace, line numbers, paths and the exit
-   code. They often name the cause.
-2. **Reproduce it.** Find the exact steps and whether it happens every time. If it does not
+   code. They often name the cause. Keep the exact text; never paraphrase it, because the exact
+   text is what finds earlier occurrences and what the record needs.
+2. **State expected against actual.** Write one sentence each for what should happen and what
+   happens instead. A bug you can't state that way isn't understood yet.
+3. **Reproduce it.** Find the exact steps and whether it happens every time. If it does not
    reproduce, gather more evidence; never guess.
-3. **Check what changed:** `git log`, `git diff`, dependencies, configuration and environment. Many
+4. **Set the scope:** when it started, and what is affected, such as which machines, services,
+   repositories or sessions, and which are not. The start time is what you line changes up
+   against, and the unaffected cases are free comparisons for section 2.
+5. **Look for an earlier occurrence.** Search the buildlogs, the vault and the repository's and
+   `platform-tickets`' issues for the exact error text. If it was solved before, start from that
+   record.
+6. **Check what changed** around the start time: commits that touched the failing path
+   (`git log -- <path>`), deploys, Ansible runs, dependency updates, configuration and
+   environment. Read the logs and metrics from that window too: Loki and Prometheus on `hub`
+   through Grafana, `journalctl` and `podman logs` on the machine, and the CI run's own log. Many
    of this estate's failures were differences between the laptop, the dev container and the CI
    runner, such as an interpreter that found a package on one and not the other.
-4. **Find the failing layer.** When work passes through several components, such as a CI
+7. **Find the failing layer.** When work passes through several components, such as a CI
    workflow, a container, a script and a service, log what enters and leaves each boundary once,
    and check that environment and configuration reach each layer. Run it once, see where the data
    breaks, then investigate only that component.
-5. **Trace a bad value back to where it starts.** Ask what called this with the bad value, and keep
+8. **Trace a bad value back to where it starts.** Ask what called this with the bad value, and keep
    asking until you reach the source. An empty path that makes `git init` run in the current folder
    is a symptom; the test setup that handed over the empty path is the cause.
 
 ## 2. Compare
 
-Find similar code in the same repository that works. Read a reference implementation completely
-rather than skimming it. List every difference between the working case and the broken one, and do
-not decide in advance that one cannot matter.
+When it works in one place and not another, such as staging and production, or the laptop and CI,
+that working place is your comparison. Otherwise, find similar code in the same repository that
+works, and read it completely rather than skimming it. Either way, list every difference between
+the working case and the broken one before forming a theory, and do not decide in advance that one
+cannot matter.
 
 ## 3. Test one hypothesis at a time
 
@@ -54,7 +69,24 @@ on top. When you do not understand something, say "I don't understand X" and mar
 
 A bug fix starts with a test that fails on the bug (testing standard, "Bugs"). Write the case as
 WHEN and THEN from the real input that triggered it, show it failing on the starting commit, and put
-it in the handoff. Then confirm the original symptom is gone, not only that the new test passes.
+it in the handoff. Before handing it off, name what else the fix touches: other callers of the
+changed code, other inputs that reach it, and anything that relied on the old behaviour, and add a
+case for each that could break. After the build, confirm the original symptom is gone, not only that
+the new test passes.
+
+## Write it up
+
+The diagnosis goes where the fix is decided, which is the fix's handoff or the incident's issue, in
+this shape:
+
+- **Reproduction:** expected, actual, and the exact steps.
+- **Root cause:** why it happens, with the evidence that shows it: the trace, the log lines, or the
+  hypothesis test that confirmed it.
+- **Fix:** the proven fix from the scratch copy and the failing test case it answers. Codex builds
+  it.
+- **Prevention:** the checks at each layer and the guards from the section below.
+
+The buildlog gets the story as `Saw:`, `Cause:` and `Fix:`, with the real error text pasted in.
 
 ## Timing and flaky results
 
@@ -108,3 +140,7 @@ giving him the answer.
 Adapted from the systematic-debugging and diagnosing-superpowers skills of the superpowers plugin 7.0.2
 (https://github.com/obra/superpowers), under the MIT License. The notice the licence requires is in
 `NOTICE.md` in this folder.
+
+Expected against actual, setting the scope, looking for earlier occurrences, reading logs from the
+window when it started, the side-effects check and the write-up shape come from the debug skill of
+the engineering plugin in Anthropic's knowledge-work plugins.
