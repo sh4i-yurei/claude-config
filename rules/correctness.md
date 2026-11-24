@@ -23,3 +23,5 @@ The authority for this rule is decision 17 in `~/Documents/Second_Brain/10_Proje
 - Am I claiming more than the tool actually checked?
 - Have I named what remains unchecked?
 - If work went wrong or Mark is frustrated, have I slowed down further?
+- Am I about to say "should", "probably" or "seems to" about something I could run and see?
+- Does a claim that an agent finished rest on its report, rather than on the diff and the real output?
