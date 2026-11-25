@@ -156,6 +156,33 @@ This includes a heredoc routed through a compound command into a shell.
 GitHub repository rulesets enforce protected branches even when the guard
 cannot see the eventual command, as decisions 15 and 17 specify.
 
+### If the guard refuses every command
+
+The guard fails closed: when it can't run or judge a command, it refuses it with a
+`Guard error:` reason. A bad change to `hooks/git-guard.py` can therefore refuse every
+shell command for every agent. No agent can repair that, because the agents' shell
+commands are refused and every Claude session is denied editing `hooks/`, `tools/` and
+`rules/` in this checkout and `~/.claude/hooks/`. The person at the machine recovers it
+from a terminal outside any agent, in one of two ways.
+
+The first way puts back the last good guard. `~/.claude/hooks` links to this checkout's
+`hooks/`, so the restored file takes effect at once:
+
+```bash
+git -C ~/Documents/claude-config log --oneline -5 -- hooks/git-guard.py
+git -C ~/Documents/claude-config checkout <last-good-commit> -- hooks/git-guard.py
+```
+
+The fix then goes through a pull request as usual. Once it merges, running
+`git -C ~/Documents/claude-config checkout -- hooks/git-guard.py` and a fast-forward
+pull returns the checkout to `main`.
+
+The second way turns the guard off for a short time. Remove the
+`git-guard.py --agent claude` entry from the Bash PreToolUse hooks in
+`~/.claude/settings.json`, and the `git-guard.py` entry in `~/.codex/hooks.json` if Codex
+is affected. Put both back as soon as the guard is fixed, because while they are out
+nothing checks the agents' Git, GitHub and secret commands.
+
 ## Handoff check registration
 
 To check build handoffs before Claude writes or edits them, add this entry to the
