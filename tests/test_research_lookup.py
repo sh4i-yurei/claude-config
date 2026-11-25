@@ -2053,7 +2053,6 @@ class LookupTests(unittest.TestCase):
                             cached=bright_cached,
                             name="bright.json",
                         )
-                        bright.envelope.pop("body")
                         with (
                             mock.patch.object(
                                 lookup,
@@ -2092,6 +2091,46 @@ class LookupTests(unittest.TestCase):
                         )
                         address.assert_called_once_with("example.com")
                         self.assertEqual(gateway.call_args_list, expected_calls)
+
+    def test_page_bright_data_404_keeps_not_found_for_any_body(self):
+        firecrawl = lookup.RemoteResponse(
+            "Firecrawl scrape",
+            "https://api.firecrawl.dev/v2/scrape",
+            None,
+            None,
+            False,
+            "refused",
+            "daily cap",
+        )
+        bodies = {
+            "short": "{}",
+            "blocked": "Access Denied " + "a" * 120,
+            "long": "ordinary page content " * 300,
+        }
+        for name, body in bodies.items():
+            with self.subTest(body=name):
+                bright = self.bright_page(body)
+                bright.envelope["status"] = 404
+                outcome, gateway = self.run_page(firecrawl, bright)
+                self.assertEqual(outcome["status"], "not found")
+                self.assertEqual(
+                    outcome["tried"],
+                    [
+                        {
+                            "source": "Firecrawl scrape",
+                            "status": "refused",
+                            "http": None,
+                            "reason": "daily cap",
+                        },
+                        {
+                            "source": "Bright Data",
+                            "status": "not found",
+                            "http": 404,
+                            "archive": str(bright.path),
+                        },
+                    ],
+                )
+                self.assertEqual(gateway.call_count, 2)
 
     def test_cert_returns_each_certificate_with_names_and_validity(self):
         response = self.response(

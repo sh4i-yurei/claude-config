@@ -2149,7 +2149,11 @@ def page_lookup(
         mark_attempt(bright_attempt, "error")
         bright_attempt["reason"] = header_error
         body = None
-    elif isinstance((bright.envelope or {}).get("body"), str):
+    elif (
+        isinstance(bright_attempt["http"], int)
+        and 200 <= bright_attempt["http"] < 300
+        and isinstance((bright.envelope or {}).get("body"), str)
+    ):
         reason = page_text_error((bright.envelope or {})["body"])
         if reason is not None and bright_attempt["status"] in {"found", "not found"}:
             mark_attempt(bright_attempt, "error")
