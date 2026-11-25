@@ -67,6 +67,9 @@ supported by the source they point at. Even with live search, roughly thirty per
 statements come out unsupported. Assume this applies to your own output.
 
 - Two independent sources for any load-bearing claim.
+- Copies of one article on aggregators, mirrors or syndication feeds are one source, not
+  several. Trace them to the origin before counting independent sources; otherwise repetition
+  looks like agreement.
 - Weight specifications, papers and official documentation above blogs and forums.
 - When sources disagree, flag the conflict rather than silently choosing.
 - Record where a source has an interest. A vendor's own benchmark is evidence about the
@@ -84,3 +87,6 @@ assembling everything at the end.
 
 Record, per source: the date, the exact query, and the tool used. That is what makes the
 search reproducible and criticisable later, and it costs nothing at the time.
+
+When a search tool takes a country, language or device, record those too: result order differs
+by geography and device, so a search logged without them can't be repeated.

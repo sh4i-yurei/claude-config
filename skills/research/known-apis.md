@@ -266,6 +266,29 @@ are free; past that the plan bills at $1.50 per thousand, so the free allowance 
 about $7.50. It MUST be treated as the scarce rung: it is for pages the cheaper routes could not get, and
 it SHALL NOT be used as a default.
 
+The 5,000 a month is one shared credit pool, not an allowance for this route alone. Web
+Unlocker, SERP API, Web Scraper API, Scraper Studio, the Bright Data MCP server and the `bdata`
+CLI all draw from it at one credit per request or record (vendor skill bundle, read 2026-11-24).
+The gateway counts only requests sent through `gw.py`, so treat its remaining figure as an upper
+bound in any month when another Bright Data client was used.
+
+**Bright Data routes documented but not yet verified here** (from the vendor's skill bundle, read
+2026-11-24; check the zone type and one live response before building on them).
+
+- SERP: `POST https://api.brightdata.com/request` with
+  `{"zone":<zone>,"url":"https://www.google.com/search?q=<query>&brd_json=1&gl=us&hl=en","format":"raw"}`
+  returns parsed JSON with results under `organic[]` (`rank`, `title`, `link`, `description`).
+  Page with `start=10`, `start=20`; `num` is deprecated. A dedicated SERP zone is preferred, but
+  an Unlocker zone can serve these requests. Only successful requests are billed.
+- Discover: `POST https://api.brightdata.com/discover` with `query` (at most 1,500 characters)
+  and `intent` (at most 3,000) returns `task_id`; then
+  `GET https://api.brightdata.com/discover?task_id=<id>` until `status` is `done`. Rows are under
+  `results[]` with `link`, `title`, `description`, `relevance_score` and, with `include_content`,
+  page text; `num_results` is 1 to 20; modes are `standard`, `deep`, `fast` and `zeroRanking`.
+  403 means Discover is not enabled; 404 means the task expired. The bundle doesn't state
+  Discover's billing. A `relevance_score` ranks addresses; like a search snippet, it is not
+  evidence.
+
 **Authenticating to GitHub.** The gateway always adds the held read-only token; a session never
 reads or sends it. Use `lookup.py repo`, `vuln` or `cve` for the routes they cover.
 
