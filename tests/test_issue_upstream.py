@@ -106,6 +106,24 @@ class IssueUpstream(TestCase):
             code = issue_tool.main(["upstream", str(path), *options])
         return code, output.getvalue()
 
+    def run_open(self, content, *options):
+        path = self.root / "open.toml"
+        path.write_text(content)
+        output = io.StringIO()
+        with (
+            patch.dict(os.environ, self.env),
+            patch.object(workflow_config, "DIRECTORY", self.workflow),
+            redirect_stdout(output),
+        ):
+            code = issue_tool.main(["open", str(path), *options])
+        return code, output.getvalue()
+
+    def open_file(self, extra="", repo="sh4i-yurei/claude-config"):
+        return (
+            f'repo = "{repo}"\nkind = "feature"\ntitle = "A feature"\n'
+            f'scope = "scope:ci"\n{extra}\n[body]\ndone = "It works"\n'
+        )
+
     def assert_no_writes(self):
         self.assertFalse(any("--method" in call["args"] for call in self.calls("gh")))
         self.assertFalse(
@@ -115,9 +133,67 @@ class IssueUpstream(TestCase):
     def test_dry_run_reads_everything_without_writing(self):
         code, output = self.run_upstream()
         self.assertEqual(code, 0, output)
-        self.assertIn(TITLE, output)
+        prefix = f"Would call: POST repos/{REPO}/issues "
+        self.assertEqual(
+            json.loads(
+                next(
+                    line.removeprefix(prefix)
+                    for line in output.splitlines()
+                    if line.startswith(prefix)
+                )
+            ),
+            {"title": TITLE, "body": BODY, "labels": ["enhancement"]},
+        )
+        self.assertIn(
+            f"Filed upstream as <upstream link> with approval {APPROVAL}.", output
+        )
         self.assertIn("Upstream: " + TITLE, output)
+        self.assertIn(
+            f"Would call: rig queue update {APPROVAL} --note Filed upstream: <upstream link>; tracking: <tracking link>\n",
+            output,
+        )
         self.assert_no_writes()
+
+    def test_dry_run_preserves_non_ascii_and_optional_labels(self):
+        code, output = self.run_upstream(title=TITLE + " é", omit=("labels",))
+        self.assertEqual(code, 0, output)
+        self.assertIn('"title": "' + TITLE + ' é"', output)
+        self.assertNotIn("\\u00e9", output)
+        self.assertIn('"labels": []', output)
+
+    def test_dry_run_prints_complete_preview(self):
+        body = "A short body."
+        code, output = self.run_upstream(body=body)
+        self.assertEqual(code, 0, output)
+        tracking_body = (
+            f"### Project, step, and reason\n\nFiled upstream as <upstream link> with approval {APPROVAL}.\n\n"
+            f"### What changes\n\n> {TITLE}\n> {body}\n\n"
+            f"### Done when\n\n{REPO} resolves or declines the request, and this issue closes with the outcome.\n"
+        )
+        expected = (
+            f"Would call: POST repos/{REPO}/issues "
+            + json.dumps(
+                {"title": TITLE, "body": body, "labels": ["enhancement"]},
+                ensure_ascii=False,
+            )
+            + "\nRendered body:\n"
+            + tracking_body
+            + "\nWould call: POST repos/"
+            + TRACKING
+            + "/issues "
+            + json.dumps(
+                {
+                    "title": "Upstream: " + TITLE,
+                    "body": tracking_body,
+                    "labels": ["type:chore", "upstream"],
+                },
+                ensure_ascii=False,
+            )
+            + "\nWould call: project item-add 4 --owner sh4i-yurei --url NEW_ISSUE_URL\n"
+            + "Would call: project item-edit Status Backlog on new issue; leave Priority, Size, Estimate and Iteration empty\n"
+            + f"Would call: rig queue update {APPROVAL} --note Filed upstream: <upstream link>; tracking: <tracking link>\n"
+        )
+        self.assertEqual(output, expected)
 
     def test_files_upstream_then_tracking_then_notes_approval(self):
         code, output = self.run_upstream(options=[])
@@ -139,8 +215,21 @@ class IssueUpstream(TestCase):
         )
         self.assertEqual(second["title"], "Upstream: " + TITLE)
         self.assertEqual(second["labels"], ["type:chore", "upstream"])
-        self.assertIn(APPROVAL, second["body"])
-        self.assertIn(f"https://github.com/{REPO}/issues/99", second["body"])
+        self.assertIn(
+            f"### Project, step, and reason\n\nFiled upstream as https://github.com/{REPO}/issues/99 with approval {APPROVAL}.",
+            second["body"],
+        )
+        self.assertIn(
+            "### What changes\n\n"
+            + "\n".join("> " + line for line in (TITLE + "\n" + BODY).splitlines()),
+            second["body"],
+        )
+        self.assertIn(
+            f"### Done when\n\n{REPO} resolves or declines the request, and this issue closes with the outcome.",
+            second["body"],
+        )
+        self.assertIn(f"filed upstream: https://github.com/{REPO}/issues/99\n", output)
+        self.assertIn(f"tracking: https://github.com/{TRACKING}/issues/99\n", output)
         self.assertIn(
             [
                 "queue",
@@ -155,7 +244,9 @@ class IssueUpstream(TestCase):
     def test_approval_rules(self):
         cases = [
             (
-                {"body": "File the upstream request"},
+                {
+                    "body": "Yes to all three on the plan. (3) File the upstream request for a per-seat field that stops an MCP server outright, with no secrets, private paths or names."
+                },
                 f"approval {APPROVAL} doesn't name {REPO}",
             ),
             (
@@ -206,6 +297,54 @@ class IssueUpstream(TestCase):
         self.save()
         self.assertEqual(self.run_upstream()[0], 0)
 
+    def test_approval_search_reads_first_middle_and_later_pages(self):
+        url = "https://github.com/sh4i-yurei/workflow-engine/issues/44"
+        hit = {"html_url": url, "body": f"Approval {APPROVAL}"}
+        for position, count in ((0, 1), (34, 40), (100, 101)):
+            with self.subTest(position=position):
+                self.gh_state = {"approval_hits": [{} for _ in range(count)]}
+                self.gh_state["approval_hits"][position] = hit
+                self.save()
+                self.assertEqual(
+                    self.run_upstream(),
+                    (2, f"approval {APPROVAL} already filed {url}\n"),
+                )
+
+    def test_title_search_requires_exact_title_by_authenticated_author(self):
+        url = f"https://github.com/{REPO}/issues/44"
+        self.gh_state["title_hits"] = [{"html_url": url, "title": TITLE}]
+        self.save()
+        self.assertEqual(
+            self.run_upstream(),
+            (2, f"{REPO} already has {url} with this title\n"),
+        )
+        searches = [
+            call["args"][1]
+            for call in self.calls("gh")
+            if call["args"][1].startswith("search/issues")
+        ]
+        self.assertTrue(any("author%3A%40me" in endpoint for endpoint in searches))
+
+    def test_label_with_slash_is_encoded(self):
+        self.assertEqual(self.run_upstream(labels=["area/cli"])[0], 0)
+        self.assertTrue(
+            any(
+                call["args"][1] == f"repos/{REPO}/labels/area%2Fcli"
+                for call in self.calls("gh")
+            )
+        )
+
+    def test_approval_requires_full_json_row_for_requested_id(self):
+        self.rig_state["approval"]["body"] = (
+            "File the upstream request in mvschwarz/openrig."
+        )
+        self.save()
+        code, output = self.run_upstream()
+        self.assertEqual(code, 0, output)
+        self.assertIn(
+            ["queue", "show", APPROVAL, "--full", "--json"], self.calls("rig")
+        )
+
     def test_repo_and_tracking_boundaries(self):
         for repo in (
             "SH4I-YUREI/some-new-repo",
@@ -213,16 +352,58 @@ class IssueUpstream(TestCase):
             "sh4i-yurei/some-new-repo",
         ):
             with self.subTest(repo=repo):
+                self.rig_state["approval"]["body"] = (
+                    f"File the upstream request in {repo}."
+                )
+                self.save()
                 code, output = self.run_upstream(repo=repo)
                 self.assertEqual(
                     (code, output), (2, f"{repo} is one of ours; use issue.py open\n")
                 )
-        self.assertIn("repo must be owner/name", self.run_upstream(repo="mvschwarz")[1])
+        for repo in ("mvschwarz", "mvschwarz/", "/openrig"):
+            with self.subTest(repo=repo):
+                self.assertEqual(
+                    self.run_upstream(repo=repo), (2, "repo must be owner/name\n")
+                )
+        self.rig_state["approval"]["body"] = f"File the upstream request in {REPO}."
+        self.save()
         self.assertEqual(
             self.run_upstream(tracking=REPO),
             (2, f"tracking {REPO} has no board mapping\n"),
         )
         self.assert_no_writes()
+
+    def test_approval_name_problem_survives_ours_refusal(self):
+        self.rig_state["approval"]["body"] = "File upstream elsewhere."
+        self.save()
+        code, output = self.run_upstream(repo="sh4i-yurei/claude-config")
+        self.assertEqual(code, 2)
+        self.assertEqual(
+            output.splitlines(),
+            [
+                "sh4i-yurei/claude-config is one of ours; use issue.py open",
+                f"approval {APPROVAL} doesn't name sh4i-yurei/claude-config",
+            ],
+        )
+
+    def test_whoami_failure_joins_other_problems(self):
+        self.rig_state["whoami_failure"] = "seat unavailable"
+        self.rig_state["approval"]["sourceSession"] = "other@hq"
+        self.save()
+        code, output = self.run_upstream(body=BODY + "Mark asked.")
+        self.assertEqual(code, 2, output)
+        self.assertIn("seat unavailable", output)
+        self.assertIn(
+            f"approval {APPROVAL} comes from other@hq, not main-lead@hq", output
+        )
+        self.assertIn('body has a personal name: "Mark"', output)
+
+    def test_missing_sender_is_named_without_traceback(self):
+        self.rig_state["missing_sender"] = True
+        self.save()
+        code, output = self.run_upstream()
+        self.assertEqual(code, 2, output)
+        self.assertIn("rig whoami returned no seat address", output)
 
     def test_labels_and_text_rules(self):
         self.gh_state["missing_labels"] = ["nosuchlabel-xyz"]
@@ -245,6 +426,17 @@ class IssueUpstream(TestCase):
             ("It lives in /var/home/someone/notes.", 'a private path: "/home/"'),
             ("The hub is hub.tail4cf2f3.ts.net.", 'a hostname: ".ts.net"'),
             ("Reach it at 100.101.102.103.", 'a private address: "100.101.102.103"'),
+            (
+                "See WORKFLOW-UPKEEP-RULES@TOOLING.",
+                'a seat address: "WORKFLOW-UPKEEP-RULES@TOOLING"',
+            ),
+            ("Ask Main-Lead.", 'a seat address: "Main-Lead"'),
+            ("co-authored-by: someone", 'an attribution line: "co-authored-by"'),
+            ("The hub is HUB.TAIL4CF2F3.TS.NET.", 'a hostname: ".TS.NET"'),
+            (
+                "Version 999.999.999.999 is invalid. Reach it at 10.0.0.1.",
+                'a private address: "10.0.0.1"',
+            ),
         ]
         for addition, problem in cases:
             with self.subTest(addition=addition):
@@ -283,6 +475,12 @@ class IssueUpstream(TestCase):
             self.run_upstream(labels="enhancement"),
             (2, "labels must be a list of label names\n"),
         )
+        for labels in ([""], [1]):
+            with self.subTest(labels=labels):
+                self.assertEqual(
+                    self.run_upstream(labels=labels),
+                    (2, "labels must be a list of label names\n"),
+                )
         self.assertEqual(
             self.run_upstream(milestone=12), (2, "unknown file key milestone\n")
         )
@@ -291,12 +489,11 @@ class IssueUpstream(TestCase):
         code, output = self.run_upstream(tracking="sh4i-yurei/claude-config")
         self.assertEqual(code, 2)
         self.assertIn("scope must be one of:", output)
-        self.assertNotIn(
-            "scope must be one of:",
-            self.run_upstream(
-                tracking="sh4i-yurei/claude-config", tracking_scope="scope:ci"
-            )[1],
+        code, output = self.run_upstream(
+            tracking="sh4i-yurei/claude-config", tracking_scope="scope:ci"
         )
+        self.assertEqual(code, 0, output)
+        self.assertIn('"labels": ["type:chore", "scope:ci", "upstream"]', output)
 
     def test_case_varied_tracking_repository_dry_run_uses_board_mapping(self):
         code, output = self.run_upstream(tracking="SH4I-YUREI/workflow-engine")
@@ -333,10 +530,14 @@ class IssueUpstream(TestCase):
         }
         self.save()
         code, output = self.run_upstream(options=[])
-        self.assertEqual(code, 1, output)
-        self.assertIn(f"https://github.com/{REPO}/issues/99", output)
-        self.assertIn(f"https://github.com/{TRACKING}/issues/99", output)
-        self.assertIn("board failed", output)
+        self.assertEqual(
+            (code, output),
+            (
+                1,
+                f"filed upstream: https://github.com/{REPO}/issues/99\n"
+                f"tracking issue failed: https://github.com/{TRACKING}/issues/99: added new issue to board failed: board failed\n",
+            ),
+        )
         self.assertEqual(
             sum(
                 call["args"][1] == f"repos/{REPO}/issues"
@@ -345,14 +546,26 @@ class IssueUpstream(TestCase):
             ),
             1,
         )
+        self.assertEqual(
+            sum(
+                call["args"][:2] == ["api", f"repos/{TRACKING}/issues"]
+                and "--method" in call["args"]
+                for call in self.calls("gh")
+            ),
+            1,
+        )
 
     def test_tracking_post_failure_keeps_upstream_link(self):
         self.gh_state["tracking_post_failure"] = "tracking POST failed"
         self.save()
         code, output = self.run_upstream(options=[])
-        self.assertEqual(code, 1, output)
-        self.assertIn(f"filed upstream: https://github.com/{REPO}/issues/99", output)
-        self.assertIn("tracking POST failed", output)
+        self.assertEqual(
+            (code, output),
+            (
+                1,
+                f"filed upstream: https://github.com/{REPO}/issues/99\ntracking issue failed: tracking POST failed\n",
+            ),
+        )
         posts = [
             call
             for call in self.calls("gh")
@@ -361,6 +574,15 @@ class IssueUpstream(TestCase):
         ]
         self.assertEqual(len(posts), 1)
 
+    def test_tracking_create_without_link_names_step(self):
+        self.gh_state["tracking_missing_link"] = True
+        self.save()
+        code, output = self.run_upstream(options=[])
+        self.assertEqual(code, 1, output)
+        self.assertIn(f"filed upstream: https://github.com/{REPO}/issues/99", output)
+        self.assertIn("tracking issue failed:", output)
+        self.assertNotIn("Traceback", output)
+
     def test_approval_note_failure_keeps_both_links(self):
         self.rig_state["update_failure"] = "queue update failed"
         self.save()
@@ -368,9 +590,22 @@ class IssueUpstream(TestCase):
         self.assertEqual(code, 1, output)
         self.assertIn(f"https://github.com/{REPO}/issues/99", output)
         self.assertIn(f"https://github.com/{TRACKING}/issues/99", output)
-        self.assertIn("queue update failed", output)
+        self.assertEqual(
+            output.splitlines()[-1], "approval note failed: queue update failed"
+        )
+        self.rig_state["update_on_stdout"] = True
+        self.save()
+        code, output = self.run_upstream(options=[])
+        self.assertEqual(
+            (code, output.splitlines()[-1]),
+            (1, "approval note failed: queue update failed"),
+        )
 
     def test_other_owner_mapped_and_exception_are_ours(self):
+        self.rig_state["approval"]["body"] = (
+            "File the upstream request in other-owner/mapped-repo."
+        )
+        self.save()
         path = self.workflow / "workflow.toml"
         original = path.read_text()
         path.write_text(
@@ -494,6 +729,107 @@ class IssueUpstream(TestCase):
         self.assertIn(f"filed upstream: https://github.com/{REPO}/issues/99", output)
         self.assertIn("tracking issue failed:", output)
         self.assertIn("HTTP 503: form unavailable", output)
+
+    def test_open_repo_and_exception_refusals_keep_exact_lines(self):
+        for repo in ("a/b/c", "x/"):
+            with self.subTest(repo=repo):
+                code, output = self.run_open(self.open_file(repo=repo))
+                self.assertEqual((code, output), (2, "repo must be owner/name\n"))
+        code, output = self.run_open(self.open_file(repo="sh4i-yurei/second-brain"))
+        self.assertEqual(
+            (code, output), (2, "sh4i-yurei/second-brain: workflow exception\n")
+        )
+
+    def test_open_form_read_error_and_unknown_kind_are_named(self):
+        self.gh_state["form_read_failure"] = True
+        self.save()
+        code, output = self.run_open(self.open_file())
+        self.assertEqual((code, output), (2, "HTTP 503: form read failed\n"))
+        self.gh_state = {}
+        self.save()
+        code, output = self.run_open(
+            self.open_file().replace('kind = "feature"', 'kind = "missing"')
+        )
+        self.assertEqual(
+            (code, output),
+            (
+                2,
+                "kind 'missing' matches no issue form; valid kinds: bug, chore, docs, feature\n",
+            ),
+        )
+
+    def test_open_dry_run_exact_payload_and_status(self):
+        content = self.open_file().replace(
+            'title = "A feature"', 'title = "A feature é"'
+        )
+        code, output = self.run_open(content, "--dry-run")
+        self.assertEqual(code, 0, output)
+        prefix = "Would call: POST repos/sh4i-yurei/claude-config/issues "
+        payload = json.loads(
+            next(
+                line.removeprefix(prefix)
+                for line in output.splitlines()
+                if line.startswith(prefix)
+            )
+        )
+        self.assertEqual(
+            payload,
+            {
+                "title": "A feature é",
+                "body": "### Project, step, and reason\n\n_No response_\n\n### What changes\n\n_No response_\n\n### Done when\n\nIt works\n",
+                "labels": ["type:feature", "scope:ci"],
+            },
+        )
+        self.assertIn('"title": "A feature é"', output)
+        self.assertIn(
+            "Would call: project item-edit Status Backlog on new issue; leave Priority, Size, Estimate and Iteration empty",
+            output.splitlines(),
+        )
+        self.assertEqual(
+            output,
+            "Rendered body:\n"
+            + payload["body"]
+            + "\nWould call: POST repos/sh4i-yurei/claude-config/issues "
+            + json.dumps(payload, ensure_ascii=False)
+            + "\nWould call: project item-add 2 --owner sh4i-yurei --url NEW_ISSUE_URL\n"
+            + "Would call: project item-edit Status Backlog on new issue; leave Priority, Size, Estimate and Iteration empty\n",
+        )
+
+    def test_open_parent_zero_and_blockers_read_only_valid_issues(self):
+        code, output = self.run_open(self.open_file(extra="parent = 0"))
+        self.assertEqual(
+            (code, output), (2, "parent must be a positive issue number\n")
+        )
+        self.assertFalse(
+            any(
+                "/issues/0" in call["args"][1]
+                for call in self.calls("gh")
+                if call["args"][0] == "api"
+            )
+        )
+        code, output = self.run_open(
+            self.open_file(extra="blocked_by = [0, 20]"), "--dry-run"
+        )
+        self.assertEqual((code, output), (2, "invalid blocked_by issue 0\n"))
+        self.assertEqual(
+            [
+                call["args"][1]
+                for call in self.calls("gh")
+                if call["args"][:2]
+                == ["api", "repos/sh4i-yurei/claude-config/issues/20"]
+            ],
+            ["repos/sh4i-yurei/claude-config/issues/20"],
+        )
+
+    def test_open_created_output_includes_link_and_milestone(self):
+        code, output = self.run_open(self.open_file(extra="milestone = 1"))
+        self.assertEqual(code, 0, output)
+        url = "https://github.com/sh4i-yurei/claude-config/issues/99"
+        self.assertEqual(
+            output,
+            f"{url}\ncreated {url} with labels type:feature, scope:ci and milestone 1\n"
+            "added new issue to board\nset new issue Status Backlog\n",
+        )
 
 
 class LoadUpstreamConfig(TestCase):

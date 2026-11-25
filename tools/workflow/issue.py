@@ -518,7 +518,10 @@ def open_data(data, dry_run, return_link=False):
             )
         return 0
     created = api(endpoint, payload=create)
-    url = created["html_url"]
+    try:
+        url = created["html_url"]
+    except (KeyError, TypeError) as error:
+        raise IssueError("created issue response has no link") from error
     completed = [
         f"created {url} with labels {', '.join(issue_labels)}"
         + (f" and milestone {milestone_number}" if milestone_number else "")
@@ -1263,8 +1266,11 @@ def upstream_data(data, dry_run):
         if not isinstance(data.get(key), str) or not data[key].strip():
             problems.append(f"{key} must be a nonempty string")
     repo = data.get("repo")
-    valid_repo = isinstance(repo, str) and repo.count("/") == 1 and all(repo.split("/"))
-    if not valid_repo:
+    well_formed_repo = (
+        isinstance(repo, str) and repo.count("/") == 1 and all(repo.split("/"))
+    )
+    valid_repo = well_formed_repo
+    if not well_formed_repo:
         problems.append("repo must be owner/name")
     elif (
         repo.casefold() in {name.casefold() for name in boards}
@@ -1289,18 +1295,25 @@ def upstream_data(data, dry_run):
             source = row.get("sourceSession")
             destination = row.get("destinationSession")
             body = row.get("body")
-            seat = rig("whoami", "--json")["identity"]["senderAddress"]
+            try:
+                seat = rig("whoami", "--json")["identity"]["senderAddress"]
+            except IssueError as error:
+                problems.append(str(error))
+                seat = None
+            except (KeyError, TypeError):
+                problems.append("rig whoami returned no seat address")
+                seat = None
             if source != rules["approver"]:
                 problems.append(
                     f"approval {approval} comes from {source}, not {rules['approver']}"
                 )
-            if destination != seat:
+            if seat is not None and destination != seat:
                 problems.append(
                     f"approval {approval} is addressed to {destination}, not {seat}"
                 )
             if not isinstance(body, str) or "upstream" not in body.casefold():
                 problems.append(f"approval {approval} doesn't say upstream")
-            if valid_repo and (
+            if well_formed_repo and (
                 not isinstance(body, str) or repo.casefold() not in body.casefold()
             ):
                 problems.append(f"approval {approval} doesn't name {repo}")
@@ -1371,7 +1384,10 @@ def upstream_data(data, dry_run):
         "labels": ["upstream"],
         "body": {
             "context": f"Filed upstream as {upstream_url} with approval {approval}.",
-            "changes": "\n".join("> " + line for line in data["body"].splitlines()),
+            "changes": "\n".join(
+                "> " + line
+                for line in (data["title"] + "\n" + data["body"]).splitlines()
+            ),
             "done": f"{repo} resolves or declines the request, and this issue closes with the outcome.",
         },
     }

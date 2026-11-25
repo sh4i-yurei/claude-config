@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import sys
 import tomllib
+from urllib.parse import parse_qs, unquote
 
 
 args = sys.argv[1:]
@@ -29,7 +30,10 @@ if failure and args[: len(failure["prefix"])] == failure["prefix"]:
 
 
 def fixture(name):
-    return json.loads((fixtures / (name + ".json")).read_text())
+    path = fixtures / (name + ".json")
+    if not path.exists():
+        path = fixtures.parent / "issue_open" / (name + ".json")
+    return json.loads(path.read_text())
 
 
 result = None
@@ -154,29 +158,55 @@ if args[:1] == ["api"]:
             result["data"]["repositoryOwner"] = None
     elif method == "GET":
         if endpoint.startswith("search/issues"):
+            params = parse_qs(args[1].partition("?")[2])
+            if "q" not in params or "per_page" not in params or "page" not in params:
+                print("HTTP 422: invalid search parameters", file=sys.stderr)
+                sys.exit(1)
+            query = params["q"][0]
+            approval_search = "label:upstream" in query
+            if approval_search:
+                if not all(part in query for part in ("user:sh4i-yurei", "is:issue")):
+                    print("HTTP 422: invalid approval search", file=sys.stderr)
+                    sys.exit(1)
+            elif not all(
+                part in query
+                for part in (
+                    "repo:mvschwarz/openrig",
+                    "is:issue",
+                    "author:@me",
+                    "in:title",
+                )
+            ):
+                print("HTTP 422: invalid title search", file=sys.stderr)
+                sys.exit(1)
+            page = int(params["page"][0])
+            per_page = min(int(params["per_page"][0]), 100)
             if "search_response" in state:
                 result = state["search_response"]
             else:
-                approval_search = "label%3Aupstream" in args[1]
                 pages = state.get(
                     "approval_pages" if approval_search else "title_pages"
                 )
-                items = (
-                    pages[1 if "page=2" in args[1] else 0]
-                    if pages
-                    else state.get(
+                if pages is not None:
+                    items = pages[page - 1] if page <= len(pages) else []
+                else:
+                    hits = state.get(
                         "approval_hits" if approval_search else "title_hits", []
                     )
-                )
+                    items = hits[(page - 1) * per_page : page * per_page]
                 result = {"items": items}
         elif endpoint.startswith("repos/mvschwarz/openrig/labels/"):
             if state.get("label_failure"):
                 print(state["label_failure"], file=sys.stderr)
                 sys.exit(1)
-            if endpoint.rsplit("/", 1)[1] in state.get("missing_labels", []):
+            label = endpoint.removeprefix("repos/mvschwarz/openrig/labels/")
+            if "/" in label:
                 print("HTTP 404: Not Found", file=sys.stderr)
                 sys.exit(1)
-            result = {"name": endpoint.rsplit("/", 1)[1]}
+            if unquote(label) in state.get("missing_labels", []):
+                print("HTTP 404: Not Found", file=sys.stderr)
+                sys.exit(1)
+            result = {"name": unquote(label)}
         elif (
             endpoint == "repos/sh4i-yurei/claude-config/pulls/69/reviews"
             and debt_fixtures
@@ -282,6 +312,9 @@ if args[:1] == ["api"]:
                 else "forms-list"
             )
         elif "/contents/.github/ISSUE_TEMPLATE/" in endpoint:
+            if state.get("form_read_failure"):
+                print("HTTP 503: form read failed", file=sys.stderr)
+                sys.exit(1)
             name = endpoint.rsplit("/", 1)[1]
             result = fixture(
                 ("infra-" if "keepbreathing-infra" in endpoint else "form-") + name
@@ -290,9 +323,9 @@ if args[:1] == ["api"]:
             result = fixture("milestones")
         elif endpoint.endswith("/labels"):
             result = fixture("labels")
-        elif endpoint.endswith("/issues/20"):
+        elif endpoint == "repos/sh4i-yurei/claude-config/issues/20":
             result = fixture("issue-20")
-        elif endpoint.endswith("/issues/22"):
+        elif endpoint == "repos/sh4i-yurei/claude-config/issues/22":
             result = fixture("issue-22")
         elif "/issues/" in endpoint:
             print("HTTP 404: Not Found", file=sys.stderr)
@@ -321,6 +354,8 @@ if args[:1] == ["api"]:
             "number": 99,
             "html_url": f"https://github.com/{repo}/issues/99",
         }
+        if state.get("tracking_missing_link") and repo == "sh4i-yurei/workflow-engine":
+            result.pop("html_url")
     elif method == "POST" and (
         endpoint.endswith("/sub_issues") or endpoint.endswith("/blocked_by")
     ):
