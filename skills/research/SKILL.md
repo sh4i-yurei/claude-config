@@ -71,10 +71,12 @@ immediately; stop a site for four hours after five consecutive errors; make at m
 per request, keep retries below one tenth of requests, cap a site at 300 fetches per day, batch
 identifiers where an endpoint supports it, and state a ceiling before billable calls.
 
-`research-gate.py` is only a backstop for WebFetch and the Firecrawl connector. Its site count does
-not reset by date, most redirect rows do not match, subagent detection is unverified, and a fast
-error can shorten its next gap. It does not see searches, shell commands, other MCP tools or pages
-already read. Follow these rules even when the hook permits a call.
+`research-gate.py` is only a backstop for WebFetch and the Firecrawl connector. It refuses a
+subagent's WebFetch, Firecrawl scrape, search and agent calls, which it recognises by the `agent_id`
+Claude Code sends from a subagent. Its site count does not reset by date, most redirect rows do not
+match, and a fast error can shorten its next gap. It does not pace searches, and it does not see
+shell commands, other MCP tools or pages already read. Follow these rules even when the hook permits
+a call.
 
 Broad searches precede narrow searches. A lookup of a known identifier is not a search. Do not
 probe an API to discover its limits; read its documentation first. Where documentation is
