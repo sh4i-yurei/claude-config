@@ -176,6 +176,16 @@ class SecretLoadTests(unittest.TestCase):
     def test_http_requests_have_json_headers_and_no_body_on_reads(self):
         self.assertEqual(self.load()[0], 0)
         self.assertEqual(
+            self.bao.raw_request_bodies,
+            [
+                json.dumps({"password": "dummy-login-pw-5555"}).encode(),
+                b"",
+                json.dumps({"options": {"cas": 0}, "data": {"value": VALUE}}).encode(),
+                b"",
+                b"",
+            ],
+        )
+        self.assertEqual(
             [request[3] for request in self.bao.requests if request[0] == "GET"],
             [None, None],
         )
@@ -404,18 +414,30 @@ class SecretLoadTests(unittest.TestCase):
         code, out, err = self.run_tool("--help")
         self.assertEqual((code, err), (0, ""))
         help_text = " ".join(out.split())
-        self.assertIn(
-            "usage: secret-load [-h] --from FILE [--label LABEL] --to openbao:PATH[#KEY] [--dry-run] [--replace] [--remove-source]",
+        self.assertEqual(
             help_text,
+            "usage: secret-load [-h] --from FILE [--label LABEL] --to openbao:PATH[#KEY] "
+            "[--dry-run] [--replace] [--remove-source] options: -h, --help show this help "
+            "message and exit --from FILE --label LABEL --to openbao:PATH[#KEY] --dry-run "
+            "--replace Replace a different existing value. OpenBao keeps the old version; "
+            "Vaultwarden keeps no history for a custom field, so its old value is lost. "
+            "--remove-source After a verified match, remove the label's line, or the whole "
+            "file. Removal does not scrub the old data from a btrfs disk.",
         )
-        self.assertIn(
-            "Replace a different existing value. OpenBao keeps the old version; Vaultwarden keeps no history for a custom field, so its old value is lost.",
-            help_text,
+
+    def test_lone_carriage_return_numbers_and_removes_one_label(self):
+        original = LINES[0] + b"\r" + LINES[1] + b"\n" + LINES[2] + b"\n"
+        self.source.write_bytes(original)
+        self.assertEqual(
+            self.load("--remove-source"),
+            (
+                0,
+                f"login: 200\n{DEST}: write 200, read back 200, matches True, length 53, version 1\n"
+                "revoke: 204\nremoved line 2 of cf.txt\n",
+                "",
+            ),
         )
-        self.assertIn(
-            "After a verified match, remove the label's line, or the whole file. Removal does not scrub the old data from a btrfs disk.",
-            help_text,
-        )
+        self.assertEqual(self.source.read_bytes(), LINES[0] + b"\r" + LINES[2] + b"\n")
 
     def test_write_merges_and_cas(self):
         self.bao.seed(

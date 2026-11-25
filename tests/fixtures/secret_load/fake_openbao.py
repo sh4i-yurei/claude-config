@@ -10,6 +10,7 @@ class FakeOpenBao:
     def __init__(self):
         self.entries = {}
         self.requests = []
+        self.raw_request_bodies = []
         self.request_headers = []
         self.write_error = False
         self.readback_mismatch = False
@@ -38,9 +39,11 @@ class FakeOpenBao:
 
             def handle_request(self):
                 length = int(self.headers.get("Content-Length", "0"))
-                body = json.loads(self.rfile.read(length)) if length else None
+                raw_body = self.rfile.read(length)
+                body = json.loads(raw_body) if raw_body else None
                 token = self.headers.get("X-Vault-Token")
                 owner.requests.append((self.command, self.path, token, body))
+                owner.raw_request_bodies.append(raw_body)
                 owner.request_headers.append(dict(self.headers.items()))
                 if (
                     self.path == "/v1/auth/userpass/login/keepbreath0"
