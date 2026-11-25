@@ -1,7 +1,7 @@
 # Equivalent mutants confirmed by scoped local mutmut runs.
 - mutant: tools.secret_load.x__source__mutmut_7
   reason: UTF-8 and utf-8 are aliases for the same Python codec; decoding and every command result agree.
-- mutant: tools.secret_load.x__source__mutmut_34
+- mutant: tools.secret_load.x__source__mutmut_28
   reason: UTF-8 and utf-8 are aliases for the same Python codec; decoding and every command result agree.
 - mutant: tools.secret_load.x__parser__mutmut_21
   reason: argparse's default metavar for --label is LABEL, so omitting the explicit metavar leaves help and usage unchanged.
@@ -31,15 +31,15 @@
   reason: Each path segment has already been separated from slashes; urllib.quote's default safe slash cannot change it.
 - mutant: tools.secret_load.x_main__mutmut_88
   reason: X is unreserved and already preserved by urllib.quote, so safe='XXXX' changes no encoded path.
-- mutant: tools.secret_load.x__remove_source__mutmut_29
+- mutant: tools.secret_load.x__remove_source__mutmut_40
   reason: The temporary file's prefix cannot affect the source bytes, mode, or message after it is renamed over the source.
-- mutant: tools.secret_load.x__remove_source__mutmut_28
+- mutant: tools.secret_load.x__remove_source__mutmut_39
   reason: A different temporary folder changes behavior only across filesystems; arranging that in a portable test would require patching tempfile rather than observing the command.
-- mutant: tools.secret_load.x__remove_source__mutmut_30
+- mutant: tools.secret_load.x__remove_source__mutmut_41
   reason: tempfile treats delete=None and delete=False as false; both leave the temporary file available for rename.
-- mutant: tools.secret_load.x__remove_source__mutmut_31
+- mutant: tools.secret_load.x__remove_source__mutmut_42
   reason: A different temporary folder changes behavior only across filesystems; arranging that in a portable test would require patching tempfile rather than observing the command.
-- mutant: tools.secret_load.x__remove_source__mutmut_32
+- mutant: tools.secret_load.x__remove_source__mutmut_43
   reason: The temporary file's prefix cannot affect the source bytes, mode, or message after it is renamed over the source.
 - mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_40
   reason: json.loads accepts bytes as well as text, so changing text=True leaves the status result unchanged.
