@@ -21,6 +21,9 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
   and stray open issues on that repository's board. `handoff_cost.py` counts the Codex sessions
   that followed one handoff, with their model calls and tokens. `handoff_send.py` delivers a
   handoff or its Response notice to a named live session.
+- `telemetry/`: a Podman Quadlet unit and an OpenTelemetry Collector config that keep Claude
+  Code's `skill_activated` events, and nothing else, in one local file. See
+  [Skill telemetry](#skill-telemetry).
 - `vale/`: configuration for Vale, the prose linter. `vale.ini` covers posts and is run by
   the `vale-post-lint.py` hook; `vale-sweep.ini` covers every prose note and is run by the
   vault sweep. `styles/` holds the rules: `keepbreath`, my own, and `ai-tells`, a downloaded
@@ -42,6 +45,39 @@ done
 
 `~/.claude/settings.json` is not in this repository. Because it refers to the hooks through
 `~/.claude/hooks`, it needs no change when this repository moves.
+
+## Skill telemetry
+
+Claude Code reports which skills run through OpenTelemetry. A collector in a pinned container
+receives those events on `127.0.0.1:4318`. It keeps only `skill_activated` and deletes the
+email and account and organisation ids. The result goes to
+`~/.local/share/claude-telemetry/skill-activations.jsonl`, rotated at 10 MB. The two files run
+from links, like the skills:
+
+```bash
+mkdir -p ~/.config/containers/systemd ~/.config/claude-telemetry
+ln -s ~/Documents/claude-config/telemetry/claude-telemetry.container ~/.config/containers/systemd/
+ln -s ~/Documents/claude-config/telemetry/collector.yaml ~/.config/claude-telemetry/
+systemctl --user daemon-reload
+systemctl --user start claude-telemetry.service
+```
+
+These run on the host, not inside `dev`. The `env` block in `~/.claude/settings.json` turns the
+export on:
+
+```json
+"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+"OTEL_LOGS_EXPORTER": "otlp",
+"OTEL_METRICS_EXPORTER": "none",
+"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
+"OTEL_LOG_TOOL_DETAILS": "1"
+```
+
+`OTEL_LOG_TOOL_DETAILS` gives skills their real names. It also puts full commands and file paths
+on other events, which is why the collector keeps only `skill_activated`. Prompt text, response
+text, raw API bodies, the host name and tracing stay off. When the collector isn't running, a
+session carries on normally and its events are lost.
 
 ## Secrets for agents
 

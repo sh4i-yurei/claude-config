@@ -1,0 +1,25 @@
+# Podman Quadlet user unit: an OpenTelemetry Collector that keeps Claude Code's
+# skill_activated events in one local file. Linked into ~/.config/containers/systemd/.
+[Unit]
+Description=OpenTelemetry Collector keeping Claude Code skill activations
+
+[Container]
+ContainerName=claude-telemetry
+# Official core distribution, pinned by digest. An upgrade edits this line.
+Image=ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector:0.165.0@sha256:34b24b740c3c88d3467740e8642a397c13898ef76d7295c5425164c482ed1b73
+# Claude Code sends OTLP over HTTP to 127.0.0.1:4318. Nothing else on the network can reach it.
+PublishPort=127.0.0.1:4318:4318
+# The image runs as uid 10001; map it to my own user so the output file is mine.
+UserNS=keep-id:uid=10001,gid=10001
+Volume=%h/.config/claude-telemetry/collector.yaml:/etc/otelcol/config.yaml:ro,Z
+Volume=%h/.local/share/claude-telemetry:/data:Z
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=all
+
+[Service]
+ExecStartPre=/usr/bin/mkdir -p %h/.local/share/claude-telemetry
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
