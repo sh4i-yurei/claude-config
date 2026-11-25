@@ -89,14 +89,30 @@ all of them. The full rules are in the "Program charters" section of `10_Project
   be raised with Mark rather than recorded.
 - **Put each decision where it applies.** If it affects one project, it goes in that project's
   note. If it affects several, it goes in the charter, and the projects link to it rather
-  than copying it.
+  than copying it. The same goes for design: the charter's reference architecture holds what
+  runs where, which pieces are shared and the interfaces between them, while detail specific to
+  one project stays in that project's own **How it's built**.
 - **A charter never holds build steps and never gets a buildlog.** Its roadmap orders the
   projects. Each project's own Next orders that project's work. The vault check warns when a
   buildlog points at a charter.
 - **A charter closes when its last project does** and nothing more is planned. The vault check
   refuses a `done` charter with an unfinished member.
 
-Start a charter from `_Templates/program-charter.md`.
+Start a charter from `_Templates/program-charter.md`, and delete the sections that aren't needed
+yet rather than leaving empty headings. Its sections have their own jobs:
+
+- **What it is** is a paragraph or two in plain terms on what the program as a whole does,
+  written for someone who knows tech but has never heard of it.
+- **Why** gives the honest reason the program exists. Its definition of done adds, to every
+  member being done, any check that only makes sense across them, such as a measurement taken
+  after the last project lands.
+- **Scope**: In lists the member projects, each with one line on its role. Out lists the work he
+  keeps being tempted to fold in, each with where it belongs instead: a future project, another
+  program, or nowhere.
+- **Open questions** hold only questions that span projects and genuinely can't be answered yet,
+  each with what would answer it. A question about one project goes in that project's note.
+- **Risks** are risks to the program as a whole, such as a shared foundation everything depends
+  on, a dependency weeks old, or a machine that hosts too much.
 
 ## The five states
 
@@ -127,6 +143,14 @@ Ten sections: **What it is**, **Why** (including what done looks like), **Scope*
 first three; delete the rest rather than leaving empty headings. A live project
 fills all ten and that's fine — there is no length cap.
 
+**What it is** is a paragraph or two in plain terms, written for someone who knows tech but
+has never heard of the project. Say what the thing actually does, not what category it
+belongs to.
+
+**Why** says what problem the project solves or what he wants out of it, and gives the honest
+reason, not the defensible one. "Because nginx is the tool used everywhere in networking and
+security work and I want to know it" is more useful to future-Mark than "for performance."
+
 The **In** half of Scope has to be concrete enough to build from. "The baseline every
 box shares" is not; a list of what the baseline actually does is. If you cannot write a
 task list from the In section, it is not finished.
@@ -139,7 +163,10 @@ already decided. Each item says where it belongs instead.
 what order things happen in, and anything about the environment the build depends on. When
 a fact was read off a real machine rather than assumed, say so and date it. Estates drift
 and notes go stale quietly — the Ansible project believed its droplets were AlmaLinux 10
-for four days because nobody had looked.
+for four days because nobody had looked. It also states the concrete facts: the stack, the
+language, where the repository is, where it deploys, the domain, which machine and which
+container. It is updated whenever reality changes. The language is chosen in Decisions with
+its reason (Operating model decision 18); this section only states what was chosen.
 
 **Facts** holds every claim a decision or a build depends on, about a real system,
 tool, service, machine, file or his own code. Each fact has a type: behaviour, meaning
@@ -156,6 +183,11 @@ handoffs quote the entries their test cases depend on. The rules are Workflow en
 decision 42 and Workflow upkeep decision 47, and the steps are the gate in
 `codex-build-loop`.
 
+Write each fact as one bullet: its type in parentheses, the claim, then `Evidence:` and the
+proof. For example, `- (behaviour) Claim. Evidence: run <command> on <machine>, <commit>,
+<date>; output saved at <path>; it would be false if the output showed X.` or `- (other)
+Claim. Evidence: source read, <file> and line.`
+
 ## Decisions are numbered, and superseded rather than deleted
 
 ```
@@ -164,6 +196,10 @@ decision 42 and Workflow upkeep decision 47, and the steps are the gate in
 2. Mail on its own droplet `[tentative]` — decide during the rebuild.
 7. Time-trap bot defence `[superseded by 5]` — ALTCHA covers it cryptographically.
 ```
+
+Write the status tag with its date, who decided and the basis inside it:
+`[decided 2026-01-01 by me; basis: merit]`. A decision still in the air is `[tentative]`,
+followed by what would settle it. A reversed one is `[superseded by 7]` and stays where it is.
 
 Numbering exists so a changed mind leaves a trace. Editing decision 5 in place
 destroys the record of what was believed before and why it changed, which is
