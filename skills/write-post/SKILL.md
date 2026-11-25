@@ -39,9 +39,15 @@ at what's next if there is one.
 
 `_Templates/post-personal.md` for pieces with no code — the career change, going
 back to school. No gotcha digest, no section structure required, allowed to end
-unresolved. Source material is `[life]` entries and memory, not a command log.
+unresolved. Source material is `[life]` entries from buildlogs, notes in
+`50_Personal`, and memory, not a command log. There is no command log to lean on, which is
+exactly why specific, concrete details matter more in a personal piece than anywhere
+else.
 
 Never staple the technical structure onto a personal piece.
+
+The templates hold structure only. Delete any placeholder text, and any placeholder
+heading the post doesn't use, as you write. A draft handed to Mark carries none of them.
 
 ## Writing it
 
@@ -91,7 +97,11 @@ consistently and it is a large part of why the posts work.
 
 **Keep the honest reason.** "Because nginx is the tool used everywhere in security
 work and I want to know it" beats a performance justification neither of you
-believes.
+believes. If there was no real choice to make, leave out the section on the decision
+rather than inventing one.
+
+**Write each failure's Saw, Cause and Fix as prose, in that order, never as a form.**
+The pattern should be invisible to the reader and unmissable in the structure.
 
 **Link out** to real documentation where a reader would want to go deeper.
 

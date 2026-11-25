@@ -14,13 +14,18 @@ The setup Claude Code loads on my machines: the skills, hooks and rules it reads
 - `tools/`: standalone scripts that aren't skills. `tools/token-usage/` measures where Claude
   Code's and Codex's tokens go, from their session files.
 - `tools/workflow/`: `labels.toml` defines global labels and repository-specific `scope:` labels.
-  `workflow.toml` lists GitHub owners, workflow exceptions and each active repository's board.
+  `workflow.toml` lists GitHub owners, workflow exceptions, each active repository's board and
+  the `[upstream]` approval and text rules.
   `config.py` validates both files, and `sync_labels.py` applies the definitions to every active
   repository returned by GitHub for those owners. A newly created repository receives the global
-  labels without an entry in either file. `issue.py open` creates a checked issue and places it
+  labels without an entry in either file. `issue.py open` creates a checked issue on our boards;
+  `issue.py upstream` files an approved issue outside them and opens a tracking issue. `open` places it
   and stray open issues on that repository's board. `handoff_cost.py` counts the Codex sessions
   that followed one handoff, with their model calls and tokens. `handoff_send.py` delivers a
   handoff or its Response notice to a named live session.
+- `telemetry/`: a Podman Quadlet unit and an OpenTelemetry Collector config that keep Claude
+  Code's `skill_activated` events, and nothing else, in one local file. See
+  [Skill telemetry](#skill-telemetry).
 - `vale/`: configuration for Vale, the prose linter. `vale.ini` covers posts and is run by
   the `vale-post-lint.py` hook; `vale-sweep.ini` covers every prose note and is run by the
   vault sweep. `styles/` holds the rules: `keepbreath`, my own, and `ai-tells`, a downloaded
@@ -42,6 +47,39 @@ done
 
 `~/.claude/settings.json` is not in this repository. Because it refers to the hooks through
 `~/.claude/hooks`, it needs no change when this repository moves.
+
+## Skill telemetry
+
+Claude Code reports which skills run through OpenTelemetry. A collector in a pinned container
+receives those events on `127.0.0.1:4318`. It keeps only `skill_activated` and deletes the
+email and account and organisation ids. The result goes to
+`~/.local/share/claude-telemetry/skill-activations.jsonl`, rotated at 10 MB. The two files run
+from links, like the skills:
+
+```bash
+mkdir -p ~/.config/containers/systemd ~/.config/claude-telemetry
+ln -s ~/Documents/claude-config/telemetry/claude-telemetry.container ~/.config/containers/systemd/
+ln -s ~/Documents/claude-config/telemetry/collector.yaml ~/.config/claude-telemetry/
+systemctl --user daemon-reload
+systemctl --user start claude-telemetry.service
+```
+
+These run on the host, not inside `dev`. The `env` block in `~/.claude/settings.json` turns the
+export on:
+
+```json
+"CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+"OTEL_LOGS_EXPORTER": "otlp",
+"OTEL_METRICS_EXPORTER": "none",
+"OTEL_EXPORTER_OTLP_PROTOCOL": "http/protobuf",
+"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:4318/v1/logs",
+"OTEL_LOG_TOOL_DETAILS": "1"
+```
+
+`OTEL_LOG_TOOL_DETAILS` gives skills their real names. It also puts full commands and file paths
+on other events, which is why the collector keeps only `skill_activated`. Prompt text, response
+text, raw API bodies, the host name and tracing stay off. When the collector isn't running, a
+session carries on normally and its events are lost.
 
 ## Secrets for agents
 
@@ -84,7 +122,8 @@ The guard reads commands only from Bash PreToolUse events. Codex also sends patc
 in `tool_input.command` for `apply_patch`, and that text is not a shell command.
 For every agent, the guard refuses `gh issue create`, `gh api` POST requests to a
 repository's issue list, and GraphQL `createIssue` mutations. Its refusal directs issue
-creation through `tools/workflow/issue.py open` in [Opening an issue from a file](#opening-an-issue-from-a-file).
+creation through `tools/workflow/issue.py open` for our repositories or `issue.py upstream`
+for one outside our boards, as described in [Opening an issue from a file](#opening-an-issue-from-a-file).
 Issue reads, issue comments, edits and closes, and writes to other API endpoints remain
 available under each agent's other guard rules.
 For every agent, the guard also refuses `git commit` in the shared vault checkout, found at `SECOND_BRAIN` or `~/Documents/Second_Brain`, and names `vault-commit`, because every session shares that checkout's index; worktrees and clones of the vault have their own index and stay allowed.
@@ -211,6 +250,37 @@ the issue repository owner's `.github` repository. It renders fields in form ord
 links the parent and blockers, and puts the issue on its configured board with Status Backlog.
 Priority, Size, Estimate and Iteration stay empty for triage. It also adds any open issues from
 the same repository that are missing from that board, with Status Backlog.
+
+### Filing an issue upstream
+
+Run these commands in the `dev` shell from the repository root. The first reads the approval row,
+GitHub labels and issues, and the tracking repository's chore form and board. It prints both planned
+issues without writing either one. The second files the upstream issue, opens its tracking issue
+on our board, then notes both links on the approval row.
+
+```bash
+vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py upstream issue.toml --dry-run
+vault-run --env GH_TOKEN -- /usr/bin/python3 tools/workflow/issue.py upstream issue.toml
+```
+
+The TOML file accepts exactly `repo`, `title`, `body`, `approval`, `tracking`, optional
+`tracking_scope` and optional `labels`. The target repository must be outside our owners and
+boards. Every label must already exist there. For example:
+
+```toml
+repo = "mvschwarz/openrig"
+title = "Per-seat list of MCP servers to block, through deniedMcpServers in the seat's settings"
+body = "A per-seat list could block selected MCP servers at launch."
+approval = "qitem-<id>"
+tracking = "sh4i-yurei/workflow-engine"
+labels = ["enhancement"]
+```
+
+The approval row must come from `main-lead@hq`, be addressed to the filing seat, say
+"upstream", and name the target repository. One approval may file one issue. The title and body
+are checked against the `[upstream]` text rules before any write. If a later step fails, the
+command prints the links it created and the failed step; keep those links when resolving the
+failure, rather than filing the same upstream issue again.
 
 ## Filing a build's review leftovers from its final round
 

@@ -41,6 +41,50 @@
   reason: >-
     A missing or empty sub-issue body becomes either an empty string or XXXX.
     Neither contains an earlier round's review file name or URL, so the refusal and writes agree.
+- mutant: tools.workflow.issue.x_open_data__mutmut_11
+  reason: mapped starts false and is read only for truth, so None gives the same validation and output.
+- mutant: tools.workflow.issue.x_open_data__mutmut_111
+  reason: parent starts false and is read only for truth, so an empty string gives the same links and output.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_69
+  reason: valid_repo is read only for truth, so None gives the same checks and output as false.
+- mutant: tools.workflow.issue.x_open_data__mutmut_214
+  reason: json.dumps treats ensure_ascii=None and ensure_ascii=False identically because both are false.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_336
+  reason: json.dumps treats ensure_ascii=None and ensure_ascii=False identically because both are false.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_395
+  reason: open_data reads dry_run only for truth, so None and false both perform the same tracking write.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_226
+  reason: The pre-check title remains nonempty and is neither printed nor sent; the final tracking title is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_227
+  reason: The pre-check title remains nonempty and is neither printed nor sent; the final tracking title is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_228
+  reason: The pre-check title remains nonempty and is neither printed nor sent; the final tracking title is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_229
+  reason: The pre-check title remains nonempty and is neither printed nor sent; the final tracking title is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_234
+  reason: The pre-check title remains nonempty and is neither printed nor sent; the final tracking title is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_239
+  reason: The pre-check body value remains nonempty and is neither printed nor sent; the final tracking body is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_240
+  reason: The pre-check body value remains nonempty and is neither printed nor sent; the final tracking body is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_243
+  reason: The pre-check body value remains nonempty and is neither printed nor sent; the final tracking body is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_244
+  reason: The pre-check body value remains nonempty and is neither printed nor sent; the final tracking body is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_247
+  reason: The pre-check body value remains nonempty and is neither printed nor sent; the final tracking body is built separately.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_248
+  reason: The pre-check body value remains nonempty and is neither printed nor sent; the final tracking body is built separately.
+- mutant: tools.workflow.issue.x_search_issues__mutmut_14
+  reason: GitHub caps per_page at 100, so requesting 101 returns the same pages and results as requesting 100.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_199
+  reason: X is unreserved in a URL and safe='XXXX' does not change the encoded label path.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_62
+  reason: The owner split runs after the one-slash check, so splitting without maxsplit returns the same owner.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_63
+  reason: The owner split runs after the one-slash check, so splitting from the right returns the same owner.
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_65
+  reason: The owner split runs after the one-slash check, so maxsplit of two returns the same owner.
 - mutant: hooks.git-guard.x_rig_queue_problem__mutmut_14
   reason: >-
     With no --tags option the starting tags value is never a project: or item: tag, so an

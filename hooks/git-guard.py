@@ -236,9 +236,7 @@ GH_FLAG_TABLES = {
 PUSH_REASON = (
     "Name the branch: git push [-u] origin <branch> or <source>:<destination>."
 )
-ISSUE_REASON = (
-    "Use tools/workflow/issue.py open; see README.md, Opening an issue from a file."
-)
+ISSUE_REASON = "Use tools/workflow/issue.py open for our repositories, or issue.py upstream for one outside our boards; see README.md, Opening an issue from a file."
 DEADLINE = None
 MAX_COMMAND_BYTES = 64 * 1024
 ATTRIBUTION_REASON = (
