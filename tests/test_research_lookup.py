@@ -1,12 +1,14 @@
 """Offline checks for lookup core and local kinds."""
 
 import json
+import io
 import os
 import shlex
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
@@ -21,6 +23,8 @@ sys.path.insert(0, str(SOURCE / "skills/research/scripts"))
 sys.path.insert(0, str(SOURCE))
 
 from skills.research.scripts import lookup
+
+PAGE_FIXTURES = ROOT / "tests/fixtures/research_page"
 
 
 class LookupTests(unittest.TestCase):
@@ -65,6 +69,48 @@ class LookupTests(unittest.TestCase):
             "body": json.dumps(payload),
         }
         return lookup.RemoteResponse(source, url, path, envelope, cached)
+
+    def page_text(self, name):
+        return (PAGE_FIXTURES / name).read_text()
+
+    def firecrawl_page(self, text, status=200):
+        return self.response(
+            "Firecrawl scrape",
+            "https://api.firecrawl.dev/v2/scrape",
+            {
+                "success": True,
+                "data": {"markdown": text, "metadata": {"statusCode": status}},
+            },
+        )
+
+    def bright_page(self, body=None, headers=None):
+        envelope = {
+            "status": 200,
+            "headers": headers or {},
+            "body_size": len(body or ""),
+        }
+        if body is None:
+            envelope["body_omitted"] = "non-text Content-Type"
+        else:
+            envelope["body"] = body
+        return lookup.RemoteResponse(
+            "Bright Data",
+            "https://api.brightdata.com/request",
+            self.root / "bright.json",
+            envelope,
+            False,
+        )
+
+    def run_page(self, firecrawl, bright=None):
+        replies = [firecrawl] + ([bright] if bright is not None else [])
+        with (
+            mock.patch.object(
+                lookup, "gateway_response", side_effect=replies
+            ) as gateway,
+            mock.patch.object(lookup, "public_address", return_value="93.184.216.34"),
+        ):
+            outcome = lookup.page_lookup(["https://example.com"], root=self.root)
+        return outcome, gateway
 
     def test_archive_path_slug_month_and_run_location(self):
         at = datetime(2026, 9, 25, 15, 4, 5, tzinfo=timezone.utc)
@@ -958,7 +1004,7 @@ class LookupTests(unittest.TestCase):
             {
                 "success": True,
                 "data": {
-                    "markdown": "# Example Domain",
+                    "markdown": self.page_text("example-com-firecrawl.md"),
                     "metadata": {"title": "Example Domain", "creditsUsed": 1},
                 },
             },
@@ -1044,7 +1090,10 @@ class LookupTests(unittest.TestCase):
             "https://api.firecrawl.dev/v2/scrape",
             {
                 "success": True,
-                "data": {"markdown": "paper text", "metadata": {"creditsUsed": 1}},
+                "data": {
+                    "markdown": "paper text " * 12,
+                    "metadata": {"creditsUsed": 1},
+                },
             },
         )
         with (
@@ -1059,6 +1108,292 @@ class LookupTests(unittest.TestCase):
             )
         self.assertEqual(outcome["status"], "found")
         self.assertEqual(gateway.call_args.args[0], "fulltext")
+
+    def test_page_accepts_real_short_page_and_long_error_table(self):
+        for name, length in (
+            ("example-com-firecrawl.md", 167),
+            ("backblaze-b2-delete-firecrawl.md", 23511),
+        ):
+            with self.subTest(name=name):
+                outcome, gateway = self.run_page(
+                    self.firecrawl_page(self.page_text(name))
+                )
+                self.assertEqual(outcome["status"], "found")
+                self.assertEqual(outcome["answer"]["length"], length)
+                self.assertEqual(gateway.call_count, 1)
+
+    def test_page_target_404_stops_before_bright_data(self):
+        for name in ("openrig-faq-firecrawl.md", "typesafe-pricing-firecrawl.md"):
+            with self.subTest(name=name):
+                outcome, gateway = self.run_page(
+                    self.firecrawl_page(self.page_text(name), 404)
+                )
+                self.assertEqual(outcome["status"], "not found")
+                self.assertEqual(gateway.call_count, 1)
+                self.assertEqual(outcome["tried"][0]["status"], "not found")
+                self.assertEqual(outcome["tried"][0]["reason"], "target answered 404")
+
+    def test_page_target_503_and_challenge_fall_back_to_bright_data(self):
+        # This written challenge is 1,500 characters, titled Just a moment..., and mentions cf-browser-verification.
+        for name, status, reason in (
+            ("redhat-firecrawl.md", 503, "target answered 503"),
+            ("challenge-written.md", 200, "anti-automation challenge"),
+        ):
+            with self.subTest(name=name):
+                outcome, gateway = self.run_page(
+                    self.firecrawl_page(self.page_text(name), status),
+                    self.bright_page(self.page_text("example-com-brightdata.md")),
+                )
+                self.assertEqual(outcome["status"], "found")
+                self.assertEqual(outcome["answer"]["length"], 172)
+                self.assertEqual(gateway.call_count, 2)
+                self.assertEqual(outcome["tried"][0]["status"], "error")
+                self.assertEqual(outcome["tried"][0]["reason"], reason)
+
+    def test_page_text_length_and_signature_boundaries(self):
+        cases = [
+            ("a" * 90 + " \n" * 105, "empty page"),
+            ("a" * 99, "empty page"),
+            ("a" * 100, None),
+            ("Cloudflare" + "a" * 1889, "anti-automation challenge"),
+            ("Cloudflare" + "a" * 1990, None),
+            ("captcha" + "a" * 4992, "anti-automation challenge"),
+            ("captcha" + "a" * 4993, None),
+        ]
+        for text, reason in cases:
+            with self.subTest(length=len(text), reason=reason):
+                outcome, gateway = self.run_page(
+                    self.firecrawl_page(text),
+                    self.bright_page(self.page_text("example-com-brightdata.md"))
+                    if reason
+                    else None,
+                )
+                self.assertEqual(outcome["status"], "found")
+                self.assertEqual(gateway.call_count, 2 if reason else 1)
+                if reason:
+                    self.assertEqual(outcome["tried"][0]["status"], "error")
+                    self.assertEqual(outcome["tried"][0]["reason"], reason)
+
+    def test_page_every_short_block_signature(self):
+        for signature in (
+            "Access Denied",
+            "Just a moment",
+            "Attention Required",
+            "Checking your browser",
+            "captcha",
+            "cf-browser-verification",
+        ):
+            text = signature + "a" * (600 - len(signature))
+            with self.subTest(signature=signature):
+                outcome, gateway = self.run_page(
+                    self.firecrawl_page(text),
+                    self.bright_page(self.page_text("example-com-brightdata.md")),
+                )
+                self.assertEqual(outcome["tried"][0]["status"], "error")
+                self.assertEqual(
+                    outcome["tried"][0]["reason"], "anti-automation challenge"
+                )
+                self.assertEqual(outcome["status"], "found")
+                self.assertEqual(gateway.call_count, 2)
+
+    def test_page_cloudflare_exact_boundary(self):
+        for length, reason in ((1999, "anti-automation challenge"), (2000, None)):
+            text = "cloudflare" + "a" * (length - len("cloudflare"))
+            with self.subTest(length=length):
+                outcome, gateway = self.run_page(
+                    self.firecrawl_page(text),
+                    self.bright_page(self.page_text("example-com-brightdata.md"))
+                    if reason
+                    else None,
+                )
+                self.assertEqual(outcome["status"], "found")
+                self.assertEqual(gateway.call_count, 2 if reason else 1)
+                if reason:
+                    self.assertEqual(outcome["tried"][0]["reason"], reason)
+
+    def test_page_target_400_and_399(self):
+        text = self.page_text("example-com-firecrawl.md")
+        for status, reason in ((400, "target answered 400"), (399, None)):
+            with self.subTest(status=status):
+                outcome, gateway = self.run_page(
+                    self.firecrawl_page(text, status),
+                    self.bright_page(self.page_text("example-com-brightdata.md"))
+                    if reason
+                    else None,
+                )
+                self.assertEqual(outcome["status"], "found")
+                self.assertEqual(gateway.call_count, 2 if reason else 1)
+                if reason:
+                    self.assertEqual(outcome["tried"][0]["reason"], reason)
+
+    def test_page_malformed_or_failed_firecrawl_reply_falls_back(self):
+        for firecrawl in (
+            self.response(
+                "Firecrawl scrape", "https://api.firecrawl.dev/v2/scrape", {"data": []}
+            ),
+            self.response(
+                "Firecrawl scrape",
+                "https://api.firecrawl.dev/v2/scrape",
+                {},
+                status=500,
+            ),
+        ):
+            with self.subTest(envelope=firecrawl.envelope):
+                outcome, gateway = self.run_page(
+                    firecrawl,
+                    self.bright_page(self.page_text("example-com-brightdata.md")),
+                )
+                self.assertEqual(outcome["status"], "found")
+                self.assertEqual(outcome["tried"][0]["status"], "error")
+                self.assertEqual(gateway.call_count, 2)
+
+    def test_page_bright_data_without_headers_uses_its_body(self):
+        bright = self.bright_page(self.page_text("example-com-brightdata.md"))
+        bright.envelope.pop("headers")
+        outcome, gateway = self.run_page(self.firecrawl_page("a" * 99), bright)
+        self.assertEqual(outcome["status"], "found")
+        self.assertEqual(outcome["answer"]["length"], 172)
+        self.assertEqual(gateway.call_count, 2)
+
+    def test_page_bright_data_header_and_empty_body(self):
+        saved = json.loads(
+            (PAGE_FIXTURES / "reddit-brightdata-headers.json").read_text()
+        )
+        for headers, body, reason in (
+            (saved, None, saved["x-brd-error"]),
+            ({"X-BRD-Error": saved["x-brd-error"]}, "text" * 30, saved["x-brd-error"]),
+            ({}, "", "empty page"),
+            ({}, "a" * 99, "empty page"),
+            ({}, self.page_text("challenge-written.md"), "anti-automation challenge"),
+            ({"content-type": "text/plain"}, "", "empty page"),
+            ({}, None, None),
+        ):
+            with self.subTest(headers=headers, body=body):
+                outcome, gateway = self.run_page(
+                    self.firecrawl_page("a" * 99), self.bright_page(body, headers)
+                )
+                self.assertEqual(outcome["status"], "error")
+                self.assertEqual(gateway.call_count, 2)
+                self.assertEqual(outcome["tried"][1]["status"], "error")
+                if reason is not None:
+                    self.assertEqual(outcome["tried"][1]["reason"], reason)
+                else:
+                    self.assertNotIn("reason", outcome["tried"][1])
+
+    def test_page_bright_data_requests_markdown(self):
+        _, gateway = self.run_page(
+            self.firecrawl_page("a" * 99),
+            self.bright_page(self.page_text("example-com-brightdata.md")),
+        )
+        self.assertEqual(
+            json.loads(gateway.call_args.kwargs["curl_args"][1]),
+            {
+                "zone": "bright_data_agent",
+                "url": "https://example.com",
+                "format": "raw",
+                "data_format": "markdown",
+            },
+        )
+
+    def test_page_cache_validators_reject_failed_pages_and_accept_good_pages(self):
+        challenge = self.page_text("challenge-written.md")
+        fire = self.firecrawl_page(challenge)
+        bright = self.bright_page(challenge)
+        _, gateway = self.run_page(fire, bright)
+        fire_validator = gateway.call_args_list[0].kwargs["cache_validator"]
+        bright_validator = gateway.call_args_list[1].kwargs["cache_validator"]
+        for text, status in (
+            (challenge, 200),
+            (self.page_text("redhat-firecrawl.md"), 503),
+            (self.page_text("openrig-faq-firecrawl.md"), 404),
+        ):
+            with self.subTest(status=status, length=len(text)):
+                self.assertFalse(
+                    fire_validator(self.firecrawl_page(text, status).envelope)
+                )
+        self.assertFalse(
+            fire_validator(
+                self.response("Firecrawl scrape", fire.url, {"data": {}}).envelope
+            )
+        )
+        self.assertFalse(
+            fire_validator(
+                self.response("Firecrawl scrape", fire.url, {}, status=500).envelope
+            )
+        )
+        self.assertTrue(
+            fire_validator(
+                self.firecrawl_page(self.page_text("example-com-firecrawl.md")).envelope
+            )
+        )
+        self.assertFalse(
+            bright_validator(
+                self.bright_page(
+                    None,
+                    json.loads(
+                        (PAGE_FIXTURES / "reddit-brightdata-headers.json").read_text()
+                    ),
+                ).envelope
+            )
+        )
+        self.assertFalse(bright_validator(self.bright_page(None).envelope))
+        self.assertTrue(
+            bright_validator(
+                self.bright_page(self.page_text("example-com-brightdata.md")).envelope
+            )
+        )
+
+        for url, validator, rejected, accepted in (
+            (
+                fire.url,
+                fire_validator,
+                self.firecrawl_page(challenge).envelope,
+                self.firecrawl_page(
+                    self.page_text("example-com-firecrawl.md")
+                ).envelope,
+            ),
+            (
+                bright.url,
+                bright_validator,
+                self.bright_page(challenge).envelope,
+                self.bright_page(self.page_text("example-com-brightdata.md")).envelope,
+            ),
+        ):
+            now = datetime(2026, 11, 25, tzinfo=timezone.utc)
+            folder = self.root / "70_Research/_lookups/2026-11/page"
+            folder.mkdir(parents=True, exist_ok=True)
+            prefix = lookup.lookup_key(["https://example.com/"])
+            common = {
+                "lookup": lookup.lookup_identity("page", ["https://example.com/"]),
+                "url": url,
+                "requested_at": "2026-11-25T00:00:00Z",
+            }
+            bad = folder / f"{prefix}--20261125T000000.json"
+            bad.write_text(json.dumps({**rejected, **common}))
+            with self.subTest(url=url):
+                self.assertIsNone(
+                    lookup.newest_cached_envelope(
+                        "page",
+                        ["https://example.com/"],
+                        7,
+                        root=self.root,
+                        now=now,
+                        url=url,
+                        validator=validator,
+                    )
+                )
+                good = folder / f"{prefix}--20261125T000001.json"
+                good.write_text(json.dumps({**accepted, **common}))
+                hit = lookup.newest_cached_envelope(
+                    "page",
+                    ["https://example.com/"],
+                    7,
+                    root=self.root,
+                    now=now,
+                    url=url,
+                    validator=validator,
+                )
+                self.assertEqual(hit[0], good)
 
     def test_cert_returns_each_certificate_with_names_and_validity(self):
         response = self.response(
@@ -1425,14 +1760,22 @@ class LookupTests(unittest.TestCase):
         unlocked = subprocess.CompletedProcess(
             ["bw", "status"], 0, stdout=json.dumps({"status": "unlocked"}), stderr=""
         )
+        stdout = io.StringIO()
+        stderr = io.StringIO()
         with (
-            mock.patch.dict(os.environ, {"BW_SESSION": "session"}, clear=False),
+            mock.patch.dict(
+                os.environ,
+                {"BW_SESSION": "session", "SECOND_BRAIN": str(self.root)},
+                clear=False,
+            ),
             mock.patch.object(lookup, "load_config", return_value=config),
             mock.patch.object(lookup.shutil, "which", return_value="/bin/tool"),
             mock.patch.object(lookup.subprocess, "run", return_value=unlocked),
             mock.patch.object(
                 lookup, "credential", return_value="TEST_ONLY_DOCTOR_SECRET"
             ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
         ):
             outcome = lookup.doctor_lookup([], root=self.root)
         self.assertEqual(
@@ -1444,6 +1787,10 @@ class LookupTests(unittest.TestCase):
         )
         self.assertTrue(outcome["answer"]["vaultwarden_session"]["available"])
         self.assertNotIn("TEST_ONLY_DOCTOR_SECRET", json.dumps(outcome))
+        self.assertNotIn("TEST_ONLY_DOCTOR_SECRET", stdout.getvalue())
+        self.assertNotIn("TEST_ONLY_DOCTOR_SECRET", stderr.getvalue())
+        for path in (self.root / "70_Research/_log").glob("*.jsonl"):
+            self.assertNotIn("TEST_ONLY_DOCTOR_SECRET", path.read_text())
 
     def test_doctor_turns_each_credential_result_into_a_status(self):
         config = {

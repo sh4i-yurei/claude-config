@@ -1936,6 +1936,80 @@ def page_redirect(url: str, *, allow_arxiv_pdf: bool = False) -> str | None:
     return None
 
 
+def page_text_error(text: Any) -> str | None:
+    """Return the reason page text cannot be used, or None when it is usable."""
+    if not isinstance(text, str):
+        return "empty page"
+    stripped = text.strip()
+    if len(stripped) < 100:
+        return "empty page"
+    lowered = stripped.lower()
+    if len(stripped) < 5000 and any(
+        phrase in lowered
+        for phrase in (
+            "access denied",
+            "just a moment",
+            "attention required",
+            "checking your browser",
+            "captcha",
+            "cf-browser-verification",
+        )
+    ):
+        return "anti-automation challenge"
+    if len(stripped) < 2000 and "cloudflare" in lowered:
+        return "anti-automation challenge"
+    return None
+
+
+def firecrawl_page_fields(
+    payload: Any,
+) -> tuple[dict[str, Any] | None, Any, int | None]:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        return None, None, None
+    metadata = data.get("metadata")
+    status = metadata.get("statusCode") if isinstance(metadata, dict) else None
+    if not isinstance(status, int) or isinstance(status, bool):
+        status = None
+    return data, data.get("markdown"), status
+
+
+def bright_error_header(envelope: dict[str, Any]) -> str | None:
+    headers = envelope.get("headers")
+    if not isinstance(headers, dict):
+        return None
+    for name, value in headers.items():
+        if isinstance(name, str) and name.lower() == "x-brd-error":
+            return str(value)
+    return None
+
+
+def firecrawl_page_cacheable(envelope: dict[str, Any]) -> bool:
+    payload, attempt = remote_json(
+        RemoteResponse(
+            "Firecrawl scrape",
+            "https://api.firecrawl.dev/v2/scrape",
+            None,
+            envelope,
+            True,
+        )
+    )
+    if attempt["status"] != "found":
+        return False
+    _data, markdown, status = firecrawl_page_fields(payload)
+    return (status is None or status < 400) and page_text_error(markdown) is None
+
+
+def bright_page_cacheable(envelope: dict[str, Any]) -> bool:
+    http = envelope.get("status")
+    return (
+        isinstance(http, int)
+        and 200 <= http < 300
+        and bright_error_header(envelope) is None
+        and page_text_error(envelope.get("body")) is None
+    )
+
+
 def page_lookup(
     arguments: list[str],
     *,
@@ -2002,13 +2076,33 @@ def page_lookup(
         ],
         fresh=fresh,
         root=root,
+        cache_validator=firecrawl_page_cacheable,
         subject=subject,
     )
     payload, attempt = remote_json(firecrawl)
     tried = [attempt]
-    data = payload.get("data") if isinstance(payload, dict) else None
-    markdown = data.get("markdown") if isinstance(data, dict) else None
-    if isinstance(markdown, str) and markdown.strip():
+    data, markdown, target_status = firecrawl_page_fields(payload)
+    if target_status == 404:
+        mark_attempt(attempt, "not found")
+        attempt["reason"] = "target answered 404"
+        return result(
+            "page",
+            {"url": target},
+            "not found",
+            None,
+            None,
+            tried,
+            cached=firecrawl.cached,
+        )
+    if target_status is not None and target_status >= 400:
+        mark_attempt(attempt, "error")
+        attempt["reason"] = f"target answered {target_status}"
+    elif payload is not None:
+        reason = page_text_error(markdown)
+        if reason is not None:
+            mark_attempt(attempt, "error")
+            attempt["reason"] = reason
+    if attempt["status"] == "found" and data is not None and isinstance(markdown, str):
         return result(
             "page",
             {"url": target},
@@ -2025,9 +2119,6 @@ def page_lookup(
             tried,
             cached=firecrawl.cached,
         )
-    if payload is not None:
-        mark_attempt(attempt, "error")
-
     bright_url = "https://api.brightdata.com/request"
     bright = gateway_response(
         cache_kind,
@@ -2037,16 +2128,33 @@ def page_lookup(
         curl_args=[
             "--json",
             json.dumps(
-                {"zone": "bright_data_agent", "url": target, "format": "raw"},
+                {
+                    "zone": "bright_data_agent",
+                    "url": target,
+                    "format": "raw",
+                    "data_format": "markdown",
+                },
                 separators=(",", ":"),
             ),
         ],
         fresh=fresh,
         root=root,
+        cache_validator=bright_page_cacheable,
         subject=subject,
     )
     body, bright_attempt = remote_text(bright)
     tried.append(bright_attempt)
+    header_error = bright_error_header(bright.envelope or {})
+    if header_error is not None:
+        mark_attempt(bright_attempt, "error")
+        bright_attempt["reason"] = header_error
+        body = None
+    elif isinstance((bright.envelope or {}).get("body"), str):
+        reason = page_text_error((bright.envelope or {})["body"])
+        if reason is not None and bright_attempt["status"] in {"found", "not found"}:
+            mark_attempt(bright_attempt, "error")
+            bright_attempt["reason"] = reason
+            body = None
     if body is not None:
         return result(
             "page",
