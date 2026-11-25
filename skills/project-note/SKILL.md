@@ -183,6 +183,12 @@ handoffs quote the entries their test cases depend on. The rules are Workflow en
 decision 42 and Workflow upkeep decision 47, and the steps are the gate in
 `codex-build-loop`.
 
+Once the engine's record exists, it holds the facts instead (Workflow engine decision 45). Each
+fact and each run of it is a row there, and a Facts entry in the note becomes a sentence a person
+can read that cites the fact's id. The check refuses an id that doesn't exist or has gone stale,
+and a fact proven in one project can be cited from any other. There are no fact ids until then,
+so entries carry their own evidence, as below.
+
 Write each fact as one bullet: its type in parentheses, the claim, then `Evidence:` and the
 proof. For example, `- (behaviour) Claim. Evidence: run <command> on <machine>, <commit>,
 <date>; output saved at <path>; it would be false if the output showed X.` or `- (other)
