@@ -627,7 +627,7 @@ class SecretLoadTests(unittest.TestCase):
         self.bao.read_fault = "body-timeout"
         code, out, err = self.load()
         self.assertEqual((code, out), (1, "login: 200\nrevoke: 204\n"))
-        self.assertTrue(err.startswith("secret-load: cannot reach OpenBao: "))
+        self.assertEqual(err, "secret-load: cannot reach OpenBao: timed out\n")
 
     def test_dry_run(self):
         self.assertEqual(

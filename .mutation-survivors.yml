@@ -7,10 +7,6 @@
   reason: argparse's default metavar for --label is LABEL, so omitting the explicit metavar leaves help and usage unchanged.
 - mutant: tools.secret_load.x__parser__mutmut_23
   reason: argparse's default metavar for --label is LABEL, so setting the metavar to None leaves help and usage unchanged.
-- mutant: tools.secret_load.x__request__mutmut_29
-  reason: A missing timeout differs only when OpenBao accepts a connection and never answers. Testing that requires waiting at least 30 seconds for each mutation run.
-- mutant: tools.secret_load.x__request__mutmut_31
-  reason: A missing timeout differs only when OpenBao accepts a connection and never answers. Testing that requires waiting at least 30 seconds for each mutation run.
 - mutant: tools.secret_load.x__request__mutmut_8
   reason: HTTP field names are case insensitive, and urllib stores this spelling as Content-type before sending it.
 - mutant: tools.secret_load.x__request__mutmut_9

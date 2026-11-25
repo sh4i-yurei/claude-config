@@ -5,7 +5,6 @@ import argparse
 import json
 import os
 from pathlib import Path
-import re
 import sys
 import tempfile
 from http.client import HTTPException
@@ -172,10 +171,9 @@ def _remove_source(filename, original, line_number):
         source.unlink()
         print(f"deleted {filename}")
         return
-    endings = re.findall(rb"\r\n|\r|\n", original)
     remaining = b"".join(
-        line + (endings[index - 1] if index <= len(endings) else b"")
-        for index, line in enumerate(original.splitlines(), 1)
+        line
+        for index, line in enumerate(original.splitlines(keepends=True), 1)
         if index != line_number
     )
     if all(
