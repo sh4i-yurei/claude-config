@@ -3,6 +3,7 @@
 import json
 import os
 import shlex
+import socket
 import subprocess
 import sys
 import tempfile
@@ -1059,6 +1060,617 @@ class LookupTests(unittest.TestCase):
             )
         self.assertEqual(outcome["status"], "found")
         self.assertEqual(gateway.call_args.args[0], "fulltext")
+
+    def test_page_refuses_wrong_argument_count_and_invalid_url(self):
+        for arguments in ([], ["https://example.com", "https://other.example"]):
+            with self.subTest(arguments=arguments):
+                with mock.patch.object(lookup, "gateway_response") as gateway:
+                    with self.assertRaisesRegex(
+                        lookup.BadArguments, "^page needs one HTTPS URL$"
+                    ):
+                        lookup.page_lookup(arguments, root=self.root)
+                gateway.assert_not_called()
+
+        with mock.patch.object(lookup, "gateway_response") as gateway:
+            outcome = lookup.page_lookup(["http://example.com/"], root=self.root)
+        self.assertEqual(
+            outcome,
+            {
+                "kind": "page",
+                "query": {"url": "http://example.com/"},
+                "status": "refused",
+                "cached": False,
+                "answer": {
+                    "reason": "URL needs a public HTTPS host without login information"
+                },
+                "source": None,
+                "tried": [{"source": "routing", "status": "refused", "http": None}],
+            },
+        )
+        gateway.assert_not_called()
+
+    def test_page_refuses_redirect_and_non_public_hosts(self):
+        with mock.patch.object(lookup, "gateway_response") as gateway:
+            outcome = lookup.page_lookup(
+                ["https://github.com/openai/openai-python"], root=self.root
+            )
+        self.assertEqual(
+            outcome,
+            {
+                "kind": "page",
+                "query": {"url": "https://github.com/openai/openai-python"},
+                "status": "refused",
+                "cached": False,
+                "answer": {"use": "repo"},
+                "source": None,
+                "tried": [
+                    {
+                        "source": "routing",
+                        "status": "refused",
+                        "http": None,
+                        "reason": "use repo",
+                    }
+                ],
+            },
+        )
+        gateway.assert_not_called()
+
+        target = "https://example.com/path?q=1"
+        for error in (ValueError("private address"), socket.gaierror(-2, "no host")):
+            with self.subTest(error=type(error).__name__):
+                with (
+                    mock.patch.object(
+                        lookup, "public_address", side_effect=error
+                    ) as address,
+                    mock.patch.object(lookup, "gateway_response") as gateway,
+                ):
+                    outcome = lookup.page_lookup([target], root=self.root)
+                self.assertEqual(
+                    outcome,
+                    {
+                        "kind": "page",
+                        "query": {"url": target},
+                        "status": "refused",
+                        "cached": False,
+                        "answer": {"reason": str(error)},
+                        "source": None,
+                        "tried": [
+                            {"source": "routing", "status": "refused", "http": None}
+                        ],
+                    },
+                )
+                address.assert_called_once_with("example.com")
+                gateway.assert_not_called()
+
+    def test_page_firecrawl_found_uses_default_gateway_arguments(self):
+        target = "https://example.com/path?q=1"
+        markdown = "# Example Domain\nA useful page."
+        for cached in (False, True):
+            with self.subTest(cached=cached):
+                response = self.response(
+                    "Firecrawl scrape",
+                    "https://api.firecrawl.dev/v2/scrape",
+                    {
+                        "success": True,
+                        "data": {
+                            "markdown": markdown,
+                            "metadata": {"title": "Example Domain", "creditsUsed": 1},
+                        },
+                    },
+                    cached=cached,
+                )
+                with (
+                    mock.patch.object(
+                        lookup, "gateway_response", return_value=response
+                    ) as gateway,
+                    mock.patch.object(
+                        lookup, "public_address", return_value="93.184.216.34"
+                    ) as address,
+                ):
+                    outcome = lookup.page_lookup([target], root=self.root)
+                archive = str(response.path)
+                self.assertEqual(
+                    outcome,
+                    {
+                        "kind": "page",
+                        "query": {"url": target},
+                        "status": "found",
+                        "cached": cached,
+                        "answer": {
+                            "length": len(markdown),
+                            "archive": archive,
+                            "title": "Example Domain",
+                            "credits_used": 1,
+                        },
+                        "source": {
+                            "name": "Firecrawl scrape",
+                            "url": "https://api.firecrawl.dev/v2/scrape",
+                            "retrieved": "2026-09-26T12:00:00Z",
+                            "archive": archive,
+                        },
+                        "tried": [
+                            {
+                                "source": "Firecrawl scrape",
+                                "status": "found",
+                                "http": 200,
+                                "archive": archive,
+                            }
+                        ],
+                    },
+                )
+                address.assert_called_once_with("example.com")
+                self.assertEqual(
+                    gateway.call_args_list,
+                    [
+                        mock.call(
+                            "page",
+                            [target],
+                            "Firecrawl scrape",
+                            "https://api.firecrawl.dev/v2/scrape",
+                            curl_args=[
+                                "--json",
+                                '{"url":"https://example.com/path?q=1","formats":["markdown"],"onlyMainContent":true}',
+                            ],
+                            fresh=False,
+                            root=self.root,
+                            subject=None,
+                        )
+                    ],
+                )
+
+    def test_page_firecrawl_missing_metadata_has_no_title(self):
+        target = "https://example.com/path?q=1"
+        for data in (
+            {"markdown": "Text"},
+            {"markdown": "Text", "metadata": "not a dictionary"},
+        ):
+            with self.subTest(data=data):
+                response = self.response(
+                    "Firecrawl scrape",
+                    "https://api.firecrawl.dev/v2/scrape",
+                    {"success": True, "data": data},
+                )
+                with (
+                    mock.patch.object(
+                        lookup, "gateway_response", return_value=response
+                    ) as gateway,
+                    mock.patch.object(
+                        lookup, "public_address", return_value="93.184.216.34"
+                    ) as address,
+                ):
+                    outcome = lookup.page_lookup([target], root=self.root)
+                archive = str(response.path)
+                self.assertEqual(
+                    outcome,
+                    {
+                        "kind": "page",
+                        "query": {"url": target},
+                        "status": "found",
+                        "cached": False,
+                        "answer": {
+                            "length": 4,
+                            "archive": archive,
+                            "title": None,
+                            "credits_used": None,
+                        },
+                        "source": {
+                            "name": "Firecrawl scrape",
+                            "url": "https://api.firecrawl.dev/v2/scrape",
+                            "retrieved": "2026-09-26T12:00:00Z",
+                            "archive": archive,
+                        },
+                        "tried": [
+                            {
+                                "source": "Firecrawl scrape",
+                                "status": "found",
+                                "http": 200,
+                                "archive": archive,
+                            }
+                        ],
+                    },
+                )
+                address.assert_called_once_with("example.com")
+                self.assertEqual(
+                    gateway.call_args_list,
+                    [
+                        mock.call(
+                            "page",
+                            [target],
+                            "Firecrawl scrape",
+                            "https://api.firecrawl.dev/v2/scrape",
+                            curl_args=[
+                                "--json",
+                                '{"url":"https://example.com/path?q=1","formats":["markdown"],"onlyMainContent":true}',
+                            ],
+                            fresh=False,
+                            root=self.root,
+                            subject=None,
+                        )
+                    ],
+                )
+
+    def test_page_arxiv_pdf_requires_opt_in(self):
+        target = "https://arxiv.org/pdf/2506.08837"
+        with mock.patch.object(lookup, "gateway_response") as gateway:
+            refused = lookup.page_lookup([target], root=self.root)
+        self.assertEqual(
+            refused,
+            {
+                "kind": "page",
+                "query": {"url": target},
+                "status": "refused",
+                "cached": False,
+                "answer": {"use": "paper or fulltext"},
+                "source": None,
+                "tried": [
+                    {
+                        "source": "routing",
+                        "status": "refused",
+                        "http": None,
+                        "reason": "use paper or fulltext",
+                    }
+                ],
+            },
+        )
+        gateway.assert_not_called()
+
+        response = self.response(
+            "Firecrawl scrape",
+            "https://api.firecrawl.dev/v2/scrape",
+            {"data": {"markdown": "paper text"}},
+        )
+        with (
+            mock.patch.object(
+                lookup, "gateway_response", return_value=response
+            ) as gateway,
+            mock.patch.object(
+                lookup, "public_address", return_value="151.101.3.42"
+            ) as address,
+        ):
+            found = lookup.page_lookup(
+                [target], root=self.root, allow_arxiv_pdf=True, cache_kind="fulltext"
+            )
+        archive = str(response.path)
+        self.assertEqual(
+            found,
+            {
+                "kind": "page",
+                "query": {"url": target},
+                "status": "found",
+                "cached": False,
+                "answer": {
+                    "length": 10,
+                    "archive": archive,
+                    "title": None,
+                    "credits_used": None,
+                },
+                "source": {
+                    "name": "Firecrawl scrape",
+                    "url": "https://api.firecrawl.dev/v2/scrape",
+                    "retrieved": "2026-09-26T12:00:00Z",
+                    "archive": archive,
+                },
+                "tried": [
+                    {
+                        "source": "Firecrawl scrape",
+                        "status": "found",
+                        "http": 200,
+                        "archive": archive,
+                    }
+                ],
+            },
+        )
+        address.assert_called_once_with("arxiv.org")
+        self.assertEqual(
+            gateway.call_args_list,
+            [
+                mock.call(
+                    "fulltext",
+                    [target],
+                    "Firecrawl scrape",
+                    "https://api.firecrawl.dev/v2/scrape",
+                    curl_args=[
+                        "--json",
+                        '{"url":"https://arxiv.org/pdf/2506.08837","formats":["markdown"],"onlyMainContent":true}',
+                    ],
+                    fresh=False,
+                    root=self.root,
+                    subject=None,
+                )
+            ],
+        )
+
+    def test_page_blank_firecrawl_falls_back_with_forwarded_options(self):
+        target = "https://example.com/path?q=1"
+        firecrawl = self.response(
+            "Firecrawl scrape",
+            "https://api.firecrawl.dev/v2/scrape",
+            {"data": {"markdown": "  "}},
+            name="firecrawl.json",
+        )
+        bright = self.response(
+            "Bright Data",
+            "https://api.brightdata.com/request",
+            {},
+            name="bright.json",
+        )
+        bright.envelope["body"] = "Bright page body"
+        with (
+            mock.patch.object(
+                lookup, "gateway_response", side_effect=[firecrawl, bright]
+            ) as gateway,
+            mock.patch.object(
+                lookup, "public_address", return_value="93.184.216.34"
+            ) as address,
+        ):
+            outcome = lookup.page_lookup(
+                [target],
+                fresh=True,
+                root=self.root,
+                subject="topic",
+                cache_kind="fulltext",
+            )
+        fire_archive = str(firecrawl.path)
+        bright_archive = str(bright.path)
+        self.assertEqual(
+            outcome,
+            {
+                "kind": "page",
+                "query": {"url": target},
+                "status": "found",
+                "cached": False,
+                "answer": {
+                    "length": len("Bright page body"),
+                    "archive": bright_archive,
+                    "title": None,
+                    "credits_used": None,
+                },
+                "source": {
+                    "name": "Bright Data",
+                    "url": "https://api.brightdata.com/request",
+                    "retrieved": "2026-09-26T12:00:00Z",
+                    "archive": bright_archive,
+                },
+                "tried": [
+                    {
+                        "source": "Firecrawl scrape",
+                        "status": "error",
+                        "http": 200,
+                        "archive": fire_archive,
+                    },
+                    {
+                        "source": "Bright Data",
+                        "status": "found",
+                        "http": 200,
+                        "archive": bright_archive,
+                    },
+                ],
+            },
+        )
+        address.assert_called_once_with("example.com")
+        self.assertEqual(
+            gateway.call_args_list,
+            [
+                mock.call(
+                    "fulltext",
+                    [target],
+                    "Firecrawl scrape",
+                    "https://api.firecrawl.dev/v2/scrape",
+                    curl_args=[
+                        "--json",
+                        '{"url":"https://example.com/path?q=1","formats":["markdown"],"onlyMainContent":true}',
+                    ],
+                    fresh=True,
+                    root=self.root,
+                    subject="topic",
+                ),
+                mock.call(
+                    "fulltext",
+                    [target],
+                    "Bright Data",
+                    "https://api.brightdata.com/request",
+                    curl_args=[
+                        "--json",
+                        '{"zone":"bright_data_agent","url":"https://example.com/path?q=1","format":"raw"}',
+                    ],
+                    fresh=True,
+                    root=self.root,
+                    subject="topic",
+                ),
+            ],
+        )
+
+    def test_page_gateway_failure_keeps_refusal_when_bright_finds_body(self):
+        target = "https://example.com/path?q=1"
+        expected_calls = [
+            mock.call(
+                "page",
+                [target],
+                "Firecrawl scrape",
+                "https://api.firecrawl.dev/v2/scrape",
+                curl_args=[
+                    "--json",
+                    '{"url":"https://example.com/path?q=1","formats":["markdown"],"onlyMainContent":true}',
+                ],
+                fresh=False,
+                root=self.root,
+                subject=None,
+            ),
+            mock.call(
+                "page",
+                [target],
+                "Bright Data",
+                "https://api.brightdata.com/request",
+                curl_args=[
+                    "--json",
+                    '{"zone":"bright_data_agent","url":"https://example.com/path?q=1","format":"raw"}',
+                ],
+                fresh=False,
+                root=self.root,
+                subject=None,
+            ),
+        ]
+        for fire_cached in (False, True):
+            for bright_cached in (False, True):
+                with self.subTest(fire_cached=fire_cached, bright_cached=bright_cached):
+                    firecrawl = lookup.RemoteResponse(
+                        "Firecrawl scrape",
+                        "https://api.firecrawl.dev/v2/scrape",
+                        None,
+                        None,
+                        fire_cached,
+                        "refused",
+                        "daily cap",
+                    )
+                    bright = self.response(
+                        "Bright Data",
+                        "https://api.brightdata.com/request",
+                        {},
+                        cached=bright_cached,
+                        name="bright.json",
+                    )
+                    bright.envelope["body"] = "Bright page body"
+                    with (
+                        mock.patch.object(
+                            lookup, "gateway_response", side_effect=[firecrawl, bright]
+                        ) as gateway,
+                        mock.patch.object(
+                            lookup, "public_address", return_value="93.184.216.34"
+                        ) as address,
+                    ):
+                        outcome = lookup.page_lookup([target], root=self.root)
+                    archive = str(bright.path)
+                    self.assertEqual(
+                        outcome,
+                        {
+                            "kind": "page",
+                            "query": {"url": target},
+                            "status": "found",
+                            "cached": fire_cached and bright_cached,
+                            "answer": {
+                                "length": len("Bright page body"),
+                                "archive": archive,
+                                "title": None,
+                                "credits_used": None,
+                            },
+                            "source": {
+                                "name": "Bright Data",
+                                "url": "https://api.brightdata.com/request",
+                                "retrieved": "2026-09-26T12:00:00Z",
+                                "archive": archive,
+                            },
+                            "tried": [
+                                {
+                                    "source": "Firecrawl scrape",
+                                    "status": "refused",
+                                    "http": None,
+                                    "reason": "daily cap",
+                                },
+                                {
+                                    "source": "Bright Data",
+                                    "status": "found",
+                                    "http": 200,
+                                    "archive": archive,
+                                },
+                            ],
+                        },
+                    )
+                    address.assert_called_once_with("example.com")
+                    self.assertEqual(gateway.call_args_list, expected_calls)
+
+    def test_page_both_gateways_fail_with_and_without_not_found(self):
+        target = "https://example.com/path?q=1"
+        expected_calls = [
+            mock.call(
+                "page",
+                [target],
+                "Firecrawl scrape",
+                "https://api.firecrawl.dev/v2/scrape",
+                curl_args=[
+                    "--json",
+                    '{"url":"https://example.com/path?q=1","formats":["markdown"],"onlyMainContent":true}',
+                ],
+                fresh=False,
+                root=self.root,
+                subject=None,
+            ),
+            mock.call(
+                "page",
+                [target],
+                "Bright Data",
+                "https://api.brightdata.com/request",
+                curl_args=[
+                    "--json",
+                    '{"zone":"bright_data_agent","url":"https://example.com/path?q=1","format":"raw"}',
+                ],
+                fresh=False,
+                root=self.root,
+                subject=None,
+            ),
+        ]
+        for bright_http, expected_status in ((404, "not found"), (500, "error")):
+            for fire_cached in (False, True):
+                for bright_cached in (False, True):
+                    with self.subTest(
+                        bright_http=bright_http,
+                        fire_cached=fire_cached,
+                        bright_cached=bright_cached,
+                    ):
+                        firecrawl = lookup.RemoteResponse(
+                            "Firecrawl scrape",
+                            "https://api.firecrawl.dev/v2/scrape",
+                            None,
+                            None,
+                            fire_cached,
+                            "refused",
+                            "daily cap",
+                        )
+                        bright = self.response(
+                            "Bright Data",
+                            "https://api.brightdata.com/request",
+                            {},
+                            status=bright_http,
+                            cached=bright_cached,
+                            name="bright.json",
+                        )
+                        with (
+                            mock.patch.object(
+                                lookup,
+                                "gateway_response",
+                                side_effect=[firecrawl, bright],
+                            ) as gateway,
+                            mock.patch.object(
+                                lookup, "public_address", return_value="93.184.216.34"
+                            ) as address,
+                        ):
+                            outcome = lookup.page_lookup([target], root=self.root)
+                        self.assertEqual(
+                            outcome,
+                            {
+                                "kind": "page",
+                                "query": {"url": target},
+                                "status": expected_status,
+                                "cached": fire_cached and bright_cached,
+                                "answer": None,
+                                "source": None,
+                                "tried": [
+                                    {
+                                        "source": "Firecrawl scrape",
+                                        "status": "refused",
+                                        "http": None,
+                                        "reason": "daily cap",
+                                    },
+                                    {
+                                        "source": "Bright Data",
+                                        "status": expected_status,
+                                        "http": bright_http,
+                                        "archive": str(bright.path),
+                                    },
+                                ],
+                            },
+                        )
+                        address.assert_called_once_with("example.com")
+                        self.assertEqual(gateway.call_args_list, expected_calls)
 
     def test_cert_returns_each_certificate_with_names_and_validity(self):
         response = self.response(
