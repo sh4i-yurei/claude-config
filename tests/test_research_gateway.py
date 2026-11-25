@@ -521,6 +521,26 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 1)
 
+    def test_target_without_error_count_is_sent_at_streak_threshold_one(self):
+        config = gw.load_config()
+        config["gateway"]["error_streak"] = 1
+        instant = 100.0
+        self.state.write_text(
+            json.dumps(
+                {
+                    "api.brightdata.com": {
+                        "targets": {"www.reddit.com": {"end": instant}}
+                    }
+                }
+            )
+        )
+        with (
+            patch.object(gw, "load_config", return_value=config),
+            patch.object(gw.time, "time", return_value=instant),
+        ):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(len(self.calls), 1)
+
     def test_brightdata_success_is_billed_and_clears_site(self):
         self.statuses = [502, 200]
         self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
