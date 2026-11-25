@@ -104,7 +104,7 @@ class FakeOpenBao:
                             self.send_response(200)
                             self.send_header("Content-Length", "1")
                             self.end_headers()
-                            time.sleep(31)
+                            time.sleep(40)
                         elif fault == "malformed-one-field":
                             self.answer(
                                 200,
