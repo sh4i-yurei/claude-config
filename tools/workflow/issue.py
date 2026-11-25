@@ -1407,10 +1407,14 @@ def upstream_data(data, dry_run):
         )
         return 0
     try:
-        upstream_url = api(
+        created = api(
             f"repos/{repo}/issues",
             payload={"title": data["title"], "body": data["body"], "labels": labels},
-        )["html_url"]
+        )
+        try:
+            upstream_url = created["html_url"]
+        except (KeyError, TypeError) as error:
+            raise IssueError("created issue response has no link") from error
     except IssueError as error:
         print(f"upstream issue creation failed: {error}")
         return 1

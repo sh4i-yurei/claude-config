@@ -391,19 +391,21 @@ class IssueUpstream(TestCase):
         self.rig_state["approval"]["sourceSession"] = "other@hq"
         self.save()
         code, output = self.run_upstream(body=BODY + "Mark asked.")
-        self.assertEqual(code, 2, output)
-        self.assertIn("seat unavailable", output)
-        self.assertIn(
-            f"approval {APPROVAL} comes from other@hq, not main-lead@hq", output
+        self.assertEqual(
+            (code, output),
+            (
+                2,
+                "seat unavailable\n"
+                f"approval {APPROVAL} comes from other@hq, not main-lead@hq\n"
+                'body has a personal name: "Mark"\n',
+            ),
         )
-        self.assertIn('body has a personal name: "Mark"', output)
 
     def test_missing_sender_is_named_without_traceback(self):
         self.rig_state["missing_sender"] = True
         self.save()
         code, output = self.run_upstream()
-        self.assertEqual(code, 2, output)
-        self.assertIn("rig whoami returned no seat address", output)
+        self.assertEqual((code, output), (2, "rig whoami returned no seat address\n"))
 
     def test_labels_and_text_rules(self):
         self.gh_state["missing_labels"] = ["nosuchlabel-xyz"]
@@ -578,10 +580,43 @@ class IssueUpstream(TestCase):
         self.gh_state["tracking_missing_link"] = True
         self.save()
         code, output = self.run_upstream(options=[])
-        self.assertEqual(code, 1, output)
-        self.assertIn(f"filed upstream: https://github.com/{REPO}/issues/99", output)
-        self.assertIn("tracking issue failed:", output)
-        self.assertNotIn("Traceback", output)
+        self.assertEqual(
+            (code, output),
+            (
+                1,
+                f"filed upstream: https://github.com/{REPO}/issues/99\n"
+                "tracking issue failed: created issue response has no link\n",
+            ),
+        )
+
+    def test_upstream_create_without_link_names_step(self):
+        self.gh_state["upstream_missing_link"] = True
+        self.save()
+        self.assertEqual(
+            self.run_upstream(options=[]),
+            (1, "upstream issue creation failed: created issue response has no link\n"),
+        )
+        self.assertEqual(
+            [
+                call["args"][1]
+                for call in self.calls("gh")
+                if call["args"][0] == "api" and "--method" in call["args"]
+            ],
+            [f"repos/{REPO}/issues"],
+        )
+
+    def test_tracking_second_form_reports_each_problem_after_upstream_filing(self):
+        self.gh_state["tracking_form_changes_on_second_read"] = True
+        self.save()
+        self.assertEqual(
+            self.run_upstream(options=[]),
+            (
+                1,
+                f"filed upstream: https://github.com/{REPO}/issues/99\n"
+                "tracking issue failed: unknown body field changes\n"
+                "unknown body field context\n",
+            ),
+        )
 
     def test_approval_note_failure_keeps_both_links(self):
         self.rig_state["update_failure"] = "queue update failed"
@@ -819,6 +854,20 @@ class IssueUpstream(TestCase):
                 == ["api", "repos/sh4i-yurei/claude-config/issues/20"]
             ],
             ["repos/sh4i-yurei/claude-config/issues/20"],
+        )
+
+    def test_open_valid_parent_is_linked_on_dry_run(self):
+        code, output = self.run_open(self.open_file(extra="parent = 20"), "--dry-run")
+        self.assertEqual(code, 0, output)
+        self.assertIn(
+            "Would call: POST repos/sh4i-yurei/claude-config/issues/20/sub_issues with sub_issue_id NEW_ISSUE_ID",
+            output.splitlines(),
+        )
+
+    def test_open_blocker_one_is_checked_on_dry_run(self):
+        self.assertEqual(
+            self.run_open(self.open_file(extra="blocked_by = [1]"), "--dry-run"),
+            (2, "sh4i-yurei/claude-config issue #1 does not exist\n"),
         )
 
     def test_open_created_output_includes_link_and_milestone(self):

@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 """Replay captured GitHub responses and record every gh call."""
 
+import base64
 import json
 import os
 from pathlib import Path
@@ -319,6 +320,23 @@ if args[:1] == ["api"]:
             result = fixture(
                 ("infra-" if "keepbreathing-infra" in endpoint else "form-") + name
             )
+            if (
+                state.get("tracking_form_changes_on_second_read")
+                and name == "chore.yml"
+                and sum(
+                    json.loads(line)["args"][:2] == args[:2]
+                    for line in calls.read_text().splitlines()
+                )
+                == 2
+            ):
+                content = base64.b64decode(result["content"]).decode()
+                content = content.replace(
+                    "    id: context\n", "    id: changed_context\n"
+                )
+                content = content.replace(
+                    "    id: changes\n", "    id: changed_changes\n"
+                )
+                result["content"] = base64.b64encode(content.encode()).decode()
         elif endpoint.endswith("/milestones"):
             result = fixture("milestones")
         elif endpoint.endswith("/labels"):
@@ -355,6 +373,8 @@ if args[:1] == ["api"]:
             "html_url": f"https://github.com/{repo}/issues/99",
         }
         if state.get("tracking_missing_link") and repo == "sh4i-yurei/workflow-engine":
+            result.pop("html_url")
+        if state.get("upstream_missing_link") and repo == "mvschwarz/openrig":
             result.pop("html_url")
     elif method == "POST" and (
         endpoint.endswith("/sub_issues") or endpoint.endswith("/blocked_by")
