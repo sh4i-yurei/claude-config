@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
-from contextlib import contextmanager, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -71,6 +71,9 @@ class GatewayTests(unittest.TestCase):
         self.calls = []
         self.statuses = [200]
         self.returncodes = [0]
+        self.connect_times = [0.05]
+        self.extra_headers = {}
+        self.output_prefix = "reply"
         self.remaining = 4000
         self.rate_headers = True
         self.usd_remaining = None
@@ -286,7 +289,14 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(input.count("url = "), 1)
         with self.lock.open("a+b") as stream, self.assertRaises(BlockingIOError):
             fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        status = self.statuses[len(self.calls)]
+        index = len(self.calls)
+        status = self.statuses[min(index, len(self.statuses) - 1)]
+        returncode = self.returncodes[min(index, len(self.returncodes) - 1)]
+        if returncode in (7, 35) or (
+            returncode == 28
+            and self.connect_times[min(index, len(self.connect_times) - 1)] == 0
+        ):
+            status = 0
         Path(command[command.index("--output") + 1]).write_bytes(b'{"ok":true}')
         headers = f"HTTP/2 {status}\r\nContent-Type: application/json\r\n"
         if self.rate_headers:
@@ -298,6 +308,8 @@ class GatewayTests(unittest.TestCase):
             headers += f"X-RateLimit-Remaining-USD: {self.usd_remaining}\r\n"
         if self.retry_after is not None:
             headers += f"Retry-After: {self.retry_after}\r\n"
+        for name, value in self.extra_headers.items():
+            headers += f"{name}: {value}\r\n"
         Path(command[command.index("--dump-header") + 1]).write_bytes(
             (headers + "\r\n").encode()
         )
@@ -307,14 +319,330 @@ class GatewayTests(unittest.TestCase):
             "Result",
             (),
             {
-                "stdout": f"{status} 0.2 {size}",
-                "returncode": self.returncodes[-1],
+                "stdout": f"{status:03d} 0.2 {size} {self.connect_times[min(index, len(self.connect_times) - 1)]}",
+                "returncode": returncode,
             },
         )()
 
     def run_gateway(self, *args):
         with patch.object(gw.subprocess, "run", side_effect=self.fake_curl):
             return gw.main([str(self.out), "--", *args])
+
+    def request_site(self, site, *, host="api.brightdata.com"):
+        self.out = self.out.with_name(
+            f"{self.output_prefix}-{len(self.calls) + 1}.json"
+        )
+        body = json.dumps({"zone": "bright_data_agent", "url": site, "format": "raw"})
+        with patch.object(gw.time, "sleep"):
+            return self.run_gateway("--json", body, f"https://{host}/request")
+
+    def gateway_entry(self, host="api.brightdata.com"):
+        return json.loads(self.state.read_text())[host]
+
+    def test_brightdata_failed_attempt_is_free_and_site_scoped(self):
+        self.rate_headers = False
+        self.statuses = [502]
+        self.assertEqual(self.request_site("https://www.reddit.com/r/devops/"), 0)
+        entry = self.gateway_entry()
+        self.assertEqual(entry["window_used"], 0)
+        self.assertEqual(entry["count"], 1)
+        self.assertEqual(entry["errors"], 0)
+        self.assertEqual(entry["targets"]["www.reddit.com"]["errors"], 1)
+
+    def test_brightdata_success_is_billed_and_clears_site(self):
+        self.statuses = [502, 200]
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        entry = self.gateway_entry()
+        self.assertEqual(entry["window_used"], 1)
+        self.assertEqual(entry.get("targets", {}), {})
+
+    def test_brightdata_error_header_is_billed_and_site_scoped(self):
+        self.extra_headers = {
+            "x-brd-error": "Forbidden: Access to this site is restricted on the selected network type due to compliance policies. Please try switching to a different network type. In order to gain access with same network you may need to undergo a KYC process, you can do so by filling in the form: https://brightdata.com/cp/kyc If you have already completed the KYC approval, please contact your account manager for further details.",
+            "x-brd-status-code": "502",
+        }
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        entry = self.gateway_entry()
+        self.assertEqual(entry["window_used"], 1)
+        self.assertEqual(entry["targets"]["www.reddit.com"]["errors"], 1)
+        self.assertEqual(entry["errors"], 0)
+
+    def test_brightdata_header_name_is_case_insensitive(self):
+        self.extra_headers = {"X-BRD-Error": "blocked"}
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 1)
+
+    def test_different_sites_do_not_share_target_cooldown(self):
+        self.statuses = [502]
+        for index in range(6):
+            self.assertEqual(self.request_site(f"https://site{index}.example.org/x"), 0)
+        self.assertEqual(len(self.calls), 6)
+        self.assertEqual(self.gateway_entry()["errors"], 0)
+        self.assertEqual(len(self.gateway_entry()["targets"]), 6)
+
+    def test_target_cooldown_stops_same_site_and_allows_another(self):
+        self.statuses = [502]
+        for _ in range(5):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 3)
+        self.assertEqual(
+            stderr.getvalue().strip(),
+            "[gw] REFUSED api.brightdata.com: error cooldown for www.reddit.com",
+        )
+        self.assertEqual(len(self.calls), 5)
+        self.assertEqual(self.request_site("https://example.com/x"), 0)
+        self.assertEqual(len(self.calls), 6)
+
+    def test_other_site_success_does_not_reset_failing_site(self):
+        self.statuses = [502, 200] * 5
+        for _ in range(5):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+            self.assertEqual(self.request_site("https://example.com/x"), 0)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 3)
+        self.assertEqual(
+            stderr.getvalue().strip(),
+            "[gw] REFUSED api.brightdata.com: error cooldown for www.reddit.com",
+        )
+        self.assertEqual(len(self.calls), 10)
+
+    def test_success_resets_target_streak(self):
+        self.statuses = [502] * 4 + [200, 502]
+        for _ in range(4):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 1)
+
+    def test_expired_target_streak_allows_request(self):
+        self.state.write_text(
+            json.dumps(
+                {
+                    "api.brightdata.com": {
+                        "targets": {
+                            "www.reddit.com": {"errors": 5, "end": time.time() - 14401}
+                        }
+                    }
+                }
+            )
+        )
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.gateway_entry().get("targets", {}), {})
+
+    def test_service_errors_share_host_cooldown(self):
+        for host, status, returncode in (
+            ("api.brightdata.com", 401, 0),
+            ("api.brightdata.com", 403, 0),
+            ("api.brightdata.com", 0, 7),
+            ("api.brightdata.com", 0, 35),
+            ("api.brightdata.com", 0, 28),
+            ("api.firecrawl.dev", 402, 0),
+        ):
+            with self.subTest(host=host, status=status, returncode=returncode):
+                self.state.unlink(missing_ok=True)
+                self.calls.clear()
+                self.output_prefix = f"reply-{host}-{status}-{returncode}"
+                self.statuses = [status]
+                self.returncodes = [returncode]
+                self.connect_times = [0 if returncode == 28 else 0.05]
+                for index in range(5):
+                    self.assertEqual(
+                        self.request_site(
+                            f"https://site{index}.example.org/x", host=host
+                        ),
+                        1 if returncode else 0,
+                    )
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(
+                        self.request_site("https://sixth.example.org/x", host=host), 3
+                    )
+                self.assertEqual(
+                    stderr.getvalue().strip(), f"[gw] REFUSED {host}: error cooldown"
+                )
+                self.assertEqual(len(self.calls), 5)
+                entry = self.gateway_entry(host)
+                self.assertEqual(entry["errors"], 5)
+                self.assertEqual(entry.get("targets", {}), {})
+                if host == "api.brightdata.com" and returncode:
+                    self.assertEqual(entry["window_used"], 0)
+
+    def test_timeout_after_connection_is_target_error(self):
+        self.statuses = [0]
+        self.returncodes = [28]
+        self.connect_times = [0.05]
+        for index in range(6):
+            self.assertEqual(self.request_site(f"https://site{index}.example.org/x"), 1)
+        entry = self.gateway_entry()
+        self.assertEqual(entry["errors"], 0)
+        self.assertEqual(entry["window_used"], 0)
+        self.assertEqual(len(entry["targets"]), 6)
+
+    def test_missing_connect_field_counts_as_connected(self):
+        self.statuses = [0]
+        self.returncodes = [28]
+        original = self.fake_curl
+
+        def three_fields(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result.stdout = "000 0.2 0"
+            return result
+
+        with patch.object(self, "fake_curl", side_effect=three_fields):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 1)
+        self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 1)
+        self.assertEqual(self.gateway_entry()["errors"], 0)
+
+    def test_attached_json_and_normalized_target_host(self):
+        self.statuses = [502]
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.out = self.out.with_name("attached-with-header.json")
+        body = '{"zone":"bright_data_agent","url":"https://WWW.Reddit.com./r/x","format":"raw"}'
+        with patch.object(gw.time, "sleep"):
+            self.assertEqual(
+                self.run_gateway(
+                    "-H",
+                    "X-Test: harmless",
+                    f"--json={body}",
+                    "https://api.brightdata.com/request",
+                ),
+                0,
+            )
+        self.assertEqual(list(self.gateway_entry()["targets"]), ["www.reddit.com"])
+        self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 2)
+
+    def test_malformed_curl_writeout_still_records_site_failure(self):
+        self.returncodes = [28]
+        original = self.fake_curl
+
+        def malformed(*args, **kwargs):
+            result = original(*args, **kwargs)
+            result.stdout = "not-a-code 0.2 0 invalid-connect-time"
+            return result
+
+        with patch.object(self, "fake_curl", side_effect=malformed):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 1)
+        entry = self.gateway_entry()
+        self.assertEqual(entry["errors"], 0)
+        self.assertEqual(entry["targets"]["www.reddit.com"]["errors"], 1)
+        self.assertEqual(entry["window_used"], 0)
+
+    def test_service_error_keeps_target_streak_and_target_error_clears_host(self):
+        self.statuses = [502] * 4 + [401, 502]
+        for _ in range(4):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 4)
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 5)
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 3)
+
+    def test_target_error_clears_host_streak(self):
+        self.statuses = [401] * 4 + [502, 401]
+        for index in range(4):
+            self.assertEqual(self.request_site(f"https://site{index}.example.org/x"), 0)
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(self.gateway_entry()["errors"], 0)
+        self.assertEqual(self.request_site("https://example.org/x"), 0)
+        self.assertEqual(self.request_site("https://next.example.org/x"), 0)
+
+    def test_oversize_success_is_billed_and_target_error(self):
+        self.statuses = [200]
+        self.returncodes = [63]
+        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 1)
+        self.assertEqual(self.gateway_entry()["window_used"], 1)
+        self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 1)
+
+    def test_no_usable_target_uses_host_streak(self):
+        for body in (
+            '{"query":"x","limit":10}',
+            "not json",
+            '{"url":9}',
+            '{"url":"not a URL"}',
+        ):
+            with self.subTest(body=body):
+                self.state.unlink(missing_ok=True)
+                self.calls.clear()
+                self.statuses = [502]
+                for _ in range(5):
+                    self.out = self.out.with_name(f"reply-{time.time_ns()}.json")
+                    with patch.object(gw.time, "sleep"):
+                        self.assertEqual(
+                            self.run_gateway(
+                                "--json", body, "https://api.firecrawl.dev/v2/search"
+                            ),
+                            0,
+                        )
+                self.out = self.out.with_name(f"reply-{time.time_ns()}.json")
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    self.assertEqual(
+                        self.run_gateway(
+                            "--json", body, "https://api.firecrawl.dev/v2/search"
+                        ),
+                        3,
+                    )
+                self.assertEqual(
+                    stderr.getvalue().strip(),
+                    "[gw] REFUSED api.firecrawl.dev: error cooldown",
+                )
+                self.assertEqual(
+                    self.gateway_entry("api.firecrawl.dev")["window_used"], 5
+                )
+                self.assertNotIn("targets", self.gateway_entry("api.firecrawl.dev"))
+
+    def test_other_providers_keep_host_streak_and_cost(self):
+        self.statuses = [502]
+        for _ in range(5):
+            self.out = self.out.with_name(f"reply-{len(self.calls) + 1}.json")
+            with patch.object(gw.time, "sleep"):
+                self.assertEqual(
+                    self.run_gateway("https://api.github.com/rate_limit"), 0
+                )
+        self.out = self.out.with_name("reply-6.json")
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            self.assertEqual(self.run_gateway("https://api.github.com/rate_limit"), 3)
+        self.assertEqual(
+            stderr.getvalue().strip(), "[gw] REFUSED api.github.com: error cooldown"
+        )
+        self.assertEqual(self.gateway_entry("api.github.com")["window_used"], 5)
+        self.assertNotIn("targets", self.gateway_entry("api.github.com"))
+
+    def test_brightdata_without_json_keeps_host_streak(self):
+        self.statuses = [502]
+        for index in range(5):
+            self.out = self.out.with_name(f"plain-{index}.json")
+            with patch.object(gw.time, "sleep"):
+                self.assertEqual(
+                    self.run_gateway("https://api.brightdata.com/request"), 0
+                )
+        self.out = self.out.with_name("plain-sixth.json")
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            self.assertEqual(self.run_gateway("https://api.brightdata.com/request"), 3)
+        self.assertEqual(
+            stderr.getvalue().strip(),
+            "[gw] REFUSED api.brightdata.com: error cooldown",
+        )
+        entry = self.gateway_entry()
+        self.assertEqual(entry["errors"], 5)
+        self.assertEqual(entry["window_used"], 0)
+        self.assertNotIn("targets", entry)
+
+    def test_firecrawl_target_error_keeps_existing_billing(self):
+        self.statuses = [502]
+        self.assertEqual(
+            self.request_site("https://example.org/x", host="api.firecrawl.dev"), 0
+        )
+        entry = self.gateway_entry("api.firecrawl.dev")
+        self.assertEqual(entry["targets"]["example.org"]["errors"], 1)
+        self.assertEqual(entry["window_used"], 1)
 
     def log_records(self):
         path = next((self.vault / "70_Research" / "_log").glob("*.jsonl"))
