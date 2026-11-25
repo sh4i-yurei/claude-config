@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+from http.client import HTTPException
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -82,8 +83,8 @@ def _source(filename, label):
             raise SourceError(f"{filename} is empty")
         return value, original, None
     matches = []
-    for number, line in enumerate(content.splitlines(keepends=True), 1):
-        line = line.removesuffix("\r\n").removesuffix("\n")
+    for number, raw_line in enumerate(original.splitlines(keepends=True), 1):
+        line = raw_line.decode("utf-8").removesuffix("\r\n").removesuffix("\n")
         if not line.strip() or line.lstrip().startswith("#"):
             continue
         positions = [
@@ -124,9 +125,12 @@ def _request(method, route, token=None, body=None):
         response = error
     except (URLError, OSError) as error:
         raise BaoError(f"cannot reach OpenBao: {error}") from error
-    with response:
-        status = response.status
-        raw = response.read()
+    try:
+        with response:
+            status = response.status
+            raw = response.read()
+    except (OSError, HTTPException) as error:
+        raise BaoError(f"cannot reach OpenBao: {error}") from error
     try:
         answer = json.loads(raw) if raw else None
     except (ValueError, UnicodeDecodeError) as error:

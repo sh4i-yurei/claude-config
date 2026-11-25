@@ -5,7 +5,9 @@ import io
 import json
 import os
 from pathlib import Path
+import resource
 import runpy
+import signal
 import subprocess
 import sys
 import tempfile
@@ -170,6 +172,20 @@ class SecretLoadTests(unittest.TestCase):
             ],
         )
         self.assertEqual(self.bao.requests[2][3]["options"], {"cas": 0})
+
+    def test_http_requests_have_json_headers_and_no_body_on_reads(self):
+        self.assertEqual(self.load()[0], 0)
+        self.assertEqual(
+            [request[3] for request in self.bao.requests if request[0] == "GET"],
+            [None, None],
+        )
+        self.assertIsNone(self.bao.requests[-1][3])
+        self.assertTrue(
+            all(
+                headers.get("Content-Type") == "application/json"
+                for headers in self.bao.request_headers
+            )
+        )
         self.assertEqual(
             self.calls()[0]["args"],
             ["list", "items", "--search", "openbao keepbreath0 (hub)"],
@@ -183,7 +199,7 @@ class SecretLoadTests(unittest.TestCase):
                 "dummy-durable-colon-value-4444444444444444444444444==",
             ),
             (
-                b"IaC plan token old = x\nIaC plan token = dummy-iac-plan-cloudflare-111111111111111111111111111\n",
+                b"IaC plan token old = dummy-iac-short-lived-cf-3333333333333333333333333333\nIaC plan token = dummy-iac-plan-cloudflare-111111111111111111111111111\n",
                 "IaC plan token",
                 "dummy-iac-plan-cloudflare-111111111111111111111111111",
             ),
@@ -258,6 +274,67 @@ class SecretLoadTests(unittest.TestCase):
             ),
         )
 
+    def test_parser_boundaries(self):
+        cases = [
+            (b"other =\n", "iac-durable API", 1, 7),
+            (b"= dummy\n", "iac-durable API", 1, 7),
+            (b"=dummy:x\n", "iac-durable API", 1, 8),
+        ]
+        for content, label, number, length in cases:
+            with self.subTest(content=content):
+                self.source.write_bytes(content)
+                self.assertEqual(
+                    self.run_tool(
+                        "--from", "cf.txt", "--label", label, "--to", "openbao:a/b"
+                    ),
+                    (
+                        2,
+                        "",
+                        f'secret-load: line {number} of cf.txt is not "label = value" or "label: value" (length {length})\n',
+                    ),
+                )
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_first_separator_and_indented_comment(self):
+        for line, expected in (
+            (
+                b"iac-durable API = dummy-durable-colon-value-4444444444444444444444444==",
+                "dummy-durable-colon-value-4444444444444444444444444==",
+            ),
+            (b"iac-durable API: dummy:x", "dummy:x"),
+            (b"iac-durable API=dummy", "dummy"),
+        ):
+            with self.subTest(line=line):
+                self.source.write_bytes(b"  # note\n" + line + b"\n")
+                self.bao.entries.clear()
+                code, out, err = self.load()
+                self.assertEqual((code, err), (0, ""))
+                self.assertEqual(
+                    self.bao.entries["iac-durable/cloudflare-token"]["data"],
+                    {"value": expected},
+                )
+                self.assertIn(f"length {len(expected)}", out)
+
+    def test_crlf_whole_file_and_split_token_length(self):
+        self.source.write_bytes(b"abc\r\n")
+        code, out, err = self.run_tool("--from", "cf.txt", "--to", "openbao:a/b")
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(self.bao.entries["a/b"]["data"], {"value": "abc"})
+        self.assertIn("length 3", out)
+        self.source.write_bytes(
+            LINES[0]
+            + b"\r\niac-durable API = d\r\nummy-iac-durable-cloudflare-222222222222222222222222\r\n"
+        )
+        self.assertEqual(
+            self.load(),
+            (
+                2,
+                "",
+                'secret-load: line 3 of cf.txt is not "label = value" or "label: value" (length 52)\n',
+            ),
+        )
+
     def test_whole_file_and_empty(self):
         key = "-----BEGIN FAKE KEY-----\ndummy-key-line-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n-----END FAKE KEY-----"
         (self.root / "key.pem").write_text(key + "\n")
@@ -289,7 +366,12 @@ class SecretLoadTests(unittest.TestCase):
                     "openbao:/x",
                     "openbao:a//b",
                     "openbao:a/../b",
+                    "openbao:a/./b",
                     "openbao:a#",
+                    "openbao:a#b#c",
+                    "openbao:a#b/c",
+                    "openbao:a?b",
+                    "openbao:a\\b",
                     "secret/x",
                 )
             ],
@@ -319,6 +401,21 @@ class SecretLoadTests(unittest.TestCase):
             "After a verified match, remove the label's line, or the whole file. Removal does not scrub the old data from a btrfs disk.",
             help_text,
         )
+        code, out, err = self.run_tool("--help")
+        self.assertEqual((code, err), (0, ""))
+        help_text = " ".join(out.split())
+        self.assertIn(
+            "usage: secret-load [-h] --from FILE [--label LABEL] --to openbao:PATH[#KEY] [--dry-run] [--replace] [--remove-source]",
+            help_text,
+        )
+        self.assertIn(
+            "Replace a different existing value. OpenBao keeps the old version; Vaultwarden keeps no history for a custom field, so its old value is lost.",
+            help_text,
+        )
+        self.assertIn(
+            "After a verified match, remove the label's line, or the whole file. Removal does not scrub the old data from a btrfs disk.",
+            help_text,
+        )
 
     def test_write_merges_and_cas(self):
         self.bao.seed(
@@ -328,7 +425,10 @@ class SecretLoadTests(unittest.TestCase):
         )
         code, out, err = self.load()
         self.assertEqual((code, err), (0, ""))
-        self.assertIn("version 4", out)
+        self.assertEqual(
+            out,
+            f"login: 200\n{DEST}: write 200, read back 200, matches True, length 53, version 4\nrevoke: 204\n",
+        )
         self.assertEqual(
             self.bao.requests[2][3],
             {
@@ -356,6 +456,10 @@ class SecretLoadTests(unittest.TestCase):
             ),
         )
         self.assertEqual([r[0] for r in self.bao.requests].count("POST"), 2)
+        writes_before_refusal = sum(
+            r[:2] == ("POST", "/v1/secret/data/iac-durable/cloudflare-token")
+            for r in self.bao.requests
+        )
         self.bao.seed("iac-durable/cloudflare-token", {"value": "different"}, 2)
         self.assertEqual(
             self.load(),
@@ -365,13 +469,27 @@ class SecretLoadTests(unittest.TestCase):
                 f"secret-load: {DEST} holds a different value; use --replace to rotate it\n",
             ),
         )
+        self.assertEqual(
+            sum(
+                r[:2] == ("POST", "/v1/secret/data/iac-durable/cloudflare-token")
+                for r in self.bao.requests
+            ),
+            writes_before_refusal,
+        )
         code, out, err = self.load("--replace")
         self.assertEqual((code, err), (0, ""))
-        self.assertIn("version 3", out)
+        self.assertEqual(
+            out,
+            f"login: 200\n{DEST}: write 200, read back 200, matches True, length 53, version 3\nrevoke: 204\n",
+        )
+        self.assertEqual(self.bao.requests[-3][3]["options"], {"cas": 2})
         self.bao.seed("iac-durable/cloudflare-token", {"old": "old"}, 3, deleted=True)
         code, out, err = self.load()
         self.assertEqual((code, err), (0, ""))
-        self.assertIn("version 4", out)
+        self.assertEqual(
+            out,
+            f"login: 200\n{DEST}: write 200, read back 200, matches True, length 53, version 4\nrevoke: 204\n",
+        )
         self.assertEqual(
             self.bao.entries["iac-durable/cloudflare-token"]["data"], {"value": VALUE}
         )
@@ -396,11 +514,10 @@ class SecretLoadTests(unittest.TestCase):
                 self.bao.written = False
                 setattr(self.bao, fault, True)
                 code, out, err = self.load()
-                self.assertEqual(code, 1)
-                self.assertEqual(err, error)
-                self.assertTrue(out.endswith("revoke: 204\n"))
-                if expected is not None:
-                    self.assertIn(expected, out)
+                self.assertEqual(
+                    (code, out, err),
+                    (1, "login: 200\n" + (expected or "") + "revoke: 204\n", error),
+                )
                 setattr(self.bao, fault, False)
         self.bao.revoke_error = True
         self.assertEqual(self.load()[0:1], (1,))
@@ -445,6 +562,51 @@ class SecretLoadTests(unittest.TestCase):
         )
         self.assertEqual(len(self.bao.requests), 1)
 
+    def test_malformed_login_replies(self):
+        for reply in (None, [], {"auth": {}}):
+            with self.subTest(reply=reply):
+                self.bao.login_fault = reply if reply is not None else "no-body"
+                self.assertEqual(
+                    self.load(),
+                    (1, "login: 200\n", "secret-load: OpenBao sign-in failed\n"),
+                )
+                self.assertFalse(
+                    any(
+                        path == "/v1/auth/token/revoke-self"
+                        for _, path, _, _ in self.bao.requests
+                    )
+                )
+        self.bao.login_fault = None
+
+    def test_malformed_read_and_write_replies(self):
+        self.bao.read_fault = "malformed-one-field"
+        self.assertEqual(
+            self.load(),
+            (
+                1,
+                "login: 200\nrevoke: 204\n",
+                "secret-load: OpenBao returned an unreadable entry\n",
+            ),
+        )
+        for status, body in (
+            (400, {"errors": ["invalid request"]}),
+            (400, {}),
+            (500, None),
+        ):
+            with self.subTest(status=status, body=body):
+                self.bao.write_fault = (status, body)
+                self.assertEqual(
+                    self.load(),
+                    (1, f"login: 200\n{DEST}: write {status}\nrevoke: 204\n", ""),
+                )
+        self.bao.write_fault = None
+
+    def test_read_body_timeout_is_network_error(self):
+        self.bao.read_fault = "body-timeout"
+        code, out, err = self.load()
+        self.assertEqual((code, out), (1, "login: 200\nrevoke: 204\n"))
+        self.assertTrue(err.startswith("secret-load: cannot reach OpenBao: "))
+
     def test_dry_run(self):
         self.assertEqual(
             self.load("--dry-run"),
@@ -464,7 +626,14 @@ class SecretLoadTests(unittest.TestCase):
             ),
         )
         self.bao.seed("iac-durable/cloudflare-token", {"value": "other"})
-        self.assertEqual(self.load("--dry-run")[0], 1)
+        self.assertEqual(
+            self.load("--dry-run"),
+            (
+                1,
+                "login: 200\nrevoke: 204\n",
+                f"secret-load: {DEST} holds a different value; use --replace to rotate it\n",
+            ),
+        )
         self.assertEqual(
             self.load("--dry-run", "--replace"),
             (
@@ -501,6 +670,22 @@ class SecretLoadTests(unittest.TestCase):
         )
         self.assertEqual(self.source.stat().st_mode & 0o777, 0o600)
 
+    def test_form_feed_comment_removes_loaded_line(self):
+        original = b"# a\x0c# b\n" + b"\n".join(LINES) + b"\n"
+        self.source.write_bytes(original)
+        self.assertEqual(
+            self.load("--remove-source"),
+            (
+                0,
+                f"login: 200\n{DEST}: write 200, read back 200, matches True, length 53, version 1\nrevoke: 204\nremoved line 3 of cf.txt\n",
+                "",
+            ),
+        )
+        self.assertEqual(
+            self.source.read_bytes(),
+            b"# a\x0c# b\n" + LINES[0] + b"\n" + LINES[2] + b"\n",
+        )
+
     def test_removal_line_endings_and_delete(self):
         for content, label, expected in [
             (
@@ -527,6 +712,13 @@ class SecretLoadTests(unittest.TestCase):
             b"# comment\n\niac-durable API = " + VALUE.encode() + b"\n"
         )
         self.bao.seed("iac-durable/cloudflare-token", {"value": VALUE})
+        self.assertEqual(
+            self.load("--remove-source")[1].splitlines()[-1], "deleted cf.txt"
+        )
+        self.assertFalse(self.source.exists())
+        self.source.write_bytes(
+            b"  # comment\niac-durable API = " + VALUE.encode() + b"\n"
+        )
         self.assertEqual(
             self.load("--remove-source")[1].splitlines()[-1], "deleted cf.txt"
         )
@@ -586,6 +778,21 @@ class SecretLoadTests(unittest.TestCase):
             f"login: 200\n{DEST}: write 200, read back 200, matches True, length 53, version 1\nrevoke: 204\n",
         )
         self.assertEqual(self.calls()[0]["session"], "dummy-session")
+        self.bao.entries.clear()
+        self.assertEqual(
+            self.run_tool(
+                "--from",
+                str(self.source),
+                "--label",
+                "iac-durable API",
+                "--to",
+                "openbao:iac-durable/cloudflare-token",
+                "--remove-source",
+                cwd=elsewhere,
+            )[1].splitlines()[-1],
+            f"removed line 2 of {self.source}",
+        )
+        self.source.write_bytes(b"\n".join(LINES) + b"\n")
         (self.root / "bw-session").unlink()
         self.environment["BW_SESSION"] = "dummy-session"
         self.bao.entries.clear()
@@ -706,14 +913,49 @@ class SecretLoadTests(unittest.TestCase):
         self.assertEqual(self.source.read_bytes(), original + b"# changed\n")
 
     def test_failed_source_replace_preserves_original(self):
-        original = self.source.read_bytes()
-        with patch.object(
-            secret_load.os, "replace", side_effect=OSError("replace failed")
-        ):
-            code, out, err = self.load("--remove-source")
+        locked = self.root / "locked"
+        locked.mkdir()
+        source = locked / "cf.txt"
+        source.write_bytes(self.source.read_bytes())
+        original = source.read_bytes()
+        locked.chmod(0o500)
+        try:
+            code, out, err = self.run_tool(
+                "--from",
+                "locked/cf.txt",
+                "--label",
+                "iac-durable API",
+                "--to",
+                "openbao:iac-durable/cloudflare-token",
+                "--remove-source",
+            )
+        finally:
+            locked.chmod(0o700)
         self.assertEqual(code, 1)
         self.assertTrue(out.endswith("revoke: 204\n"))
-        self.assertEqual(err, "secret-load: cannot remove cf.txt: replace failed\n")
+        self.assertEqual(
+            err, "secret-load: cannot remove locked/cf.txt: Permission denied\n"
+        )
+        self.assertEqual(source.read_bytes(), original)
+        self.assertEqual(list(locked.glob(".cf.txt.*")), [])
+
+    def test_disk_full_cleans_up_temporary_source(self):
+        original = self.source.read_bytes()
+        old_limit = resource.getrlimit(resource.RLIMIT_FSIZE)
+        old_signal = signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+
+        def fill_disk():
+            resource.setrlimit(resource.RLIMIT_FSIZE, (64, old_limit[1]))
+
+        self.bao.on_revoke = fill_disk
+        try:
+            code, out, err = self.load("--remove-source")
+        finally:
+            resource.setrlimit(resource.RLIMIT_FSIZE, old_limit)
+            signal.signal(signal.SIGXFSZ, old_signal)
+        self.assertEqual(code, 1)
+        self.assertTrue(out.endswith("revoke: 204\n"))
+        self.assertEqual(err, "secret-load: cannot remove cf.txt: File too large\n")
         self.assertEqual(self.source.read_bytes(), original)
         self.assertEqual(list(self.root.glob(".cf.txt.*")), [])
 
@@ -724,7 +966,7 @@ class SecretLoadTests(unittest.TestCase):
             redirect_stdout(stdout),
         ):
             with self.assertRaises(SystemExit) as outcome:
-                runpy.run_module("tools.secret_load", run_name="__main__")
+                runpy.run_path(str(ROOT / "tools/secret_load.py"), run_name="__main__")
         self.assertEqual(outcome.exception.code, 0)
         self.assertIn("usage: secret-load", stdout.getvalue())
 

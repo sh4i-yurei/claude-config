@@ -1,6 +1,7 @@
 """Local OpenBao KV v2 stand-in for secret-load behavior tests."""
 
 import json
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
@@ -9,6 +10,7 @@ class FakeOpenBao:
     def __init__(self):
         self.entries = {}
         self.requests = []
+        self.request_headers = []
         self.write_error = False
         self.readback_mismatch = False
         self.raise_version = False
@@ -16,6 +18,8 @@ class FakeOpenBao:
         self.token_live = False
         self.written = False
         self.read_fault = None
+        self.login_fault = None
+        self.write_fault = None
         self.revoke_disconnect = False
         self.on_revoke = None
         owner = self
@@ -37,10 +41,19 @@ class FakeOpenBao:
                 body = json.loads(self.rfile.read(length)) if length else None
                 token = self.headers.get("X-Vault-Token")
                 owner.requests.append((self.command, self.path, token, body))
+                owner.request_headers.append(dict(self.headers.items()))
                 if (
                     self.path == "/v1/auth/userpass/login/keepbreath0"
                     and self.command == "POST"
                 ):
+                    if owner.login_fault is not None:
+                        self.answer(
+                            200,
+                            None
+                            if owner.login_fault == "no-body"
+                            else owner.login_fault,
+                        )
+                        return
                     if body == {"password": "dummy-login-pw-5555"}:
                         owner.token_live = True
                         self.answer(
@@ -84,6 +97,16 @@ class FakeOpenBao:
                             self.send_response(200)
                             self.end_headers()
                             self.wfile.write(b"not json")
+                        elif fault == "body-timeout":
+                            self.send_response(200)
+                            self.send_header("Content-Length", "1")
+                            self.end_headers()
+                            time.sleep(31)
+                        elif fault == "malformed-one-field":
+                            self.answer(
+                                200,
+                                {"data": {"data": None, "metadata": {"version": 1}}},
+                            )
                         elif fault == "malformed-present":
                             self.answer(
                                 200,
@@ -132,6 +155,10 @@ class FakeOpenBao:
                         )
                     return
                 if self.command == "POST":
+                    if owner.write_fault is not None:
+                        status, body = owner.write_fault
+                        self.answer(status, body)
+                        return
                     if owner.write_error:
                         self.answer(500, {"errors": ["internal error"]})
                         return
