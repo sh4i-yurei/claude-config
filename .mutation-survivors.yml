@@ -51,7 +51,7 @@
   reason: json.dumps treats ensure_ascii=None and ensure_ascii=False identically because both are false.
 - mutant: tools.workflow.issue.x_upstream_data__mutmut_336
   reason: json.dumps treats ensure_ascii=None and ensure_ascii=False identically because both are false.
-- mutant: tools.workflow.issue.x_upstream_data__mutmut_391
+- mutant: tools.workflow.issue.x_upstream_data__mutmut_395
   reason: open_data reads dry_run only for truth, so None and false both perform the same tracking write.
 - mutant: tools.workflow.issue.x_upstream_data__mutmut_226
   reason: The pre-check title remains nonempty and is neither printed nor sent; the final tracking title is built separately.
