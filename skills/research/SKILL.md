@@ -147,3 +147,14 @@ For a single lookup answer, cite the returned source and, when supplied, the arc
 surveys and deep research, let `research.py` produce and validate the synthesis. `methodology.md`
 contains techniques such as chaining, saturation and source weighing; `known-apis.md` contains
 source routes and limits; `keys.md` records which gateway-managed credentials exist.
+
+## The synthesis
+
+A synthesis written by hand follows `_Templates/research-topic.md`, which holds its structure
+only. It opens with the question the research set out to answer, in one line. The conclusions
+that affect a decision come first; if the research changed nothing, say so, because that is a
+real result and saves the next search. Group findings by theme, not by source, with one heading
+per idea. The method section says what was actually read and how, and points at the per-source
+breakdown in `sources/<topic>-sources.md` rather than repeating it. When a finding turns out to be
+wrong, record what was assumed, what proved it wrong and the correct answer, instead of quietly
+fixing the text: a research note that hides where it was wrong is less trustworthy, not more.
