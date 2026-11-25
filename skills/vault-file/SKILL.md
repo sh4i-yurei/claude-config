@@ -102,11 +102,12 @@ is worse than not keeping it.
 Deleting is still the right answer for an item that was only ever a to-do. The test
 is whether the *reasoning* is worth reading now the work is over.
 
-## The inbox is emptied weekly, not continuously
+## The inbox is emptied when Mark asks, not continuously
 
-Filing is a separate task from capturing, and the `weekly-review` skill is when it
-happens. That review reads the inbox and gives every item a disposition — filed,
-turned into a project, or dropped.
+Filing is a separate task from capturing. It happens when Mark asks for a triage, and
+nothing schedules it; the session brief shows how many items are waiting. A triage
+reads the inbox and gives every item a disposition — filed, turned into a project, or
+dropped.
 
 An item that has sat for three weeks and still connects to nothing is telling you
 something. Say so and offer to drop it, rather than filing it somewhere it will
