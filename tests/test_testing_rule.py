@@ -99,12 +99,18 @@ def test_project_note_skill_describes_facts_and_their_place():
     )
     assert facts == (
         "**Facts** holds every claim a decision or a build depends on, about a real system, tool, "
-        "service, machine, file or his own code, each with the evidence that proved it: a disposable "
-        "test with its command and output, a source read with the file and line, a documentation "
-        "lookup with its archive path, or a read-only check on the machine with the line it printed "
-        "and the date. A decision rests only on facts listed there, and a claim that is still unchecked "
+        "service, machine, file or his own code. Each fact has a type: behaviour, meaning how a tool, "
+        "service or machine acts, or other. Each piece of evidence has a type too: a run, a source "
+        "read with the file and line, a documentation lookup with its archive path, or a check on the "
+        "machine with the line it printed. A behaviour fact needs a run on the target machine, "
+        "recorded with its command, the machine, the saved output, the commit and date, and the "
+        "result that would prove it false. Reading proves an other fact, never a behaviour fact. A "
+        "fact is proven when the decision that rests on it is recorded, not when the handoff is "
+        "written: the facts a choice turns on before it is made, and the chosen option's details once "
+        "it wins. A decision rests only on facts listed there, and a claim that is still unchecked "
         "keeps its item out of Next. Build handoffs quote the entries their test cases depend on. "
-        "The rule is Workflow upkeep decision 47, and the steps are the gate in `codex-build-loop`."
+        "The rules are Workflow engine decision 42 and Workflow upkeep decision 47, and the steps are "
+        "the gate in `codex-build-loop`."
     )
     assert (
         paragraphs.index(facts)

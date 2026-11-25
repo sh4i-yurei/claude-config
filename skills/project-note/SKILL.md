@@ -27,8 +27,12 @@ size is unclear, call it a feature.
 A fix gets a sentence in its issue naming the problem and the change. A feature gets a short
 design in the project note or issue: the problem, approach, affected interfaces or data, test
 plan, and failure modes. Architecture gets that design plus at least two options compared with
-the reasons the other options lost. Ask Codex to critique the architecture before the build
-handoff.
+the reasons the other options lost, and work touching authentication or secrets gets a threat
+model. Ask Codex to critique the architecture before the design is called settled: at most two
+rounds, the second re-checking only what changed, then the open points go to Mark together.
+
+Research is sized too: a fix gets no lookups, a feature about 5 and architecture about 25. Going
+past that means asking Mark through Operator first. The rules are Workflow engine decision 42.
 
 ## Fully decided before the buildlog opens
 
@@ -45,8 +49,15 @@ vague scope you will assume, forget the assumption, and later contradict it with
 confidence — which is exactly what happened to the Ansible baseline role between 15 and 19
 September 2026, five reversals mid-build.
 
-So: research first, decisions recorded, then build. If a question surfaces mid-build that
-was missed, stop and settle it in the note rather than deciding it in passing.
+So: research first, decisions recorded, then build. Work goes in versions: design a version,
+make sure it holds, build it all at once, test it, gather what should improve, and design the next
+version. Nothing is built and bolted on ahead of the design, because that is how drift, bloat and
+over-engineering get in.
+
+If the build shows a decision was wrong, the decision is reopened and the change is recorded as an
+amendment, never decided in passing. A builder that finds a gap files an amendment request instead
+of improvising. A change inside a frame already decided is recorded by the owner, and the work goes
+on. A change against a decision Mark made goes to him, batched with any others.
 
 ## Where it goes
 
@@ -131,13 +142,19 @@ and notes go stale quietly — the Ansible project believed its droplets were Al
 for four days because nobody had looked.
 
 **Facts** holds every claim a decision or a build depends on, about a real system,
-tool, service, machine, file or his own code, each with the evidence that proved it:
-a disposable test with its command and output, a source read with the file and line,
-a documentation lookup with its archive path, or a read-only check on the machine
-with the line it printed and the date. A decision rests only on facts listed there,
-and a claim that is still unchecked keeps its item out of Next. Build handoffs quote
-the entries their test cases depend on. The rule is Workflow upkeep decision 47, and
-the steps are the gate in `codex-build-loop`.
+tool, service, machine, file or his own code. Each fact has a type: behaviour, meaning
+how a tool, service or machine acts, or other. Each piece of evidence has a type too:
+a run, a source read with the file and line, a documentation lookup with its archive
+path, or a check on the machine with the line it printed. A behaviour fact needs a run
+on the target machine, recorded with its command, the machine, the saved output, the
+commit and date, and the result that would prove it false. Reading proves an other
+fact, never a behaviour fact. A fact is proven when the decision that rests on it is
+recorded, not when the handoff is written: the facts a choice turns on before it is
+made, and the chosen option's details once it wins. A decision rests only on facts
+listed there, and a claim that is still unchecked keeps its item out of Next. Build
+handoffs quote the entries their test cases depend on. The rules are Workflow engine
+decision 42 and Workflow upkeep decision 47, and the steps are the gate in
+`codex-build-loop`.
 
 ## Decisions are numbered, and superseded rather than deleted
 
@@ -160,6 +177,19 @@ is more useful to future-Mark than a performance justification he doesn't believ
 relitigated the first time somebody thinks of one. The rejected option and its cost are
 half the value of writing it down.
 
+**Record who decided it and on what basis.** Each decision names who made it, the facts it
+rests on, and its basis: merit, planned work, or what exists today. A recommendation resting
+on what exists today is flagged for discussion with Mark, not approval. An architecture
+decision also says how we'll know it holds, usually a named test case, and what change would
+reopen it. Something deferred ("not yet") is recorded with the trigger that brings it back.
+
+**Prepare each choice; don't fire it off.** The owner prepares a choice with its background,
+the options and their proven facts, the basis label and a recommended default. Choices are
+collected and reach Mark through Operator one at a time with full context, never as a list to
+approve in bulk. Narrow, well-defined choices will go to Jev once it exists, and judgment
+calls and anything Jev is unsure of stay with Mark. Until Jev exists, every choice goes to
+Mark, prepared.
+
 **Back decisions with research or with the machine.** Where a decision came out of a
 research pass, the write-up goes in `70_Research/<topic>/` and the decision links to it.
 Where it came out of checking a real machine, paste the line the machine printed. A
@@ -177,6 +207,19 @@ old roadmap grew. What happened belongs in `20_Buildlogs`.
 through, grouped when it is long, with each item pointing at the decision it implements.
 Everything in it must be buildable from what is already decided above. If an item needs a
 decision nobody has made, it is not Next yet — it is an open question.
+
+Each item's behaviour is written as WHEN/THEN test cases from real inputs, scaled to its size:
+one case for a small item. The cases are the item's contract, including how it behaves when
+something it depends on fails. They live with the item in its GitHub issue, and Next links to
+the issue, while the note keeps the decisions and facts.
+
+**A design is settled when the record shows it, not when someone says so.** Every decision is
+decided. Every fact is typed, and each behaviour fact has a run that still gives the same
+result. The critique, where the size calls for one, ran after the last decision changed. No
+item points at an open question, and every deliberate skip is recorded with its reason and who
+approved it. Mark then approves the design through Operator. The engine's checker will compute
+this as the build loop's first gate (Workflow engine decision 42). Until it exists, the owner
+checks each point against the record before asking for approval.
 
 **Open questions** should hold only what genuinely cannot be answered yet, each with what
 would answer it, and it should say plainly that nothing there blocks the build. If
