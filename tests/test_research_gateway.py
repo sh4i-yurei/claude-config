@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
-from contextlib import contextmanager, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -71,6 +71,10 @@ class GatewayTests(unittest.TestCase):
         self.calls = []
         self.statuses = [200]
         self.returncodes = [0]
+        self.write_outs = None
+        self.body_bytes = b'{"ok":true}'
+        self.extra_headers = ""
+        self.write_headers = True
         self.remaining = 4000
         self.rate_headers = True
         self.usd_remaining = None
@@ -278,7 +282,7 @@ class GatewayTests(unittest.TestCase):
     def fake_curl(self, command, *, input, capture_output, text, check):
         self.assertTrue(capture_output)
         self.assertTrue(text)
-        self.assertFalse(check)
+        self.assertIs(check, False)
         self.assertNotIn("TEST_ONLY_SECRET", " ".join(command))
         if self.expect_key:
             self.assertIn("TEST_ONLY_SECRET", input)
@@ -286,8 +290,8 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(input.count("url = "), 1)
         with self.lock.open("a+b") as stream, self.assertRaises(BlockingIOError):
             fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        status = self.statuses[len(self.calls)]
-        Path(command[command.index("--output") + 1]).write_bytes(b'{"ok":true}')
+        status = self.statuses[min(len(self.calls), len(self.statuses) - 1)]
+        Path(command[command.index("--output") + 1]).write_bytes(self.body_bytes)
         headers = f"HTTP/2 {status}\r\nContent-Type: application/json\r\n"
         if self.rate_headers:
             headers += (
@@ -298,17 +302,26 @@ class GatewayTests(unittest.TestCase):
             headers += f"X-RateLimit-Remaining-USD: {self.usd_remaining}\r\n"
         if self.retry_after is not None:
             headers += f"Retry-After: {self.retry_after}\r\n"
-        Path(command[command.index("--dump-header") + 1]).write_bytes(
-            (headers + "\r\n").encode()
-        )
+        headers += self.extra_headers
+        if self.write_headers:
+            Path(command[command.index("--dump-header") + 1]).write_bytes(
+                (headers + "\r\n").encode()
+            )
         self.calls.append((command, input))
-        size = len(b'{"ok":true}')
+        size = len(self.body_bytes)
+        write_out = (
+            self.write_outs[min(len(self.calls) - 1, len(self.write_outs) - 1)]
+            if self.write_outs is not None
+            else f"{status} 0.2 {size}"
+        )
         return type(
             "Result",
             (),
             {
-                "stdout": f"{status} 0.2 {size}",
-                "returncode": self.returncodes[-1],
+                "stdout": write_out,
+                "returncode": self.returncodes[
+                    min(len(self.calls) - 1, len(self.returncodes) - 1)
+                ],
             },
         )()
 
@@ -320,6 +333,613 @@ class GatewayTests(unittest.TestCase):
         path = next((self.vault / "70_Research" / "_log").glob("*.jsonl"))
         verify_log(path)
         return [json.loads(line) for line in path.read_text().splitlines()]
+
+    def observed_request(self, url="https://api.github.com/rate_limit", *args):
+        self.out = self.out.with_name(f"reply-{len(self.calls) + 1}.json")
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = self.run_gateway(*args, url)
+        return code, stdout.getvalue().splitlines(), stderr.getvalue().splitlines()
+
+    def saved_entry(self, host="api.github.com"):
+        return json.loads(self.state.read_text())[host]
+
+    def put_entry(self, entry, host="api.github.com"):
+        self.state.write_text(json.dumps({host: entry}))
+
+    def test_request_address_refusals_print_exactly(self):
+        for problem, code, message in (
+            (
+                socket.gaierror("lookup failed"),
+                1,
+                "[gw] ERROR api.github.com: DNS resolution failed: lookup failed",
+            ),
+            (ValueError("private address"), 2, "[gw] REFUSED: private address"),
+        ):
+            with (
+                self.subTest(problem=problem),
+                patch.object(gw, "public_address", side_effect=problem),
+            ):
+                self.assertEqual(self.observed_request(), (code, [], [message]))
+                self.assertEqual(self.calls, [])
+
+    def test_request_cooldown_boundary_and_error_streak(self):
+        settings = gw.load_config()["gateway"]
+        instant = 2_000_000_000.0
+        cases = (
+            (settings["error_streak"], instant - settings["error_cooldown_s"] + 1, 3),
+            (settings["error_streak"], instant - settings["error_cooldown_s"], 0),
+            (
+                settings["error_streak"] - 1,
+                instant - settings["error_cooldown_s"] + 1,
+                0,
+            ),
+        )
+        for index, (errors, end, expected) in enumerate(cases):
+            with (
+                self.subTest(index=index),
+                patch.object(gw.time, "time", return_value=instant),
+                patch.object(gw.time, "sleep"),
+            ):
+                self.put_entry({"errors": errors, "end": end})
+                code, stdout, stderr = self.observed_request()
+                self.assertEqual(code, expected)
+                self.assertEqual(
+                    stderr,
+                    ["[gw] REFUSED api.github.com: error cooldown"] if expected else [],
+                )
+                self.assertEqual(
+                    stdout,
+                    []
+                    if expected
+                    else [
+                        "[gw] api.github.com attempt 1 HTTP 200 0.20s",
+                        "[gw] requests made: 1",
+                    ],
+                )
+                self.assertEqual(len(self.calls), index)
+
+    def test_request_daily_cap_boundary_and_new_day(self):
+        cap = gw.load_config()["gateway"]["daily_host_cap"]
+        day = time.strptime("2026-09-26", "%Y-%m-%d")
+        for index, (saved_day, count, code, final_count) in enumerate(
+            (
+                ("2026-09-26", cap, 3, None),
+                ("2026-09-26", cap - 1, 0, cap),
+                ("2026-09-25", cap, 0, 1),
+            )
+        ):
+            with (
+                self.subTest(index=index),
+                patch.object(gw.time, "localtime", return_value=day),
+                patch.object(gw.time, "sleep"),
+            ):
+                self.put_entry({"day": saved_day, "count": count})
+                result, stdout, stderr = self.observed_request()
+                self.assertEqual(result, code)
+                self.assertEqual(
+                    stderr, ["[gw] REFUSED api.github.com: daily cap"] if code else []
+                )
+                self.assertEqual(
+                    stdout,
+                    []
+                    if code
+                    else [
+                        "[gw] api.github.com attempt 1 HTTP 200 0.20s",
+                        "[gw] requests made: 1",
+                    ],
+                )
+                if final_count is not None:
+                    self.assertEqual(self.saved_entry()["count"], final_count)
+                self.assertEqual(len(self.calls), index)
+
+    def test_request_margin_and_config_refusals_print_exactly(self):
+        with patch.object(gw, "margin_refusal", return_value="quota held"):
+            self.assertEqual(
+                self.observed_request(),
+                (4, [], ["[gw] REFUSED api.github.com: quota held"]),
+            )
+        with patch.object(gw, "request_config", side_effect=ValueError("bad config")):
+            self.assertEqual(
+                self.observed_request(),
+                (2, [], ["[gw] REFUSED api.github.com: bad config"]),
+            )
+        self.assertEqual(self.calls, [])
+
+    def test_request_pacing_uses_provider_floor_ceiling_and_elapsed_time(self):
+        instant = 2_000_000_000.0
+        cases = (
+            ("export.arxiv.org", 0.1, 1.0, 2.0),
+            ("api.github.com", 0.01, 0.5, 0.5),
+            ("api.github.com", 20.0, 1.0, 119.0),
+            ("api.github.com", 2.0, 1.0, 19.0),
+            ("api.github.com", 2.0, 20.0, 0.0),
+        )
+        for index, (host, duration, elapsed, expected_wait) in enumerate(cases):
+            with (
+                self.subTest(index=index),
+                patch.object(gw.time, "time", return_value=instant),
+                patch.object(gw.time, "sleep") as sleep,
+            ):
+                self.expect_key = host == "api.github.com"
+                self.put_entry({"end": instant - elapsed, "dur": duration}, host)
+                code, stdout, stderr = self.observed_request(
+                    f"https://{host}/rate_limit"
+                )
+                self.assertEqual(code, 0)
+                self.assertEqual(
+                    stdout,
+                    [f"[gw] {host} attempt 1 HTTP 200 0.20s", "[gw] requests made: 1"],
+                )
+                self.assertEqual(
+                    stderr,
+                    [f"[gw] pacing {host}: waiting {expected_wait:.1f}s"]
+                    if expected_wait
+                    else [],
+                )
+                self.assertEqual(
+                    sleep.call_args_list,
+                    [unittest.mock.call(expected_wait)] if expected_wait else [],
+                )
+
+    def test_request_curl_command_and_ipv6_resolve(self):
+        settings = gw.load_config()["gateway"]
+        for host, url in (
+            ("api.github.com", "https://api.github.com/rate_limit"),
+            ("2606:4700:4700::1111", "https://[2606:4700:4700::1111]/"),
+        ):
+            with self.subTest(host=host):
+                self.expect_key = host == "api.github.com"
+                self.assertEqual(self.observed_request(url)[0], 0)
+                command = self.calls[-1][0]
+                body = command[command.index("--output") + 1]
+                headers = command[command.index("--dump-header") + 1]
+                self.assertEqual(Path(body).name, "body")
+                self.assertEqual(Path(headers).name, "headers")
+                resolve_host = f"[{host}]" if ":" in host else host
+                self.assertEqual(
+                    command,
+                    [
+                        gw.CURL,
+                        "-q",
+                        "--silent",
+                        "--show-error",
+                        "--connect-timeout",
+                        str(settings["connect_timeout_s"]),
+                        "--max-time",
+                        str(settings["max_time_s"]),
+                        "--proto",
+                        "=https",
+                        "--globoff",
+                        "--noproxy",
+                        "*",
+                        "--resolve",
+                        f"{resolve_host}:443:140.82.112.6",
+                        "--output",
+                        body,
+                        "--max-filesize",
+                        str(settings["max_body_bytes"] + 1),
+                        "--dump-header",
+                        headers,
+                        "--write-out",
+                        "%{http_code} %{time_total} %{size_download}",
+                        "--config",
+                        "-",
+                    ],
+                )
+
+    def test_request_write_out_fields_and_transfer_failure(self):
+        cases = (
+            ("200 0.25 11", 0, 200, 0.25),
+            ("200 0.25", 0, 200, 0.25),
+            ("200", 0, 200, 0.0),
+            ("", 0, 0, 0.0),
+            ("abc", 0, 0, 0.0),
+            ("200 0.25 11", 28, 0, 0.25),
+        )
+        for index, (write_out, returncode, status, duration) in enumerate(cases):
+            with self.subTest(index=index):
+                self.write_outs = [write_out] * (index + 1)
+                self.returncodes = [0] * index + [returncode]
+                self.put_entry({})
+                code, stdout, stderr = self.observed_request()
+                self.assertEqual(code, 1 if status == 0 else 0)
+                self.assertEqual(
+                    stdout,
+                    [
+                        f"[gw] api.github.com attempt 1 HTTP {status} {duration:.2f}s",
+                        "[gw] requests made: 1",
+                    ],
+                )
+                self.assertEqual(stderr, [])
+                self.assertEqual(
+                    json.loads(self.out.read_text())["duration_s"], duration
+                )
+                self.assertEqual(self.log_records()[-1]["duration_s"], duration)
+                self.assertEqual(self.saved_entry()["code"], status)
+
+    def test_request_oversize_and_normal_body_fields(self):
+        limit = gw.load_config()["gateway"]["max_body_bytes"]
+        self.write_outs = ["200 0.25 4096"]
+        self.returncodes = [63]
+        self.assertEqual(self.observed_request()[0], 1)
+        saved = json.loads(self.out.read_text())
+        self.assertEqual(
+            saved["body_omitted"], f"curl stopped response over {limit} bytes"
+        )
+        self.assertEqual(saved["body_size"], 4096)
+        self.write_outs = ["200 0.25 4096", "200 0.25 11"]
+        self.returncodes = [63, 0]
+        self.assertEqual(self.observed_request()[0], 0)
+        saved = json.loads(self.out.read_text())
+        self.assertNotIn("body_omitted", saved)
+        self.assertNotIn("body_size", saved)
+
+    def test_request_success_messages_log_and_envelope(self):
+        with patch.dict(os.environ, {"RESEARCH_RUN": "run-87"}):
+            self.assertEqual(
+                self.observed_request(),
+                (
+                    0,
+                    [
+                        "[gw] api.github.com attempt 1 HTTP 200 0.20s",
+                        "[gw] requests made: 1",
+                    ],
+                    [],
+                ),
+            )
+        record = self.log_records()[-1]
+        saved = json.loads(self.out.read_text())
+        self.assertEqual(record["run"], "run-87")
+        self.assertEqual(record["attempt"], 1)
+        self.assertEqual(record["status"], 200)
+        for stamp in (record["ts"], saved["requested_at"]):
+            self.assertTrue(stamp.endswith("Z"), stamp)
+            self.assertEqual(
+                datetime.fromisoformat(stamp.replace("Z", "+00:00")).tzinfo,
+                timezone.utc,
+            )
+        self.assertEqual(self.saved_entry()["code"], 200)
+        with patch.dict(os.environ, {"RESEARCH_RUN": ""}, clear=False):
+            del os.environ["RESEARCH_RUN"]
+            self.assertEqual(self.observed_request()[0], 0)
+        self.assertIsNone(self.log_records()[-1]["run"])
+
+    def test_request_window_restarts_at_boundary_and_accumulates_inside(self):
+        instant = 2_000_000_000.0
+        self.rate_headers = False
+        for index, (old_end, expected_used) in enumerate(
+            ((instant - 1, 1), (instant, 1), (instant + 100, 8))
+        ):
+            with (
+                self.subTest(index=index),
+                patch.object(gw.time, "time", return_value=instant),
+            ):
+                self.put_entry({"window_end": old_end, "window_used": 7})
+                self.assertEqual(self.observed_request()[0], 0)
+                entry = self.saved_entry()
+                self.assertEqual(entry["window_used"], expected_used)
+                self.assertEqual(
+                    entry["window_end"],
+                    instant + 3600 if old_end <= instant else old_end,
+                )
+
+    def test_request_retry_backoff_and_bounded_retry_after(self):
+        cases = (("api.github.com", 4), ("export.arxiv.org", 6))
+        for host, backoff in cases:
+            with self.subTest(host=host), patch.object(gw.time, "sleep") as sleep:
+                self.expect_key = host == "api.github.com"
+                self.statuses = (
+                    [429, 200]
+                    if not self.calls
+                    else [200] * len(self.calls) + [429, 200]
+                )
+                code, stdout, stderr = self.observed_request(
+                    f"https://{host}/rate_limit"
+                )
+                self.assertEqual(code, 0)
+                self.assertEqual(
+                    stdout,
+                    [
+                        f"[gw] {host} attempt 1 HTTP 429 0.20s",
+                        f"[gw] {host} attempt 2 HTTP 200 0.20s",
+                        "[gw] requests made: 2",
+                    ],
+                )
+                self.assertEqual(
+                    stderr, [f"[gw] 429 from {host}: retry backoff {backoff}s"]
+                )
+                sleep.assert_called_once_with(backoff)
+        self.retry_after = "121"
+        self.expect_key = True
+        self.put_entry({})
+        self.statuses = [200] * len(self.calls) + [429]
+        with patch.object(gw.time, "sleep") as sleep:
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(
+            (code, stderr),
+            (4, ["[gw] REFUSED api.github.com: Retry-After exceeds the bounded wait"]),
+        )
+        self.assertEqual(
+            stdout,
+            ["[gw] api.github.com attempt 1 HTTP 429 0.20s", "[gw] requests made: 1"],
+        )
+        sleep.assert_not_called()
+
+    def test_request_retry_margin_prints_exact_refusal(self):
+        self.statuses = [429]
+        self.remaining = 500
+        with patch.object(gw.time, "sleep") as sleep:
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 4)
+        self.assertEqual(
+            stdout,
+            ["[gw] api.github.com attempt 1 HTTP 429 0.20s", "[gw] requests made: 1"],
+        )
+        self.assertEqual(
+            stderr,
+            [
+                "[gw] REFUSED api.github.com: reported quota margin reached; resets 2033-05-18T03:33:20+00:00 before retry"
+            ],
+        )
+        sleep.assert_not_called()
+
+    def test_request_daily_cap_between_attempts_keeps_envelope(self):
+        self.statuses = [429, 200]
+        cap = gw.load_config()["gateway"]["daily_host_cap"]
+        self.put_entry({"day": "2026-09-26", "count": cap - 1})
+        day = time.strptime("2026-09-26", "%Y-%m-%d")
+        with (
+            patch.object(gw.time, "localtime", return_value=day),
+            patch.object(gw.time, "sleep") as sleep,
+        ):
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 3)
+        self.assertEqual(
+            stdout,
+            ["[gw] api.github.com attempt 1 HTTP 429 0.20s", "[gw] requests made: 1"],
+        )
+        self.assertEqual(
+            stderr,
+            [
+                "[gw] 429 from api.github.com: retry backoff 4s",
+                "[gw] REFUSED api.github.com: daily cap before request",
+            ],
+        )
+        self.assertEqual(json.loads(self.out.read_text())["status"], 429)
+        self.assertEqual(len(self.calls), 1)
+        sleep.assert_called_once_with(4)
+
+    def test_request_status_classification_and_duration_floor(self):
+        for index, (status, expected_errors) in enumerate(
+            (
+                (0, 3),
+                (399, 0),
+                (400, 3),
+                (404, 0),
+                (429, 0),
+                (500, 3),
+                (599, 3),
+                (600, 0),
+            )
+        ):
+            with self.subTest(status=status), patch.object(gw.time, "sleep"):
+                self.statuses = [200] * len(self.calls) + (
+                    [429, 429, 429] if status == 429 else [status]
+                )
+                self.write_outs = ["200 0.1 11"] * len(self.calls) + (
+                    ["429 0.1 11"] * 3 if status == 429 else [f"{status} 0.1 11"]
+                )
+                self.put_entry({"errors": 2, "dur": 0.5})
+                code, stdout, stderr = self.observed_request()
+                entry = self.saved_entry()
+                self.assertEqual(entry["errors"], expected_errors)
+                self.assertEqual(entry["code"], status)
+                self.assertEqual(entry["dur"], 0.5)
+                self.assertEqual(
+                    stdout[-1], f"[gw] requests made: {3 if status == 429 else 1}"
+                )
+
+    def test_request_two_attempts_sum_durations_and_save_last(self):
+        self.statuses = [429, 200]
+        self.write_outs = ["429 0.25 11", "200 0.5 11"]
+        instant = 2_000_000_000.0
+        with (
+            patch.object(gw.time, "time", return_value=instant),
+            patch.object(gw.time, "sleep") as sleep,
+        ):
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            [
+                "[gw] api.github.com attempt 1 HTTP 429 0.25s",
+                "[gw] api.github.com attempt 2 HTTP 200 0.50s",
+                "[gw] requests made: 2",
+            ],
+        )
+        self.assertEqual(stderr, ["[gw] 429 from api.github.com: retry backoff 4s"])
+        sleep.assert_called_once_with(4)
+        self.assertEqual(json.loads(self.out.read_text())["duration_s"], 0.75)
+        self.assertEqual(self.saved_entry()["dur"], 0.5)
+        self.assertEqual(self.saved_entry()["end"], instant)
+
+    def test_request_second_retry_doubles_backoff_and_stops_at_limit(self):
+        self.statuses = [429, 429, 429]
+        with patch.object(gw.time, "sleep") as sleep:
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            [
+                "[gw] api.github.com attempt 1 HTTP 429 0.20s",
+                "[gw] api.github.com attempt 2 HTTP 429 0.20s",
+                "[gw] api.github.com attempt 3 HTTP 429 0.20s",
+                "[gw] requests made: 3",
+            ],
+        )
+        self.assertEqual(
+            stderr,
+            [
+                "[gw] 429 from api.github.com: retry backoff 4s",
+                "[gw] 429 from api.github.com: retry backoff 8s",
+            ],
+        )
+        self.assertEqual(
+            sleep.call_args_list, [unittest.mock.call(4), unittest.mock.call(8)]
+        )
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(json.loads(self.out.read_text())["attempts"], 3)
+
+    def test_request_retry_after_at_ceiling_is_allowed(self):
+        self.statuses = [429, 200]
+        self.retry_after = "120"
+        with patch.object(gw.time, "sleep") as sleep:
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            [
+                "[gw] api.github.com attempt 1 HTTP 429 0.20s",
+                "[gw] api.github.com attempt 2 HTTP 200 0.20s",
+                "[gw] requests made: 2",
+            ],
+        )
+        self.assertEqual(stderr, ["[gw] 429 from api.github.com: retry backoff 120s"])
+        sleep.assert_called_once_with(120.0)
+
+    def test_request_reads_only_maximum_body_plus_one_byte(self):
+        limit = gw.load_config()["gateway"]["max_body_bytes"]
+        self.body_bytes = b"x" * (limit + 2)
+        self.returncodes = [63]
+        self.write_outs = [f"200 0.25 {limit + 2}"]
+        self.assertEqual(self.observed_request()[0], 1)
+        saved = json.loads(self.out.read_text())
+        self.assertEqual(saved["body_size"], limit + 2)
+        self.assertEqual(
+            saved["sha256"], hashlib.sha256(self.body_bytes[: limit + 1]).hexdigest()
+        )
+
+    def test_request_provider_cost_adds_to_unexpired_window(self):
+        instant = 2_000_000_000.0
+        self.expect_key = True
+        self.rate_headers = False
+        self.body_bytes = b'{"creditsUsed":2}'
+        self.put_entry(
+            {"window_used": 7, "window_end": instant + 100}, "api.firecrawl.dev"
+        )
+        with patch.object(gw.time, "time", return_value=instant):
+            code, stdout, stderr = self.observed_request(
+                "https://api.firecrawl.dev/v2/search"
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            [
+                "[gw] api.firecrawl.dev attempt 1 HTTP 200 0.20s",
+                "[gw] requests made: 1",
+            ],
+        )
+        self.assertEqual(stderr, [])
+        self.assertEqual(self.saved_entry("api.firecrawl.dev")["window_used"], 9)
+
+    def test_request_status_200_300_and_301_duration_boundary(self):
+        for index, (status, expected_duration) in enumerate(
+            ((200, 0.1), (300, 0.5), (301, 0.5))
+        ):
+            with self.subTest(status=status):
+                self.put_entry({"dur": 0.5})
+                self.statuses = [200] * len(self.calls) + [status]
+                self.write_outs = ["200 0.1 11"] * len(self.calls) + [
+                    f"{status} 0.1 11"
+                ]
+                code, stdout, stderr = self.observed_request()
+                self.assertEqual(code, 0)
+                self.assertEqual(
+                    stdout,
+                    [
+                        f"[gw] api.github.com attempt 1 HTTP {status} 0.10s",
+                        "[gw] requests made: 1",
+                    ],
+                )
+                self.assertEqual(stderr, [])
+                self.assertEqual(self.saved_entry()["dur"], expected_duration)
+
+    def test_request_missing_response_headers_still_writes_envelope(self):
+        self.write_headers = False
+        code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            ["[gw] api.github.com attempt 1 HTTP 200 0.20s", "[gw] requests made: 1"],
+        )
+        self.assertEqual(stderr, [])
+        self.assertEqual(json.loads(self.out.read_text())["headers"], {})
+
+    def test_request_missing_error_count_obeys_configured_streak(self):
+        config = gw.load_config()
+        config["gateway"]["error_streak"] = 1
+        instant = 100.0
+        with (
+            patch.object(gw, "load_config", return_value=config),
+            patch.object(gw.time, "time", return_value=instant),
+            patch.object(gw.time, "sleep"),
+        ):
+            self.put_entry({"end": instant})
+            self.assertEqual(
+                self.observed_request(),
+                (
+                    0,
+                    [
+                        "[gw] api.github.com attempt 1 HTTP 200 0.20s",
+                        "[gw] requests made: 1",
+                    ],
+                    ["[gw] pacing api.github.com: waiting 1.0s"],
+                ),
+            )
+
+    def test_request_cooldown_without_saved_end_at_exact_boundary(self):
+        config = gw.load_config()
+        instant = float(config["gateway"]["error_cooldown_s"])
+        self.put_entry({"errors": config["gateway"]["error_streak"]})
+        with patch.object(gw.time, "time", return_value=instant):
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            ["[gw] api.github.com attempt 1 HTTP 200 0.20s", "[gw] requests made: 1"],
+        )
+        self.assertEqual(stderr, [])
+
+    def test_request_pacing_without_saved_duration_uses_floor(self):
+        instant = 2_000_000_000.0
+        self.put_entry({"end": instant})
+        with (
+            patch.object(gw.time, "time", return_value=instant),
+            patch.object(gw.time, "sleep") as sleep,
+        ):
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            ["[gw] api.github.com attempt 1 HTTP 200 0.20s", "[gw] requests made: 1"],
+        )
+        self.assertEqual(stderr, ["[gw] pacing api.github.com: waiting 1.0s"])
+        sleep.assert_called_once_with(1)
+
+    def test_request_missing_window_usage_starts_with_request_cost(self):
+        instant = 2_000_000_000.0
+        self.rate_headers = False
+        self.put_entry({"window_end": instant + 100})
+        with patch.object(gw.time, "time", return_value=instant):
+            self.assertEqual(self.observed_request()[0], 0)
+        self.assertEqual(self.saved_entry()["window_used"], 1)
+
+    def test_request_failure_without_saved_duration_keeps_last_duration(self):
+        self.statuses = [400]
+        self.write_outs = ["400 0.1 11"]
+        self.assertEqual(self.observed_request()[0], 0)
+        self.assertEqual(self.saved_entry()["dur"], 0.1)
 
     def test_key_injection_lock_envelope_and_chained_log(self):
         code = self.run_gateway("https://api.github.com/repos/openai/openai-python")
