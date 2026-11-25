@@ -1,4 +1,24 @@
 # Equivalent mutants confirmed by scoped local mutmut runs.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_3
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_4
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_6
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_12
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_13
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_14
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_15
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_16
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_17
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_page_lookup__mutmut_84
+  reason: normalize_url has already refused a URL without a hostname, so the empty-string fallback is never reached.
 - mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_40
   reason: json.loads accepts bytes as well as text, so changing text=True leaves the status result unchanged.
 - mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_41

@@ -1134,6 +1134,53 @@ class LookupTests(unittest.TestCase):
                 self.assertEqual(outcome["tried"][0]["status"], "not found")
                 self.assertEqual(outcome["tried"][0]["reason"], "target answered 404")
 
+    def test_page_target_404_returns_complete_outcome_for_fresh_and_cached(self):
+        target = "https://example.com/path?q=1"
+        for cached in (False, True):
+            with self.subTest(cached=cached):
+                firecrawl = self.response(
+                    "Firecrawl scrape",
+                    "https://api.firecrawl.dev/v2/scrape",
+                    {
+                        "success": True,
+                        "data": {
+                            "markdown": self.page_text("openrig-faq-firecrawl.md"),
+                            "metadata": {"statusCode": 404},
+                        },
+                    },
+                    cached=cached,
+                )
+                with (
+                    mock.patch.object(
+                        lookup, "gateway_response", return_value=firecrawl
+                    ) as gateway,
+                    mock.patch.object(
+                        lookup, "public_address", return_value="93.184.216.34"
+                    ),
+                ):
+                    outcome = lookup.page_lookup([target], root=self.root)
+                self.assertEqual(
+                    outcome,
+                    {
+                        "kind": "page",
+                        "query": {"url": target},
+                        "status": "not found",
+                        "cached": cached,
+                        "answer": None,
+                        "source": None,
+                        "tried": [
+                            {
+                                "source": "Firecrawl scrape",
+                                "status": "not found",
+                                "http": 200,
+                                "archive": str(firecrawl.path),
+                                "reason": "target answered 404",
+                            }
+                        ],
+                    },
+                )
+                gateway.assert_called_once()
+
     def test_page_target_503_and_challenge_fall_back_to_bright_data(self):
         # This written challenge is 1,500 characters, titled Just a moment..., and mentions cf-browser-verification.
         for name, status, reason in (
