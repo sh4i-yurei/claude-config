@@ -667,7 +667,12 @@ class GatewayTests(unittest.TestCase):
 
     def test_request_logs_without_relocking_the_gateway_lock(self):
         result = []
-        with patch.dict(gw.append_log.__kwdefaults__, {"lock_path": self.lock}):
+        append_log = gw.append_log
+
+        def append_with_gateway_lock(entry, **kwargs):
+            return append_log(entry, lock_path=self.lock, **kwargs)
+
+        with patch.object(gw, "append_log", side_effect=append_with_gateway_lock):
             worker = threading.Thread(
                 target=lambda: result.append(self.observed_request()), daemon=True
             )
