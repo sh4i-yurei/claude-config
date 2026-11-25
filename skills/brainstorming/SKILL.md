@@ -59,7 +59,14 @@ and say so.
 The ground to cover is territory, not a script: what kind of thing this is; why now and what
 success looks like; goals, non-goals and anti-goals, meaning what would make it a failure even if it
 technically works; prior art he liked or hated; what exists now and what he has tried; and the
-details he cares about. Never read these out as a list of questions.
+details he cares about. Start from what he will actually see: the messages, commands and pages,
+because a design written from the outside in shows what is missing sooner. Never read these out as
+a list of questions.
+
+Before anything is called settled, walk each part through slowly, the way it will run, and ask
+where it could go wrong: are we assuming how the parts fit together, and is there a hard choice
+that should be settled now so it doesn't stop the build later? Anything this turns up becomes a
+question, a fact to prove, or a decision.
 
 ## Play it back as you go
 
@@ -77,20 +84,30 @@ Sketch the two or three that remain concretely, grounded in what the project act
 what each trades off. Recommend one and say why. Development cost is never a reason for an approach
 (Operating model decision 7).
 
+Prove the facts the choice turns on before it is made, and the chosen option's details once it
+wins. Prepare the choice for Mark: the background, the options with their proven facts, the basis
+of your recommendation (merit, planned work, or what exists today) and a recommended default. A
+recommendation resting on what exists today is flagged for discussion. Choices reach him through
+Operator one at a time with full context, never as a list to approve in bulk (Workflow engine
+decision 42).
+
 ## Size the work
 
 Use the three questions in `00_Inbox/README.md` and the project-note skill's "Sizing the design".
 A fix gets a sentence in its issue. A feature gets a short design. Architecture gets at least two
-options compared, with the reasons the others lost, and a Codex critique before any build handoff.
+options compared, with the reasons the others lost, and a Codex critique before the design is
+called settled. The research budget follows the size: no lookups for a fix, about 5 for a feature
+and about 25 for architecture, and going past it means asking Mark through Operator.
 If the work grows mid-conversation, stop, say so, and step up a size. If it is really several
 projects, say so and agree an order.
 
 ## Learning by trying
 
 Sometimes a quick experiment is the cheapest way to learn what he wants or whether something works.
-Run it as a disposable test in a scratch folder, the kind of evidence the gate in `codex-build-loop`
-accepts, and record its command and output as a Fact in the project note. An experiment is never
-the start of the build. Anything worth keeping goes through the build loop.
+The riskiest assumption in a design gets one first. Run it as a disposable test in a scratch folder,
+on the machine the build will run on, and record it as a behaviour Fact in the project note: the
+command, the machine, the saved output, and the result that would have proved it false. An
+experiment is never the start of the build. Anything worth keeping goes through the build loop.
 
 ## Where the design lands
 
@@ -101,25 +118,19 @@ design file in a repository, because the vault plans and the repositories carry 
 
 ## The builder check
 
-For a feature or architecture, before items enter Next, run a fresh read-only Claude in a labelled
-pane, as `codex-build-loop` sets out for every job, with this prompt:
+The builder check is no longer a pass of its own. It is one more output of the pre-flight, which
+already reads each handoff fresh (Workflow engine decision 42). There, the pre-flight lists the
+places where a builder would still have to guess and a wrong guess would matter, quoting the spec
+for each one. Before that, while the design is being written, ask yourself the same question.
 
-> You are a skilled builder in this domain. You have been handed the project note at `<path>` and
-> asked to plan its build. You cannot talk to its author. Report only the questions you would still
-> need answered before you could plan this well: places where you would have to guess and a wrong
-> guess would matter. For each, give the question and why the answer changes the plan. Rank them by
-> importance. Skip anything the note leaves to the builder, anything you could reasonably decide
-> yourself, and wording. If nothing important is left, say "nothing important left".
-
-Sort the answers into three piles. Questions already answered by the conversation or the project
+Sort the guesses into three piles. Questions already answered by the conversation or the project
 get the answer written into the note. Minor questions that a sensible builder could settle without
 changing what gets built, you settle and mark in the note as your call. Questions only Mark can
-answer, whose answer changes what gets built, go to him in one message, most important first. That
-is the only round the check produces.
+answer, whose answer changes what gets built, go to him prepared, one at a time. A guess that
+changes a decision already settled goes through the amendment path in the project-note skill.
 
-The builder check is not the pre-flight, which reads a finished handoff against the code, and not
-the Codex critique, which attacks the design. It asks whether the note is complete enough to plan
-from.
+The Codex critique is a separate pass. It names the three failures most likely on the first live
+run, each tied to a decision or fact by number.
 
 ## The gate
 
@@ -140,7 +151,8 @@ are fine.
 ## Who uses this
 
 Operator, the lead, when it turns what Mark wants into work. Project owners, when a project needs a
-new decision. The designer and researcher roles. Any session in which Mark asks for something new.
+new decision: designing, proving and researching are steps of the owner's job, not separate roles
+(Work system decision 18, amended 2026-11-25). Any session in which Mark asks for something new.
 
 ## Attribution
 
