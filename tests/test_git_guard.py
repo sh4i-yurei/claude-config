@@ -377,7 +377,7 @@ for cwd, cmd, who, reason in issue_tool_reason_cases:
     assert decision["permissionDecision"] == "deny", (cmd, decision)
     if reason == "issue tool":
         assert decision["permissionDecisionReason"] == (
-            "Use tools/workflow/issue.py open; see README.md, Opening an issue from a file."
+            "Use tools/workflow/issue.py open for our repositories, or issue.py upstream for one outside our boards; see README.md, Opening an issue from a file."
         ), (cmd, decision)
     elif reason == "attribution":
         assert decision["permissionDecisionReason"] == (

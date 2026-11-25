@@ -74,6 +74,10 @@ description = "Something broken"
 color = "D93F0B"
 description = "A process step bent on purpose, with the reason on record"
 
+[global.upstream]
+color = "5319E7"
+description = "Tracks an issue filed in another project"
+
 [repository."sh4i-yurei/ci-workflows"."scope:ci"]
 color = "5319E7"
 description = ""

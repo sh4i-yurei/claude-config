@@ -1,0 +1,50 @@
+# Keeps only Claude Code's skill_activated events, without the user's email or account
+# and organisation ids, in one rotating JSON-lines file. Linked as
+# ~/.config/claude-telemetry/collector.yaml and mounted read-only by claude-telemetry.container.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 64
+  # Claude Code sends every event it logs; only skill activations are kept.
+  filter/skills-only:
+    error_mode: ignore
+    logs:
+      log_record:
+        - 'attributes["event.name"] != "skill_activated"'
+  # These ride on every event record. The email arrives with an OAuth sign-in. The
+  # transform processor does this because the attributes processor leaves the core
+  # distribution in v0.167.0.
+  transform/strip-identity:
+    error_mode: ignore
+    log_statements:
+      - context: log
+        statements:
+          - delete_key(attributes, "user.email")
+          - delete_key(attributes, "user.account_uuid")
+          - delete_key(attributes, "user.account_id")
+          - delete_key(attributes, "organization.id")
+
+exporters:
+  file/skills:
+    path: /data/skill-activations.jsonl
+    format: json
+    rotation:
+      max_megabytes: 10
+      max_days: 365
+      max_backups: 20
+
+service:
+  telemetry:
+    metrics:
+      level: none
+  pipelines:
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/skills-only, transform/strip-identity]
+      exporters: [file/skills]

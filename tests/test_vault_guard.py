@@ -28,7 +28,7 @@ bashlex_compat.install()
 GUARD.bashlex = bashlex
 GUARD.bashlex_compat = bashlex_compat
 SECRET = "Secrets stay out of transcripts: "
-ISSUE = "Use tools/workflow/issue.py open; see README.md, Opening an issue from a file."
+ISSUE = "Use tools/workflow/issue.py open for our repositories, or issue.py upstream for one outside our boards; see README.md, Opening an issue from a file."
 ATTRIBUTION = (
     "Commits and pull requests carry no AI attribution: remove the Co-authored-by "
     "trailer or Generated with line (Operating model decision 12)."
