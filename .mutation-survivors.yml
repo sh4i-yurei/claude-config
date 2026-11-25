@@ -107,17 +107,38 @@
 - mutant: hooks.git-guard.x_commit_options__mutmut_35
   reason: >-
     A timeout of 3 seconds instead of 2 differs only when the parser runs for between 2 and 3 seconds, which no portable test can arrange.
-- mutant: hooks.git-guard.x_git_problem__mutmut_140
+- mutant: hooks.git-guard.x_push_problem__mutmut_8
+  reason: The short-flag pattern below already matches -f.
+- mutant: hooks.git-guard.x_push_problem__mutmut_9
+  reason: >-
+    git push has no capital short option, so -F and a bundle with a capital letter
+    are refused by git itself either way, and no push happens.
+- mutant: hooks.git-guard.x_push_problem__mutmut_26
+  reason: >-
+    git push has no capital short option, so -F and a bundle with a capital letter
+    are refused by git itself either way, and no push happens.
+- mutant: hooks.git-guard.x_push_problem__mutmut_78
+  reason: Slicing an empty list gives an empty list.
+- mutant: hooks.git-guard.x_push_problem__mutmut_91
+  reason: The last element of a split doesn't depend on maxsplit.
+- mutant: hooks.git-guard.x_push_problem__mutmut_94
+  reason: The last element of a split doesn't depend on maxsplit.
+- mutant: hooks.git-guard.x_git_problem__mutmut_22
+  reason: Git config with one key argument reads it, as --get does.
+- mutant: hooks.git-guard.x_git_problem__mutmut_31
+  reason: Git config section names are case-insensitive.
+- mutant: hooks.git-guard.x_git_problem__mutmut_83
+  reason: >-
+    After the commit loop, return and leaving the loop both reach the same
+    subsequent checks; neither changes the guard decision for that commit.
+- mutant: hooks.git-guard.x_git_problem__mutmut_180
   reason: >-
     git rev-parse --abbrev-ref already uses symbolic full names. Removing
     --symbolic-full-name leaves the upstream name and every guard decision unchanged.
-- mutant: hooks.git-guard.x_git_problem__mutmut_149
+- mutant: hooks.git-guard.x_git_problem__mutmut_189
   reason: >-
     Git accepts @{UPSTREAM} and @{upstream} with the same meaning. The upstream
     lookup and every guard decision are unchanged.
-- mutant: hooks.git-guard.x_git_problem__mutmut_52
-  reason: >-
-    After the commit loop only push, merge and pull have checks, so returning from the loop and leaving it both allow a commit.
 - mutant: hooks.git-guard.x_has_attribution__mutmut_28
   reason: >-
     The pattern is case-insensitive, so [^a-za-z] and [^A-Za-z] exclude the same characters.
