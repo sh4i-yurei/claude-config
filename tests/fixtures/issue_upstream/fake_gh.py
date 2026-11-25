@@ -1,0 +1,336 @@
+#!/usr/bin/python3
+"""Replay captured GitHub responses and record every gh call."""
+
+import json
+import os
+from pathlib import Path
+import sys
+import tomllib
+
+
+args = sys.argv[1:]
+fixtures = Path(os.environ["FAKE_GH_FIXTURES"])
+debt_fixtures = (
+    Path(os.environ["FAKE_GH_DEBT_FIXTURES"])
+    if "FAKE_GH_DEBT_FIXTURES" in os.environ
+    else None
+)
+calls = Path(os.environ["FAKE_GH_CALLS"])
+with calls.open("a") as out:
+    out.write(json.dumps({"args": args, "input": sys.stdin.read()}) + "\n")
+state_file = Path(os.environ["FAKE_GH_STATE"])
+state = json.loads(state_file.read_text())
+failure = state.get("failure")
+if failure and args[: len(failure["prefix"])] == failure["prefix"]:
+    if "body" in failure:
+        print(json.dumps(failure["body"]))
+    print(failure["message"], file=sys.stderr)
+    sys.exit(1)
+
+
+def fixture(name):
+    return json.loads((fixtures / (name + ".json")).read_text())
+
+
+result = None
+if args[:1] == ["api"]:
+    endpoint = args[1].split("?", 1)[0]
+    method = args[args.index("--method") + 1] if "--method" in args else "GET"
+    if endpoint == "graphql":
+        if any(
+            arg.startswith(
+                (
+                    "query=",
+                    "owner=",
+                    "boardOwner=",
+                    "name=",
+                    "url=",
+                    "number=",
+                    "cursor=",
+                )
+            )
+            and args[index - 1] not in ("-f", "-F")
+            for index, arg in enumerate(args)
+        ):
+            print("gh: invalid GraphQL field flag", file=sys.stderr)
+            sys.exit(1)
+        query = next(
+            (arg.removeprefix("query=") for arg in args if arg.startswith("query=")), ""
+        )
+        if not query.startswith("query(") or "repositoryOwner(" not in query:
+            print("gh: invalid GraphQL query", file=sys.stderr)
+            sys.exit(1)
+        number = next(
+            (index for index, arg in enumerate(args) if arg.startswith("number=")), None
+        )
+        if number is None or args[number - 1] != "-F":
+            print("gh: number must be an integer", file=sys.stderr)
+            sys.exit(1)
+        if state.get("graphql_error"):
+            messages = state["graphql_error"]
+            if isinstance(messages, str):
+                messages = [messages]
+            print(
+                json.dumps({"errors": [{"message": message} for message in messages]})
+            )
+            print("gh: " + messages[0], file=sys.stderr)
+            sys.exit(1)
+        if any(arg.startswith("name=") for arg in args):
+            if "repository(" not in query:
+                print("gh: repository query missing", file=sys.stderr)
+                sys.exit(1)
+            pages = state.get("repository_pages")
+            result = (
+                pages[1 if any(arg.startswith("cursor=") for arg in args) else 0]
+                if pages
+                else state.get("repository_response", fixture("repository-query"))
+            )
+        else:
+            if "resource(" not in query:
+                print("gh: resource query missing", file=sys.stderr)
+                sys.exit(1)
+            if state.get("lookup_graphql_error"):
+                message = state["lookup_graphql_error"]
+                print(json.dumps({"errors": [{"message": message}]}))
+                print("gh: " + message, file=sys.stderr)
+                sys.exit(1)
+            if state.get("lookup_failure"):
+                print(state["lookup_failure"], file=sys.stderr)
+                sys.exit(1)
+            result = state.get("card_response", fixture("card-query"))
+            shape = state.get("lookup_response")
+            if shape == "not_mapping":
+                result = []
+            elif shape == "bad_data":
+                result["data"] = []
+            elif shape == "null_resource":
+                result["data"]["resource"] = None
+            elif shape == "missing_project_items":
+                result["data"]["resource"].pop("projectItems")
+            elif shape == "missing_nodes":
+                result["data"]["resource"]["projectItems"].pop("nodes")
+            elif shape in (
+                "bad_card",
+                "bad_project",
+                "bad_number",
+                "bad_owner",
+                "bad_login",
+                "bad_id",
+            ):
+                nodes = result["data"]["resource"]["projectItems"]["nodes"]
+                if shape == "bad_card":
+                    nodes[0] = None
+                elif shape == "bad_project":
+                    nodes[0]["project"] = None
+                elif shape == "bad_number":
+                    nodes[0]["project"]["number"] = None
+                elif shape == "bad_owner":
+                    nodes[0]["project"]["owner"] = None
+                elif shape == "bad_login":
+                    nodes[0]["project"]["owner"]["login"] = None
+                else:
+                    nodes[0]["id"] = None
+            elif "card_response" not in state:
+                nodes = result["data"]["resource"]["projectItems"]["nodes"]
+                if state.get("lookup_board") is None:
+                    nodes.clear()
+                else:
+                    nodes[0]["project"]["number"] = state["lookup_board"]
+        board_owner = tomllib.loads(Path(os.environ["FAKE_GH_WORKFLOW"]).read_text())[
+            "products"
+        ]["Tooling"]["owner"]
+        variable = (
+            "boardOwner=" if any(arg.startswith("name=") for arg in args) else "owner="
+        )
+        selected_owner = next(
+            (arg.removeprefix(variable) for arg in args if arg.startswith(variable)),
+            None,
+        )
+        if (
+            selected_owner != board_owner
+            and isinstance(result, dict)
+            and isinstance(result.get("data"), dict)
+        ):
+            result["data"]["repositoryOwner"] = None
+    elif method == "GET":
+        if endpoint.startswith("search/issues"):
+            if "search_response" in state:
+                result = state["search_response"]
+            else:
+                approval_search = "label%3Aupstream" in args[1]
+                pages = state.get(
+                    "approval_pages" if approval_search else "title_pages"
+                )
+                items = (
+                    pages[1 if "page=2" in args[1] else 0]
+                    if pages
+                    else state.get(
+                        "approval_hits" if approval_search else "title_hits", []
+                    )
+                )
+                result = {"items": items}
+        elif endpoint.startswith("repos/mvschwarz/openrig/labels/"):
+            if state.get("label_failure"):
+                print(state["label_failure"], file=sys.stderr)
+                sys.exit(1)
+            if endpoint.rsplit("/", 1)[1] in state.get("missing_labels", []):
+                print("HTTP 404: Not Found", file=sys.stderr)
+                sys.exit(1)
+            result = {"name": endpoint.rsplit("/", 1)[1]}
+        elif (
+            endpoint == "repos/sh4i-yurei/claude-config/pulls/69/reviews"
+            and debt_fixtures
+        ):
+            query = (
+                dict(part.split("=", 1) for part in args[1].split("?", 1)[1].split("&"))
+                if "?" in args[1]
+                else {}
+            )
+            page = query.get("page")
+            if endpoint.startswith("repos/sh4i-yurei/workflow-engine/"):
+                print("HTTP 404: Not Found", file=sys.stderr)
+                sys.exit(1)
+            if (
+                query.get("per_page") != "100"
+                or not page
+                or not page.isdecimal()
+                or int(page) < 1
+            ):
+                print(
+                    "reviews require per_page=100 and a positive page", file=sys.stderr
+                )
+                sys.exit(1)
+            reviews = state.get("reviews")
+            if reviews is None:
+                reviews = json.loads(
+                    (debt_fixtures / "pull-69-reviews.json").read_text()
+                )
+            start = (int(page) - 1) * 100
+            result = reviews[start : start + 100]
+        elif endpoint.endswith("/issues/67/sub_issues") and debt_fixtures:
+            result = state.get("sub_issues_response")
+            if result is None:
+                result = json.loads(
+                    (debt_fixtures / "issue-67-sub-issues.json").read_text()
+                )
+        elif endpoint.endswith("/issues/67") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-67.json").read_text())
+        elif endpoint.endswith("/issues/28/sub_issues") and debt_fixtures:
+            result = (
+                json.loads((debt_fixtures / "issue-28-sub-issues.json").read_text())
+                if not state.get("empty_sub_issues")
+                else []
+            )
+            result = state.get("sub_issues_response", result)
+        elif endpoint.endswith("/issues/1/sub_issues") and debt_fixtures:
+            result = []
+        elif endpoint.endswith("/issues/23/sub_issues") and debt_fixtures:
+            result = json.loads(
+                (debt_fixtures / "issue-23-sub-issues.json").read_text()
+            )
+        elif endpoint.endswith("/issues/74/sub_issues") and debt_fixtures:
+            result = json.loads(
+                (debt_fixtures / "issue-74-sub-issues.json").read_text()
+            )
+            if state.get("empty_sub_issues"):
+                result = []
+        elif endpoint.endswith("/issues/36/sub_issues") and debt_fixtures:
+            result = json.loads(
+                (debt_fixtures / "issue-36-sub-issues.json").read_text()
+            )
+        elif endpoint.endswith("/issues/28") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-28.json").read_text())
+            if state.get("remove_issue_labels"):
+                result.pop("labels")
+        elif endpoint.endswith("/issues/74") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-74.json").read_text())
+        elif endpoint.endswith("/issues/36") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-36.json").read_text())
+        elif endpoint.endswith("/issues/1") and debt_fixtures:
+            result = json.loads((debt_fixtures / "issue-28.json").read_text())
+            result["number"] = 1
+        elif endpoint.endswith("/contents/.github/ISSUE_TEMPLATE"):
+            if (
+                state.get("tracking_form_failure_after_post")
+                and state.get("upstream_posted")
+                and endpoint.startswith("repos/sh4i-yurei/.github/")
+            ):
+                print("HTTP 503: form unavailable", file=sys.stderr)
+                sys.exit(1)
+            if "keepbreathing-infra" in endpoint and state.get(
+                "debt_current_infra_forms"
+            ):
+                print("HTTP 404: Not Found", file=sys.stderr)
+                sys.exit(1)
+            if endpoint.startswith("repos/missing-owner/.github/"):
+                print("HTTP 404: Not Found", file=sys.stderr)
+                sys.exit(1)
+            if (
+                "/.github/contents/" not in endpoint
+                and "keepbreathing-infra" not in endpoint
+            ):
+                print("HTTP 404: Not Found", file=sys.stderr)
+                sys.exit(1)
+            result = fixture(
+                "infra-templates-list"
+                if "keepbreathing-infra" in endpoint
+                else "forms-list"
+            )
+        elif "/contents/.github/ISSUE_TEMPLATE/" in endpoint:
+            name = endpoint.rsplit("/", 1)[1]
+            result = fixture(
+                ("infra-" if "keepbreathing-infra" in endpoint else "form-") + name
+            )
+        elif endpoint.endswith("/milestones"):
+            result = fixture("milestones")
+        elif endpoint.endswith("/labels"):
+            result = fixture("labels")
+        elif endpoint.endswith("/issues/20"):
+            result = fixture("issue-20")
+        elif endpoint.endswith("/issues/22"):
+            result = fixture("issue-22")
+        elif "/issues/" in endpoint:
+            print("HTTP 404: Not Found", file=sys.stderr)
+            sys.exit(1)
+        else:
+            print("unexpected GET " + endpoint, file=sys.stderr)
+            sys.exit(1)
+    elif method == "POST" and endpoint.endswith("/issues"):
+        if (
+            state.get("upstream_post_failure")
+            and endpoint == "repos/mvschwarz/openrig/issues"
+        ):
+            print(state["upstream_post_failure"], file=sys.stderr)
+            sys.exit(1)
+        if (
+            state.get("tracking_post_failure")
+            and endpoint == "repos/sh4i-yurei/workflow-engine/issues"
+        ):
+            print(state["tracking_post_failure"], file=sys.stderr)
+            sys.exit(1)
+        repo = endpoint.removeprefix("repos/").removesuffix("/issues")
+        if repo == "mvschwarz/openrig":
+            state["upstream_posted"] = True
+        result = {
+            "id": 123456789,
+            "number": 99,
+            "html_url": f"https://github.com/{repo}/issues/99",
+        }
+    elif method == "POST" and (
+        endpoint.endswith("/sub_issues") or endpoint.endswith("/blocked_by")
+    ):
+        result = fixture("issue-20")
+    else:
+        print("unexpected API " + repr(args), file=sys.stderr)
+        sys.exit(1)
+elif args[:2] == ["project", "item-add"]:
+    result = {"id": "PVTI_NEW"}
+elif args[:2] == ["project", "item-edit"]:
+    if "--format" not in args:
+        sys.exit(0)
+    result = {}
+else:
+    print("unexpected command " + repr(args), file=sys.stderr)
+    sys.exit(1)
+state_file.write_text(json.dumps(state))
+print(json.dumps(result))

@@ -2,14 +2,24 @@
 
 import argparse
 import base64
+from contextlib import redirect_stdout
+import io
+import ipaddress
 import json
 from pathlib import Path
 import re
 import subprocess
 import tomllib
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
-from config import ConfigError, load, load_board_config, load_boards, load_bot
+from config import (
+    ConfigError,
+    load,
+    load_board_config,
+    load_boards,
+    load_bot,
+    load_upstream,
+)
 from markers import parse_review_marker
 
 
@@ -381,7 +391,7 @@ def open_issue(path, dry_run):
     return open_data(read_input(path), dry_run)
 
 
-def open_data(data, dry_run):
+def open_data(data, dry_run, return_link=False):
     repo = data.get("repo")
     try:
         _, exceptions, global_labels, labels = load()
@@ -462,6 +472,8 @@ def open_data(data, dry_run):
         except IssueError as error:
             problems.append(str(error))
     if problems:
+        if return_link:
+            raise IssueError("\n".join(problems))
         print("\n".join(problems))
         return 2
     board = boards[repo]
@@ -568,6 +580,8 @@ def open_data(data, dry_run):
         try:
             step[1]()
         except (IssueError, KeyError) as error:
+            if return_link:
+                raise IssueError(f"{url}: {step[0]} failed: {error}") from error
             print(url)
             print("completed: " + "; ".join(completed))
             print("not completed: " + "; ".join(name for name, _ in planned[index:]))
@@ -577,6 +591,8 @@ def open_data(data, dry_run):
     print(url)
     for step in completed:
         print(step)
+    if return_link:
+        return url
     return 0
 
 
@@ -1130,12 +1146,291 @@ def ready_issue(reference, check, stacked_on=(), proposed_with=()):
     return 0
 
 
+def rig(*args):
+    result = subprocess.run(["rig", *args], capture_output=True, text=True)
+    if result.returncode:
+        raise IssueError(
+            result.stderr.strip()
+            or result.stdout.strip()
+            or f"rig exit {result.returncode}"
+        )
+    if args[:2] == ("queue", "update"):
+        return result.stdout
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise IssueError(f"rig returned invalid JSON for {' '.join(args)}") from error
+
+
+def search_issues(query):
+    page = 1
+    while True:
+        response = api(
+            "search/issues?" + urlencode({"q": query, "per_page": 100, "page": page})
+        )
+        if not isinstance(response, dict) or not isinstance(
+            response.get("items"), list
+        ):
+            raise IssueError("GitHub issue search returned no items list")
+        yield from response["items"]
+        if len(response["items"]) < 100:
+            return
+        page += 1
+
+
+def text_problems(field, value, rules):
+    if not isinstance(value, str):
+        return []
+    checks = [
+        (
+            "a personal name",
+            [
+                re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", value)
+                for name in rules["personal_names"]
+            ],
+        ),
+        (
+            "a seat address",
+            [
+                re.search(
+                    r"(?<![\w.-])[\w.-]+@" + re.escape(rig_name) + r"(?![\w-])",
+                    value,
+                    re.I,
+                )
+                for rig_name in rules["rigs"]
+            ]
+            + [
+                re.search(r"(?<!\w)" + re.escape(word) + r"(?!\w)", value, re.I)
+                for word in rules["words"]
+            ],
+        ),
+        (
+            "an attribution line",
+            [re.search(re.escape(item), value, re.I) for item in rules["attribution"]],
+        ),
+        (
+            "a secret",
+            [re.search(pattern, value) for pattern in rules["secret_patterns"]],
+        ),
+        (
+            "a private path",
+            [re.search(re.escape(item), value) for item in rules["private_paths"]],
+        ),
+        (
+            "a hostname",
+            [re.search(re.escape(item), value, re.I) for item in rules["hostnames"]],
+        ),
+    ]
+    problems = []
+    for name, matches in checks:
+        match = next((match for match in matches if match), None)
+        if match:
+            problems.append(f'{field} has {name}: "{match.group()}"')
+    for match in re.finditer(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)", value):
+        try:
+            address = ipaddress.ip_address(match.group())
+        except ValueError:
+            continue
+        if address.is_private or address in ipaddress.ip_network("100.64.0.0/10"):
+            problems.append(f'{field} has a private address: "{match.group()}"')
+            break
+    return problems
+
+
+def upstream_data(data, dry_run):
+    try:
+        owners, exceptions, _, _ = load()
+        boards = load_boards()
+        rules = load_upstream()
+    except ConfigError as error:
+        raise IssueError(str(error)) from error
+    problems = [
+        f"unknown file key {key}"
+        for key in sorted(
+            set(data)
+            - {
+                "repo",
+                "title",
+                "body",
+                "approval",
+                "tracking",
+                "tracking_scope",
+                "labels",
+            }
+        )
+    ]
+    for key in ("title", "body", "approval", "tracking"):
+        if not isinstance(data.get(key), str) or not data[key].strip():
+            problems.append(f"{key} must be a nonempty string")
+    repo = data.get("repo")
+    valid_repo = isinstance(repo, str) and repo.count("/") == 1 and all(repo.split("/"))
+    if not valid_repo:
+        problems.append("repo must be owner/name")
+    elif (
+        repo.casefold() in {name.casefold() for name in boards}
+        or repo.casefold() in {name.casefold() for name in exceptions}
+        or repo.split("/", 1)[0].casefold() in {name.casefold() for name in owners}
+    ):
+        problems.append(f"{repo} is one of ours; use issue.py open")
+        valid_repo = False
+    labels = data.get("labels", [])
+    if not isinstance(labels, list) or not all(
+        isinstance(label, str) and label.strip() for label in labels
+    ):
+        problems.append("labels must be a list of label names")
+        labels = []
+    approval = data.get("approval")
+    if isinstance(approval, str) and approval.strip():
+        try:
+            row = rig("queue", "show", approval, "--full", "--json")
+        except IssueError:
+            problems.append(f"approval {approval} not found")
+        else:
+            source = row.get("sourceSession")
+            destination = row.get("destinationSession")
+            body = row.get("body")
+            seat = rig("whoami", "--json")["identity"]["senderAddress"]
+            if source != rules["approver"]:
+                problems.append(
+                    f"approval {approval} comes from {source}, not {rules['approver']}"
+                )
+            if destination != seat:
+                problems.append(
+                    f"approval {approval} is addressed to {destination}, not {seat}"
+                )
+            if not isinstance(body, str) or "upstream" not in body.casefold():
+                problems.append(f"approval {approval} doesn't say upstream")
+            if valid_repo and (
+                not isinstance(body, str) or repo.casefold() not in body.casefold()
+            ):
+                problems.append(f"approval {approval} doesn't name {repo}")
+        for owner in owners:
+            for issue in search_issues(
+                f"user:{owner} label:upstream is:issue {approval}"
+            ):
+                if approval.casefold() in json.dumps(issue).casefold():
+                    problems.append(
+                        f"approval {approval} already filed {issue['html_url']}"
+                    )
+                    break
+            if any(
+                problem.startswith(f"approval {approval} already filed")
+                for problem in problems
+            ):
+                break
+    if valid_repo:
+        if isinstance(data.get("title"), str) and data["title"].strip():
+            for issue in search_issues(
+                f"repo:{repo} is:issue author:@me in:title {data['title']}"
+            ):
+                if issue.get("title") == data["title"]:
+                    problems.append(
+                        f"{repo} already has {issue['html_url']} with this title"
+                    )
+                    break
+        for label in labels:
+            try:
+                api(f"repos/{repo}/labels/{quote(label, safe='')}")
+            except IssueError as error:
+                if "404" in str(error):
+                    problems.append(f"label {label} doesn't exist in {repo}")
+                else:
+                    raise
+    tracking = data.get("tracking")
+    if isinstance(tracking, str) and tracking.strip():
+        board_repo = next(
+            (name for name in boards if name.casefold() == tracking.casefold()), None
+        )
+        if board_repo is None:
+            problems.append(f"tracking {tracking} has no board mapping")
+        else:
+            check_data = {
+                "repo": board_repo,
+                "kind": "chore",
+                "title": "Upstream: "
+                + (data.get("title") if isinstance(data.get("title"), str) else ""),
+                "body": {"context": "pending", "changes": "pending", "done": "pending"},
+                "labels": ["upstream"],
+            }
+            if "tracking_scope" in data:
+                check_data["scope"] = data["tracking_scope"]
+            with redirect_stdout(io.StringIO()) as captured:
+                status = open_data(check_data, True)
+            if status:
+                problems.extend(captured.getvalue().splitlines())
+    for field in ("title", "body"):
+        problems.extend(text_problems(field, data.get(field), rules))
+    if problems:
+        print("\n".join(problems))
+        return 2
+    upstream_url = "<upstream link>"
+    tracking_data = {
+        "repo": tracking,
+        "kind": "chore",
+        "title": "Upstream: " + data["title"],
+        "labels": ["upstream"],
+        "body": {
+            "context": f"Filed upstream as {upstream_url} with approval {approval}.",
+            "changes": "\n".join("> " + line for line in data["body"].splitlines()),
+            "done": f"{repo} resolves or declines the request, and this issue closes with the outcome.",
+        },
+    }
+    if "tracking_scope" in data:
+        tracking_data["scope"] = data["tracking_scope"]
+    if dry_run:
+        print(
+            f"Would call: POST repos/{repo}/issues {json.dumps({'title': data['title'], 'body': data['body'], 'labels': labels}, ensure_ascii=False)}"
+        )
+        with redirect_stdout(io.StringIO()) as captured:
+            open_data(tracking_data, True)
+        print(captured.getvalue(), end="")
+        print(
+            f"Would call: rig queue update {approval} --note Filed upstream: {upstream_url}; tracking: <tracking link>"
+        )
+        return 0
+    try:
+        upstream_url = api(
+            f"repos/{repo}/issues",
+            payload={"title": data["title"], "body": data["body"], "labels": labels},
+        )["html_url"]
+    except IssueError as error:
+        print(f"upstream issue creation failed: {error}")
+        return 1
+    print(f"filed upstream: {upstream_url}")
+    tracking_data["body"]["context"] = (
+        f"Filed upstream as {upstream_url} with approval {approval}."
+    )
+    try:
+        tracking_url = open_data(tracking_data, False, return_link=True)
+    except IssueError as error:
+        print(f"tracking issue failed: {error}")
+        return 1
+    print(f"tracking: {tracking_url}")
+    try:
+        rig(
+            "queue",
+            "update",
+            approval,
+            "--note",
+            f"Filed upstream: {upstream_url}; tracking: {tracking_url}",
+        )
+    except IssueError as error:
+        print(f"approval note failed: {error}")
+        return 1
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     opener = commands.add_parser("open", help="create a checked issue from a TOML file")
     opener.add_argument("file")
     opener.add_argument("--dry-run", action="store_true")
+    upstream_parser = commands.add_parser(
+        "upstream", help="file an approved issue outside our boards"
+    )
+    upstream_parser.add_argument("file")
+    upstream_parser.add_argument("--dry-run", action="store_true")
     debt_parser = commands.add_parser(
         "debt", help="file a build's review leftovers from its final round"
     )
@@ -1163,6 +1458,8 @@ def main(argv=None):
     )
     arguments = parser.parse_args(argv)
     try:
+        if arguments.command == "upstream":
+            return upstream_data(read_input(arguments.file), arguments.dry_run)
         if arguments.command == "ready":
             return ready_issue(
                 arguments.issue,

@@ -1690,11 +1690,12 @@ class IssueReady(unittest.TestCase):
         for args, expected in (
             (
                 ["--help"],
-                "usage: issue.py [-h] {open,debt,ready} ...\n\n"
+                "usage: issue.py [-h] {open,upstream,debt,ready} ...\n\n"
                 "Open checked GitHub issues, file review debt, and check readiness.\n\n"
                 "positional arguments:\n"
-                "  {open,debt,ready}\n"
+                "  {open,upstream,debt,ready}\n"
                 "    open             create a checked issue from a TOML file\n"
+                "    upstream         file an approved issue outside our boards\n"
                 "    debt             file a build's review leftovers from its final round\n"
                 "    ready            check an issue's Definition of Ready\n\n"
                 "options:\n"

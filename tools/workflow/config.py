@@ -137,3 +137,35 @@ def load_bot():
     if not isinstance(login, str) or not login:
         raise ConfigError("workflow.toml: [bot] login must be a non-empty string")
     return login
+
+
+def load_upstream():
+    """Return validated approval and text rules for upstream issues."""
+    table = _read("workflow.toml").get("upstream")
+    fields = {
+        "approver",
+        "personal_names",
+        "rigs",
+        "words",
+        "attribution",
+        "private_paths",
+        "hostnames",
+        "secret_patterns",
+    }
+    if not isinstance(table, dict) or set(table) != fields:
+        raise ConfigError("workflow.toml: missing or invalid upstream table")
+    if not isinstance(table["approver"], str) or not table["approver"]:
+        raise ConfigError("workflow.toml: invalid upstream approver")
+    for key in fields - {"approver"}:
+        if not isinstance(table[key], list) or not all(
+            isinstance(item, str) and item for item in table[key]
+        ):
+            raise ConfigError(f"workflow.toml: invalid upstream {key}")
+    for pattern in table["secret_patterns"]:
+        try:
+            re.compile(pattern)
+        except re.error as error:
+            raise ConfigError(
+                f"workflow.toml: invalid upstream secret pattern: {error}"
+            ) from error
+    return table
