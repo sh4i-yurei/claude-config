@@ -218,7 +218,7 @@ cases = [
     ("allow", INFRA, "(git merge x)", "claude"),
     ("allow", INFRA, ["bash", "-lc", "git merge origin/main"], "codex"),
     ("deny", INFRA, ["bash", "-lc", "git push origin main"], "codex"),
-    ("allow", INFRA, ["bash", "-lc", "git push origin feature/y"], "codex"),
+    ("deny", INFRA, ["bash", "-lc", "git push origin feature/y"], "codex"),
 ]
 
 # W1 cases cover the strict default, parser boundaries, and real shell wrappers.
@@ -253,8 +253,8 @@ cases += [
     ("deny", INFRA, "git push --mirror origin", "codex"),
     ("deny", INFRA, "git push --tags origin", "codex"),
     ("deny", INFRA, "git push --force-if-includes origin feature/x", "codex"),
-    ("allow", INFRA, "git push -u origin feature/x", "codex"),
-    ("allow", INFRA, "git push origin HEAD:feature/x", "codex"),
+    ("deny", INFRA, "git push -u origin feature/x", "codex"),
+    ("deny", INFRA, "git push origin HEAD:feature/x", "codex"),
     ("deny", CC, "git push -q origin main", "claude"),
     ("deny", CC, "git push -q origin main", "codex"),
     ("deny", CC, "git push -q origin main", "other"),
@@ -578,7 +578,7 @@ assert run.returncode == 0 and run.stdout == "" and not run.stderr, run
 assert time.monotonic() - start < 2, "git-heavy 50 KB command exceeded two seconds"
 
 for cmd, phrase in (
-    ("git push", "Name the branch"),
+    ("git push", "Only Claude pushes"),
     ("gh run rerun 1", "Allowed gh commands"),
 ):
     event = {"tool_name": "Bash", "cwd": INFRA, "tool_input": {"command": cmd}}

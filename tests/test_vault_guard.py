@@ -529,6 +529,289 @@ class VaultGuardTests(unittest.TestCase):
 class VaultGuardInProcessTests(VaultGuardTests):
     decision = staticmethod(in_process_decision)
 
+    def test_strict_push_and_ref_update_commands(self):
+        refusal = "Only Claude pushes: commit on the named branch and stop."
+        with tempfile.TemporaryDirectory() as root:
+            repository = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "--initial-branch=feature/x", str(repository)],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://example.com/r.git",
+                ],
+                check=True,
+            )
+            allowed_for_claude = (
+                "git push -u origin feature/x",
+                "git push origin feature/x",
+                "git -C . push origin HEAD:feature/x",
+                "rtk git push origin feature/x",
+                "sh -c 'git push origin feature/x'",
+                "git send-pack origin feature/x",
+                "git send-pack --force origin feature/x",
+                "git http-push https://example.com/r.git feature/x",
+            )
+            for command in allowed_for_claude:
+                with self.subTest(command=command):
+                    self.assertEqual(
+                        in_process_decision(command, "strict", str(repository)), refusal
+                    )
+                    self.assertIsNone(
+                        in_process_decision(command, "claude", str(repository))
+                    )
+            for command in (
+                "git push --help",
+                "git push -h",
+                "git push origin main",
+                "git push --tags",
+                "git push",
+            ):
+                with self.subTest(command=command):
+                    self.assertEqual(
+                        in_process_decision(command, "strict", str(repository)), refusal
+                    )
+
+    def test_strict_aliases_and_builtin_shadowing(self):
+        refusal = (
+            "Git aliases are refused under the strict policy, because one can hide a push: "
+            "run the command it stands for."
+        )
+        with tempfile.TemporaryDirectory() as root:
+            repository = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "--initial-branch=feature/x", str(repository)],
+                check=True,
+            )
+            for name, value in (("p", "push"), ("st", "status")):
+                subprocess.run(
+                    ["git", "-C", str(repository), "config", f"alias.{name}", value],
+                    check=True,
+                )
+            for command in (
+                "git -c alias.p=push p origin feature/x",
+                "git p origin feature/x",
+                "git st",
+            ):
+                with self.subTest(command=command):
+                    self.assertEqual(
+                        in_process_decision(command, "strict", str(repository)), refusal
+                    )
+                    self.assertIsNone(
+                        in_process_decision(command, "claude", str(repository))
+                    )
+            for command in (
+                "git -c alias.status=push status",
+                "git -c alias.p=push status",
+                "git -c core.pager=cat log",
+                "git lfs push origin feature/x",
+                "git status",
+                "git commit -m x",
+            ):
+                with self.subTest(command=command):
+                    self.assertIsNone(
+                        in_process_decision(command, "strict", str(repository))
+                    )
+
+    def test_strict_alias_lookup_uses_command_config_and_directory(self):
+        refusal = (
+            "Git aliases are refused under the strict policy, because one can hide a push: "
+            "run the command it stands for."
+        )
+        with tempfile.TemporaryDirectory() as root:
+            repository = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "--initial-branch=feature/x", str(repository)],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "config", "alias.local", "status"],
+                check=True,
+            )
+            with patch.dict(os.environ, {"GUARD_ALIAS": "status"}):
+                cases = (
+                    ("git -C feature local", refusal),
+                    ("git -c alias.p=status p", refusal),
+                    ("git -calias.p=status p", None),
+                    ("git --config-env=alias.p=GUARD_ALIAS p", refusal),
+                    ("git --config-env alias.p=GUARD_ALIAS p", refusal),
+                    ("git -c alias.p=status -c alias.p=log p", refusal),
+                    ("git -c alias.p=status -c alias.p= p", None),
+                    ("git -C feature -c alias.p=status p", refusal),
+                    ("git --git-dir=feature/.git local", refusal),
+                    ("git -c alias.p=status -C feature p", refusal),
+                    ("git -c alias.status=push status", None),
+                )
+                for command, expected in cases:
+                    with self.subTest(command=command):
+                        self.assertEqual(
+                            in_process_decision(command, "strict", root), expected
+                        )
+
+    def test_strict_push_priorities_and_claude_refspecs(self):
+        strict = "Only Claude pushes: commit on the named branch and stop."
+        force = "Force pushes are refused."
+        old = (
+            "Name the branch: git push [-u] origin <branch> or <source>:<destination>."
+        )
+        protected = (
+            "Pushing to main or an unknown branch is refused in this repository."
+        )
+        with tempfile.TemporaryDirectory() as root:
+            repository = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "--initial-branch=feature/x", str(repository)],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://example.com/r.git",
+                ],
+                check=True,
+            )
+            cases = (
+                ("git push --force origin feature/x", "strict", force),
+                ("git push --force origin feature/x", "claude", force),
+                ("git push -f origin feature/x", "strict", force),
+                ("git push -f origin feature/x", "claude", force),
+                ("git push --force-with-lease origin feature/x", "strict", force),
+                ("git push --force-if-includes origin feature/x", "strict", force),
+                ("git push --force=1 origin feature/x", "strict", force),
+                (
+                    "git push --force-with-lease=refs/heads/feature/x origin feature/x",
+                    "strict",
+                    force,
+                ),
+                ("git push --force-if-includes=1 origin feature/x", "strict", force),
+                ("git push -qf origin feature/x", "claude", force),
+                ("git push origin +feature/x", "strict", force),
+                ("git push origin HEAD:+feature/x", "claude", force),
+                (
+                    "git --frobnicate push origin feature/x",
+                    "strict",
+                    "Unknown git global option for push: --frobnicate",
+                ),
+                ("git push --all origin", "strict", strict),
+                ("git push --mirror origin", "strict", strict),
+                ("git push --all origin", "claude", old),
+                ("git push --mirror origin", "claude", old),
+                ("git push --tags", "claude", None),
+                ("git push --tags origin HEAD:main", "claude", protected),
+                ("git push -o ticket=x origin HEAD:main", "claude", protected),
+                (
+                    "git push -o ticket=x --repo ignored origin HEAD:main",
+                    "claude",
+                    protected,
+                ),
+                ("git push origin -q HEAD:main", "claude", protected),
+                (
+                    "git push --push-option ticket=x origin HEAD:main",
+                    "claude",
+                    protected,
+                ),
+                ("git push --repo ignored origin HEAD:main", "claude", protected),
+                (
+                    "git push --receive-pack receive origin HEAD:main",
+                    "claude",
+                    protected,
+                ),
+                ("git push --exec receive origin HEAD:main", "claude", protected),
+                ("git push origin HEAD:refs/heads/main", "claude", protected),
+                ("git push origin HEAD:main", "claude", protected),
+                ("git push origin HEAD:feature/x:main", "claude", protected),
+                ("git push origin @:main", "claude", protected),
+                ("git push origin HEAD:feature/x", "claude", None),
+                ("git push origin HEAD", "claude", None),
+            )
+            for command, agent, expected in cases:
+                with self.subTest(command=command, agent=agent):
+                    self.assertEqual(
+                        in_process_decision(command, agent, str(repository)), expected
+                    )
+
+    def test_claude_push_uses_selected_repository_and_current_branch(self):
+        protected = (
+            "Pushing to main or an unknown branch is refused in this repository."
+        )
+        with tempfile.TemporaryDirectory() as root:
+            feature = Path(root) / "feature"
+            main = Path(root) / "main"
+            for path, branch in ((feature, "feature/x"), (main, "main")):
+                subprocess.run(
+                    ["git", "init", "-q", f"--initial-branch={branch}", str(path)],
+                    check=True,
+                )
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(path),
+                        "remote",
+                        "add",
+                        "origin",
+                        "https://example.com/r.git",
+                    ],
+                    check=True,
+                )
+            cases = (
+                ("git push origin", str(feature), None),
+                ("git push origin HEAD", str(feature), None),
+                ("git push origin @", str(feature), None),
+                ("git push origin", str(main), protected),
+                ("git push origin HEAD", str(main), protected),
+                ("git push origin @", str(main), protected),
+                ("git push origin -q", str(main), protected),
+                ("git push --tags", str(main), None),
+                ("git --git-dir=../main/.git push origin", str(feature), protected),
+                (
+                    "git --git-dir=../main/.git push origin HEAD",
+                    str(feature),
+                    protected,
+                ),
+            )
+            for command, cwd, expected in cases:
+                with self.subTest(command=command, cwd=cwd):
+                    self.assertEqual(
+                        in_process_decision(command, "claude", cwd), expected
+                    )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(main),
+                    "-c",
+                    "user.name=Test",
+                    "-c",
+                    "user.email=test@example.com",
+                    "commit",
+                    "--allow-empty",
+                    "-q",
+                    "-m",
+                    "init",
+                ],
+                check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(main), "checkout", "-q", "--detach", "HEAD"],
+                check=True,
+            )
+            self.assertEqual(
+                in_process_decision("git push origin", "claude", str(main)), protected
+            )
+
     def test_config_repository_push_policy(self):
         refusal = "Pushing to main or an unknown branch is refused in this repository."
         with tempfile.TemporaryDirectory() as root:
@@ -568,7 +851,7 @@ class VaultGuardInProcessTests(VaultGuardTests):
                     "second-brain",
                     "strict",
                     "git push -q origin main",
-                    "Name the branch: git push [-u] origin <branch> or <source>:<destination>.",
+                    "Only Claude pushes: commit on the named branch and stop.",
                 ),
             )
             for name, agent, command, expected in cases:

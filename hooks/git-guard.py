@@ -236,6 +236,11 @@ GH_FLAG_TABLES = {
 PUSH_REASON = (
     "Name the branch: git push [-u] origin <branch> or <source>:<destination>."
 )
+STRICT_PUSH_REASON = "Only Claude pushes: commit on the named branch and stop."
+STRICT_ALIAS_REASON = (
+    "Git aliases are refused under the strict policy, because one can hide a push: "
+    "run the command it stands for."
+)
 ISSUE_REASON = "Use tools/workflow/issue.py open for our repositories, or issue.py upstream for one outside our boards; see README.md, Opening an issue from a file."
 DEADLINE = None
 MAX_COMMAND_BYTES = 64 * 1024
@@ -441,6 +446,25 @@ def directory_for(args, cwd):
     return directory, args[index:], lookup, unknown, config_override
 
 
+def git_config_options(args):
+    """Keep command-local config options in their original order for a Git lookup."""
+    options = []
+    index = 0
+    while index < len(args) and args[index].startswith("-"):
+        flag = args[index]
+        if flag in ("-c", "--config-env"):
+            options.extend((flag, args[index + 1]))
+            index += 2
+        elif flag.startswith("--config-env="):
+            options.append(flag)
+            index += 1
+        elif flag == "-C":
+            index += 2
+        else:
+            index += 1
+    return options
+
+
 def repository_name(directory, lookup):
     url = run_git(directory, *lookup, "remote", "get-url", "origin")
     return url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git") if url else ""
@@ -454,30 +478,10 @@ def push_problem(args, directory, lookup, agent):
         for a in args
     ) or any(a.startswith("+") or ":+" in a for a in args):
         return "Force pushes are refused."
-    if any(a in ("--all", "--mirror") for a in args) or (
-        agent != "claude" and "--tags" in args
-    ):
-        return PUSH_REASON
     if agent != "claude":
-        values = list(args)
-        if values and values[0] in ("-u", "--set-upstream"):
-            values.pop(0)
-        if len(values) != 2 or values[0] != "origin":
-            return PUSH_REASON
-        refspec = values[1]
-        if refspec.count(":") > 1:
-            return PUSH_REASON
-        if ":" in refspec and not refspec.split(":", 1)[0]:
-            return PUSH_REASON
-        destination = refspec.rsplit(":", 1)[-1]
-        if (
-            not BRANCH.fullmatch(destination)
-            or destination.startswith("refs/")
-            or destination in PROTECTED_BRANCHES
-            or destination == "HEAD"
-        ):
-            return PUSH_REASON
-        return None
+        return STRICT_PUSH_REASON
+    if any(a in ("--all", "--mirror") for a in args):
+        return PUSH_REASON
     positional = []
     index = 0
     while index < len(args):
@@ -506,10 +510,26 @@ def push_problem(args, directory, lookup, agent):
 
 
 def git_problem(args, cwd, agent):
+    original_args = args
     directory, args, lookup, unknown, config_override = directory_for(args, cwd)
     if not args:
         return None
     action = args[0]
+    if agent != "claude":
+        alias = run_git(
+            directory,
+            *lookup,
+            *git_config_options(original_args),
+            "config",
+            "--get",
+            "alias." + action,
+        )
+        if (
+            alias
+            and action
+            not in run_git(directory, "--list-cmds=builtins,main,others").splitlines()
+        ):
+            return STRICT_ALIAS_REASON
     if action == "commit":
         top_level = run_git(directory, *lookup, "rev-parse", "--show-toplevel")
         vault = Path(
@@ -541,6 +561,8 @@ def git_problem(args, cwd, agent):
             return str(exc)
     if unknown and action in ("push", "merge", "pull"):
         return "Unknown git global option for " + action + ": " + unknown
+    if agent != "claude" and action in ("send-pack", "http-push"):
+        return STRICT_PUSH_REASON
     if action in ("merge", "pull"):
         branch = run_git(directory, *lookup, "branch", "--show-current")
         if branch in PROTECTED_BRANCHES or not branch:
