@@ -480,6 +480,47 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(entry["errors"], 0)
         self.assertEqual(entry["targets"]["www.reddit.com"]["errors"], 1)
 
+    def test_request_with_trailing_bare_json_uses_host_streak(self):
+        self.statuses = [502]
+        with (
+            patch.object(gw.subprocess, "run", side_effect=self.fake_curl),
+            patch.object(gw.time, "sleep"),
+        ):
+            self.assertEqual(
+                gw.request(
+                    self.out, "https://api.brightdata.com/request", ["--json"], "GET"
+                ),
+                0,
+            )
+        self.assertEqual(len(self.calls), 1)
+        entry = self.gateway_entry()
+        self.assertEqual(entry["errors"], 1)
+        self.assertNotIn("targets", entry)
+
+    def test_json_after_another_option_uses_its_target(self):
+        self.statuses = [502]
+        self.out = self.out.with_name("json-after-option.json")
+        body = '{"url":"https://www.reddit.com/r/x"}'
+        with patch.object(gw.time, "sleep"):
+            self.assertEqual(
+                self.run_gateway(
+                    "-s", "--json", body, "https://api.brightdata.com/request"
+                ),
+                0,
+            )
+        entry = self.gateway_entry()
+        self.assertEqual(entry["targets"]["www.reddit.com"]["errors"], 1)
+        self.assertEqual(entry["errors"], 0)
+
+    def test_new_target_is_sent_when_streak_threshold_is_one(self):
+        config = gw.load_config()
+        config["gateway"]["error_streak"] = 1
+        self.statuses = [502]
+        with patch.object(gw, "load_config", return_value=config):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 1)
+
     def test_brightdata_success_is_billed_and_clears_site(self):
         self.statuses = [502, 200]
         self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)

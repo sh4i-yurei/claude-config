@@ -478,3 +478,69 @@
 - mutant: hooks.git-guard.x_rtk_executable_commands__mutmut_85
   reason: >-
     When rtk test's words are exactly ( and ), stripping them leaves no command and keeping them leaves the program (, which the guard doesn't judge, so both give the same decision.
+- mutant: skills.research.scripts.gw.x_target_site__mutmut_47
+  reason: urlsplit lowercases the hostname, so it never ends in X, and stripping X and dot strips only the dots the code strips.
+- mutant: skills.research.scripts.gw.x_request__mutmut_85
+  reason: with no target, the lookup is of a key the gateway never writes, because it records per-target streaks only for a truthy target, so it returns the same empty entry.
+- mutant: skills.research.scripts.gw.x_request__mutmut_110
+  reason: a target entry is written with errors and end together, and an empty entry fails the errors test first, so the end default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_112
+  reason: a target entry is written with errors and end together, and an empty entry fails the errors test first, so the end default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_115
+  reason: a target entry is written with errors and end together, and an empty entry fails the errors test first, so the end default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_139
+  reason: the gateway writes count whenever it writes today's day, so the default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_141
+  reason: the gateway writes count whenever it writes today's day, so the default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_144
+  reason: the gateway writes count whenever it writes today's day, so the default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_240
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_241
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_242
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_243
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_244
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_245
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_246
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_249
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_250
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_251
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_276
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_10
+  reason: public_address has already refused a URL without a hostname.
+- mutant: skills.research.scripts.gw.x_request__mutmut_256
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_257
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_261
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_262
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_371
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_458
+  reason: write_envelope reads body_size only when body_omitted is set.
+- mutant: skills.research.scripts.gw.x_request__mutmut_474
+  reason: finished is a current epoch time, so 0 and 1 are both earlier.
+- mutant: skills.research.scripts.gw.x_request__mutmut_647
+  reason: the comparison runs only when the provider names an error header, so its default is never read, and with no header named no response header name equals the empty string.
+- mutant: skills.research.scripts.gw.x_request__mutmut_653
+  reason: the comparison runs only when the provider names an error header, so its default is never read, and with no header named no response header name equals the empty string.
+- mutant: skills.research.scripts.gw.x_request__mutmut_655
+  reason: the comparison runs only when the provider names an error header, so its default is never read, and with no header named no response header name equals the empty string.
+- mutant: skills.research.scripts.gw.x_request__mutmut_658
+  reason: the comparison runs only when the provider names an error header, so its default is never read, and with no header named no response header name equals the empty string.
+- mutant: skills.research.scripts.gw.x_request__mutmut_784
+  reason: write_envelope falls back to the same configured max_body_bytes.
+- mutant: skills.research.scripts.gw.x_request__mutmut_796
+  reason: write_envelope falls back to the same configured max_body_bytes.
