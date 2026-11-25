@@ -253,8 +253,13 @@ if args[:1] == ["api"]:
             if (
                 state.get("tracking_form_failure_after_post")
                 and state.get("upstream_posted")
-                and endpoint.startswith("repos/sh4i-yurei/.github/")
-            ):
+                or state.get("tracking_form_failure_on_second_read")
+                and sum(
+                    json.loads(line)["args"][:2] == args[:2]
+                    for line in calls.read_text().splitlines()
+                )
+                == 2
+            ) and endpoint.startswith("repos/sh4i-yurei/.github/"):
                 print("HTTP 503: form unavailable", file=sys.stderr)
                 sys.exit(1)
             if "keepbreathing-infra" in endpoint and state.get(

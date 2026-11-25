@@ -17,6 +17,7 @@ FIXTURES = ROOT / "tests/fixtures/issue_upstream"
 sys.path.insert(0, str(WORKFLOW))
 sys.path.insert(0, str(ROOT))
 import tools.workflow.issue as issue_tool
+import tools.workflow.config as package_config
 import config as workflow_config
 
 
@@ -297,6 +298,34 @@ class IssueUpstream(TestCase):
             )[1],
         )
 
+    def test_case_varied_tracking_repository_dry_run_uses_board_mapping(self):
+        code, output = self.run_upstream(tracking="SH4I-YUREI/workflow-engine")
+        self.assertEqual(code, 0, output)
+        self.assertIn(f"Would call: POST repos/{TRACKING}/issues", output)
+        self.assert_no_writes()
+
+    def test_case_varied_tracking_repository_files_under_board_mapping(self):
+        code, output = self.run_upstream(
+            tracking="SH4I-YUREI/workflow-engine", options=[]
+        )
+        self.assertEqual(code, 0, output)
+        posts = [
+            call["args"][1]
+            for call in self.calls("gh")
+            if "--method" in call["args"]
+            and call["args"][call["args"].index("--method") + 1] == "POST"
+            and call["args"][1].endswith("/issues")
+        ]
+        self.assertEqual(posts, [f"repos/{REPO}/issues", f"repos/{TRACKING}/issues"])
+
+    def test_dry_run_reports_tracking_form_failure_on_second_read(self):
+        self.gh_state["tracking_form_failure_on_second_read"] = True
+        self.save()
+        code, output = self.run_upstream()
+        self.assertEqual(code, 2, output)
+        self.assertIn("HTTP 503: form unavailable", output)
+        self.assert_no_writes()
+
     def test_partial_failure_prints_links_and_stops(self):
         self.gh_state["failure"] = {
             "prefix": ["project", "item-add"],
@@ -465,3 +494,81 @@ class IssueUpstream(TestCase):
         self.assertIn(f"filed upstream: https://github.com/{REPO}/issues/99", output)
         self.assertIn("tracking issue failed:", output)
         self.assertIn("HTTP 503: form unavailable", output)
+
+
+class LoadUpstreamConfig(TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.directory = Path(self.temp.name)
+        shutil.copytree(WORKFLOW, self.directory, dirs_exist_ok=True)
+        self.path = self.directory / "workflow.toml"
+        self.original = self.path.read_text()
+
+    def load(self):
+        with patch.object(package_config, "DIRECTORY", self.directory):
+            return package_config.load_upstream()
+
+    def replace(self, old, new):
+        self.assertIn(old, self.original)
+        self.path.write_text(self.original.replace(old, new, 1))
+
+    def refused(self, message):
+        with self.assertRaises(package_config.ConfigError) as caught:
+            self.load()
+        self.assertEqual(str(caught.exception), message)
+
+    def test_valid_table_is_returned_exactly(self):
+        self.assertEqual(self.load(), tomllib.loads(self.original)["upstream"])
+
+    def test_missing_table_is_refused(self):
+        start = self.original.index("[upstream]")
+        end = self.original.index("[products]")
+        self.path.write_text(self.original[:start] + self.original[end:])
+        self.refused("workflow.toml: missing or invalid upstream table")
+
+    def test_non_table_value_is_refused(self):
+        start = self.original.index("[upstream]")
+        end = self.original.index("[products]")
+        self.path.write_text(
+            'upstream = "x"\n' + self.original[:start] + self.original[end:]
+        )
+        self.refused("workflow.toml: missing or invalid upstream table")
+
+    def test_missing_and_extra_keys_are_refused(self):
+        self.replace('words = ["main-lead"]\n', "")
+        self.refused("workflow.toml: missing or invalid upstream table")
+        self.path.write_text(self.original)
+        self.replace(
+            'words = ["main-lead"]\n', 'words = ["main-lead"]\nextra = ["x"]\n'
+        )
+        self.refused("workflow.toml: missing or invalid upstream table")
+
+    def test_approver_must_be_nonempty_string(self):
+        for bad in ('approver = ""', "approver = 7"):
+            with self.subTest(bad=bad):
+                self.replace('approver = "main-lead@hq"', bad)
+                self.refused("workflow.toml: invalid upstream approver")
+                self.path.write_text(self.original)
+
+    def test_lists_must_hold_nonempty_strings(self):
+        for key, line in (
+            ("personal_names", 'personal_names = ["Mark"]'),
+            ("words", 'words = ["main-lead"]'),
+            ("hostnames", 'hostnames = ["keepbreath.ing", ".ts.net", "vaultserv"]'),
+        ):
+            for bad in (f'{key} = "x"', f'{key} = ["x", ""]', f"{key} = [1]"):
+                with self.subTest(key=key, bad=bad):
+                    self.replace(line, bad)
+                    self.refused(f"workflow.toml: invalid upstream {key}")
+                    self.path.write_text(self.original)
+
+    def test_bad_secret_pattern_is_refused(self):
+        self.replace("'AKIA[0-9A-Z]{16}'", "'AKIA[0-9A-Z'")
+        with self.assertRaises(package_config.ConfigError) as caught:
+            self.load()
+        self.assertTrue(
+            str(caught.exception).startswith(
+                "workflow.toml: invalid upstream secret pattern: "
+            )
+        )

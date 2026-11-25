@@ -1365,7 +1365,7 @@ def upstream_data(data, dry_run):
         return 2
     upstream_url = "<upstream link>"
     tracking_data = {
-        "repo": tracking,
+        "repo": board_repo,
         "kind": "chore",
         "title": "Upstream: " + data["title"],
         "labels": ["upstream"],
@@ -1382,8 +1382,10 @@ def upstream_data(data, dry_run):
             f"Would call: POST repos/{repo}/issues {json.dumps({'title': data['title'], 'body': data['body'], 'labels': labels}, ensure_ascii=False)}"
         )
         with redirect_stdout(io.StringIO()) as captured:
-            open_data(tracking_data, True)
+            status = open_data(tracking_data, True)
         print(captured.getvalue(), end="")
+        if status:
+            return status
         print(
             f"Would call: rig queue update {approval} --note Filed upstream: {upstream_url}; tracking: <tracking link>"
         )
