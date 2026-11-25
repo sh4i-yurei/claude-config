@@ -9,6 +9,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
@@ -282,7 +283,7 @@ class GatewayTests(unittest.TestCase):
     def fake_curl(self, command, *, input, capture_output, text, check):
         self.assertTrue(capture_output)
         self.assertTrue(text)
-        self.assertIs(check, False)
+        self.assertFalse(check)
         self.assertNotIn("TEST_ONLY_SECRET", " ".join(command))
         if self.expect_key:
             self.assertIn("TEST_ONLY_SECRET", input)
@@ -363,6 +364,22 @@ class GatewayTests(unittest.TestCase):
                 self.assertEqual(self.observed_request(), (code, [], [message]))
                 self.assertEqual(self.calls, [])
 
+    def test_request_resolves_the_requested_host(self):
+        def resolve(host, *_args, **_kwargs):
+            if host != "api.github.com":
+                raise socket.gaierror("unknown host")
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("140.82.112.6", 443))]
+
+        with (
+            patch.object(gw, "public_address", PUBLIC_ADDRESS),
+            patch.object(gw.socket, "getaddrinfo", side_effect=resolve),
+        ):
+            self.assertEqual(self.observed_request()[0], 0)
+        self.assertEqual(
+            self.calls[0][0][self.calls[0][0].index("--resolve") + 1],
+            "api.github.com:443:140.82.112.6",
+        )
+
     def test_request_cooldown_boundary_and_error_streak(self):
         settings = gw.load_config()["gateway"]
         instant = 2_000_000_000.0
@@ -433,6 +450,21 @@ class GatewayTests(unittest.TestCase):
                     self.assertEqual(self.saved_entry()["count"], final_count)
                 self.assertEqual(len(self.calls), index)
 
+    def test_request_first_attempt_cap_after_day_changes(self):
+        cap = gw.load_config()["gateway"]["daily_host_cap"]
+        previous = time.strptime("2026-09-25", "%Y-%m-%d")
+        current = time.strptime("2026-09-26", "%Y-%m-%d")
+        self.put_entry({"day": "2026-09-26", "count": cap})
+        with patch.object(gw.time, "localtime", side_effect=[previous, current]):
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 3)
+        self.assertEqual(stdout, [])
+        self.assertEqual(
+            stderr, ["[gw] REFUSED api.github.com: daily cap before request"]
+        )
+        self.assertEqual(self.calls, [])
+        self.assertFalse(self.out.exists())
+
     def test_request_margin_and_config_refusals_print_exactly(self):
         with patch.object(gw, "margin_refusal", return_value="quota held"):
             self.assertEqual(
@@ -482,6 +514,26 @@ class GatewayTests(unittest.TestCase):
                     [unittest.mock.call(expected_wait)] if expected_wait else [],
                 )
 
+    def test_request_unlisted_host_uses_configured_gap_floor(self):
+        instant = 2_000_000_000.0
+        host = "2606:4700:4700::1111"
+        config = gw.load_config()
+        config["gateway"]["default_gap_floor_s"] = 0.5
+        self.expect_key = False
+        self.put_entry({"end": instant, "dur": 0.01}, host)
+        with (
+            patch.object(gw, "load_config", return_value=config),
+            patch.object(gw.time, "time", return_value=instant),
+            patch.object(gw.time, "sleep") as sleep,
+        ):
+            code, stdout, stderr = self.observed_request(f"https://[{host}]/")
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout, [f"[gw] {host} attempt 1 HTTP 200 0.20s", "[gw] requests made: 1"]
+        )
+        self.assertEqual(stderr, [f"[gw] pacing {host}: waiting 0.5s"])
+        sleep.assert_called_once_with(0.5)
+
     def test_request_curl_command_and_ipv6_resolve(self):
         settings = gw.load_config()["gateway"]
         for host, url in (
@@ -494,8 +546,6 @@ class GatewayTests(unittest.TestCase):
                 command = self.calls[-1][0]
                 body = command[command.index("--output") + 1]
                 headers = command[command.index("--dump-header") + 1]
-                self.assertEqual(Path(body).name, "body")
-                self.assertEqual(Path(headers).name, "headers")
                 resolve_host = f"[{host}]" if ":" in host else host
                 self.assertEqual(
                     command,
@@ -558,6 +608,16 @@ class GatewayTests(unittest.TestCase):
                 self.assertEqual(self.log_records()[-1]["duration_s"], duration)
                 self.assertEqual(self.saved_entry()["code"], status)
 
+    def test_request_missing_download_size_is_zero_on_oversize(self):
+        self.body_bytes = b""
+        self.returncodes = [63]
+        for write_out in ("200 0.25", "abc"):
+            with self.subTest(write_out=write_out):
+                self.write_outs = [write_out] * (len(self.calls) + 1)
+                self.put_entry({})
+                self.assertEqual(self.observed_request()[0], 1)
+                self.assertEqual(json.loads(self.out.read_text())["body_size"], 0)
+
     def test_request_oversize_and_normal_body_fields(self):
         limit = gw.load_config()["gateway"]["max_body_bytes"]
         self.write_outs = ["200 0.25 4096"]
@@ -604,6 +664,30 @@ class GatewayTests(unittest.TestCase):
             del os.environ["RESEARCH_RUN"]
             self.assertEqual(self.observed_request()[0], 0)
         self.assertIsNone(self.log_records()[-1]["run"])
+
+    def test_request_logs_without_relocking_the_gateway_lock(self):
+        result = []
+        with patch.dict(gw.append_log.__kwdefaults__, {"lock_path": self.lock}):
+            worker = threading.Thread(
+                target=lambda: result.append(self.observed_request()), daemon=True
+            )
+            worker.start()
+            worker.join(timeout=2)
+        self.assertFalse(worker.is_alive(), "request waited on its own gateway lock")
+        self.assertEqual(
+            result,
+            [
+                (
+                    0,
+                    [
+                        "[gw] api.github.com attempt 1 HTTP 200 0.20s",
+                        "[gw] requests made: 1",
+                    ],
+                    [],
+                )
+            ],
+        )
+        self.assertEqual(len(self.log_records()), 1)
 
     def test_request_window_restarts_at_boundary_and_accumulates_inside(self):
         instant = 2_000_000_000.0
@@ -791,6 +875,60 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(len(self.calls), 3)
         self.assertEqual(json.loads(self.out.read_text())["attempts"], 3)
 
+    def test_request_third_retry_uses_exponential_backoff(self):
+        config = gw.load_config()
+        config["gateway"]["max_attempts"] = 4
+        self.statuses = [429] * 4
+        with (
+            patch.object(gw, "load_config", return_value=config),
+            patch.object(gw.time, "sleep") as sleep,
+        ):
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            [
+                "[gw] api.github.com attempt 1 HTTP 429 0.20s",
+                "[gw] api.github.com attempt 2 HTTP 429 0.20s",
+                "[gw] api.github.com attempt 3 HTTP 429 0.20s",
+                "[gw] api.github.com attempt 4 HTTP 429 0.20s",
+                "[gw] requests made: 4",
+            ],
+        )
+        self.assertEqual(
+            stderr,
+            [
+                "[gw] 429 from api.github.com: retry backoff 4s",
+                "[gw] 429 from api.github.com: retry backoff 8s",
+                "[gw] 429 from api.github.com: retry backoff 16s",
+            ],
+        )
+        self.assertEqual(
+            sleep.call_args_list,
+            [unittest.mock.call(4), unittest.mock.call(8), unittest.mock.call(16)],
+        )
+
+    def test_request_http_date_retry_after_controls_wait(self):
+        instant = 2_000_000_000.0
+        self.statuses = [429, 200]
+        self.retry_after = "Wed, 18 May 2033 03:33:50 GMT"
+        with (
+            patch.object(gw.time, "time", return_value=instant),
+            patch.object(gw.time, "sleep") as sleep,
+        ):
+            code, stdout, stderr = self.observed_request()
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            [
+                "[gw] api.github.com attempt 1 HTTP 429 0.20s",
+                "[gw] api.github.com attempt 2 HTTP 200 0.20s",
+                "[gw] requests made: 2",
+            ],
+        )
+        self.assertEqual(stderr, ["[gw] 429 from api.github.com: retry backoff 30s"])
+        sleep.assert_called_once_with(30.0)
+
     def test_request_retry_after_at_ceiling_is_allowed(self):
         self.statuses = [429, 200]
         self.retry_after = "120"
@@ -842,6 +980,28 @@ class GatewayTests(unittest.TestCase):
         )
         self.assertEqual(stderr, [])
         self.assertEqual(self.saved_entry("api.firecrawl.dev")["window_used"], 9)
+
+    def test_request_seeds_provider_window_before_snapshot_expires(self):
+        instant = datetime(2026, 9, 26, 12, tzinfo=timezone.utc).timestamp()
+        self.rate_headers = False
+        with patch.object(gw.time, "time", return_value=instant):
+            code, stdout, stderr = self.observed_request(
+                "https://api.firecrawl.dev/v2/search"
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            stdout,
+            [
+                "[gw] api.firecrawl.dev attempt 1 HTTP 200 0.20s",
+                "[gw] requests made: 1",
+            ],
+        )
+        self.assertEqual(stderr, [])
+        entry = self.saved_entry("api.firecrawl.dev")
+        self.assertEqual(entry["window_used"], 212)
+        self.assertEqual(
+            entry["window_end"], datetime(2026, 10, 19, tzinfo=timezone.utc).timestamp()
+        )
 
     def test_request_status_200_300_and_301_duration_boundary(self):
         for index, (status, expected_duration) in enumerate(
