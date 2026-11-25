@@ -1227,6 +1227,26 @@ class LookupTests(unittest.TestCase):
                 if reason:
                     self.assertEqual(outcome["tried"][0]["reason"], reason)
 
+    def test_page_non_text_markdown_reports_exact_empty_page_reason(self):
+        outcome, gateway = self.run_page(
+            self.firecrawl_page(None),
+            self.bright_page(self.page_text("example-com-brightdata.md")),
+        )
+        self.assertEqual(outcome["status"], "found")
+        self.assertEqual(gateway.call_count, 2)
+        self.assertEqual(outcome["tried"][0]["status"], "error")
+        self.assertEqual(outcome["tried"][0]["reason"], "empty page")
+
+    def test_page_non_integer_target_status_uses_usable_markdown(self):
+        firecrawl = self.firecrawl_page(self.page_text("example-com-firecrawl.md"))
+        payload = json.loads(firecrawl.envelope["body"])
+        payload["data"]["metadata"]["statusCode"] = "404"
+        firecrawl.envelope["body"] = json.dumps(payload)
+        outcome, gateway = self.run_page(firecrawl)
+        self.assertEqual(outcome["status"], "found")
+        self.assertEqual(outcome["answer"]["length"], 167)
+        self.assertEqual(gateway.call_count, 1)
+
     def test_page_malformed_or_failed_firecrawl_reply_falls_back(self):
         for firecrawl in (
             self.response(
@@ -1305,6 +1325,7 @@ class LookupTests(unittest.TestCase):
         bright_validator = gateway.call_args_list[1].kwargs["cache_validator"]
         for text, status in (
             (challenge, 200),
+            (self.page_text("example-com-firecrawl.md"), 400),
             (self.page_text("redhat-firecrawl.md"), 503),
             (self.page_text("openrig-faq-firecrawl.md"), 404),
         ):
@@ -1343,6 +1364,13 @@ class LookupTests(unittest.TestCase):
                 self.bright_page(self.page_text("example-com-brightdata.md")).envelope
             )
         )
+        for status in (300, 301):
+            envelope = self.bright_page(
+                self.page_text("example-com-brightdata.md")
+            ).envelope
+            envelope["status"] = status
+            with self.subTest(bright_http=status):
+                self.assertFalse(bright_validator(envelope))
 
         for url, validator, rejected, accepted in (
             (
@@ -1479,7 +1507,7 @@ class LookupTests(unittest.TestCase):
 
     def test_page_firecrawl_found_uses_default_gateway_arguments(self):
         target = "https://example.com/path?q=1"
-        markdown = "# Example Domain\nA useful page."
+        markdown = self.page_text("example-com-firecrawl.md")
         for cached in (False, True):
             with self.subTest(cached=cached):
                 response = self.response(
@@ -1548,6 +1576,7 @@ class LookupTests(unittest.TestCase):
                             ],
                             fresh=False,
                             root=self.root,
+                            cache_validator=lookup.firecrawl_page_cacheable,
                             subject=None,
                         )
                     ],
@@ -1556,8 +1585,8 @@ class LookupTests(unittest.TestCase):
     def test_page_firecrawl_missing_metadata_has_no_title(self):
         target = "https://example.com/path?q=1"
         for data in (
-            {"markdown": "Text"},
-            {"markdown": "Text", "metadata": "not a dictionary"},
+            {"markdown": "Text " * 21},
+            {"markdown": "Text " * 21, "metadata": "not a dictionary"},
         ):
             with self.subTest(data=data):
                 response = self.response(
@@ -1583,7 +1612,7 @@ class LookupTests(unittest.TestCase):
                         "status": "found",
                         "cached": False,
                         "answer": {
-                            "length": 4,
+                            "length": 105,
                             "archive": archive,
                             "title": None,
                             "credits_used": None,
@@ -1619,6 +1648,7 @@ class LookupTests(unittest.TestCase):
                             ],
                             fresh=False,
                             root=self.root,
+                            cache_validator=lookup.firecrawl_page_cacheable,
                             subject=None,
                         )
                     ],
@@ -1652,7 +1682,7 @@ class LookupTests(unittest.TestCase):
         response = self.response(
             "Firecrawl scrape",
             "https://api.firecrawl.dev/v2/scrape",
-            {"data": {"markdown": "paper text"}},
+            {"data": {"markdown": "paper text " * 12}},
         )
         with (
             mock.patch.object(
@@ -1674,7 +1704,7 @@ class LookupTests(unittest.TestCase):
                 "status": "found",
                 "cached": False,
                 "answer": {
-                    "length": 10,
+                    "length": 132,
                     "archive": archive,
                     "title": None,
                     "credits_used": None,
@@ -1710,6 +1740,7 @@ class LookupTests(unittest.TestCase):
                     ],
                     fresh=False,
                     root=self.root,
+                    cache_validator=lookup.firecrawl_page_cacheable,
                     subject=None,
                 )
             ],
@@ -1729,7 +1760,7 @@ class LookupTests(unittest.TestCase):
             {},
             name="bright.json",
         )
-        bright.envelope["body"] = "Bright page body"
+        bright.envelope["body"] = "Bright page body " * 8
         with (
             mock.patch.object(
                 lookup, "gateway_response", side_effect=[firecrawl, bright]
@@ -1755,7 +1786,7 @@ class LookupTests(unittest.TestCase):
                 "status": "found",
                 "cached": False,
                 "answer": {
-                    "length": len("Bright page body"),
+                    "length": 136,
                     "archive": bright_archive,
                     "title": None,
                     "credits_used": None,
@@ -1772,6 +1803,7 @@ class LookupTests(unittest.TestCase):
                         "status": "error",
                         "http": 200,
                         "archive": fire_archive,
+                        "reason": "empty page",
                     },
                     {
                         "source": "Bright Data",
@@ -1797,6 +1829,7 @@ class LookupTests(unittest.TestCase):
                     ],
                     fresh=True,
                     root=self.root,
+                    cache_validator=lookup.firecrawl_page_cacheable,
                     subject="topic",
                 ),
                 mock.call(
@@ -1806,10 +1839,11 @@ class LookupTests(unittest.TestCase):
                     "https://api.brightdata.com/request",
                     curl_args=[
                         "--json",
-                        '{"zone":"bright_data_agent","url":"https://example.com/path?q=1","format":"raw"}',
+                        '{"zone":"bright_data_agent","url":"https://example.com/path?q=1","format":"raw","data_format":"markdown"}',
                     ],
                     fresh=True,
                     root=self.root,
+                    cache_validator=lookup.bright_page_cacheable,
                     subject="topic",
                 ),
             ],
@@ -1829,6 +1863,7 @@ class LookupTests(unittest.TestCase):
                 ],
                 fresh=False,
                 root=self.root,
+                cache_validator=lookup.firecrawl_page_cacheable,
                 subject=None,
             ),
             mock.call(
@@ -1838,10 +1873,11 @@ class LookupTests(unittest.TestCase):
                 "https://api.brightdata.com/request",
                 curl_args=[
                     "--json",
-                    '{"zone":"bright_data_agent","url":"https://example.com/path?q=1","format":"raw"}',
+                    '{"zone":"bright_data_agent","url":"https://example.com/path?q=1","format":"raw","data_format":"markdown"}',
                 ],
                 fresh=False,
                 root=self.root,
+                cache_validator=lookup.bright_page_cacheable,
                 subject=None,
             ),
         ]
@@ -1864,7 +1900,7 @@ class LookupTests(unittest.TestCase):
                         cached=bright_cached,
                         name="bright.json",
                     )
-                    bright.envelope["body"] = "Bright page body"
+                    bright.envelope["body"] = "Bright page body " * 8
                     with (
                         mock.patch.object(
                             lookup, "gateway_response", side_effect=[firecrawl, bright]
@@ -1883,7 +1919,7 @@ class LookupTests(unittest.TestCase):
                             "status": "found",
                             "cached": fire_cached and bright_cached,
                             "answer": {
-                                "length": len("Bright page body"),
+                                "length": 136,
                                 "archive": archive,
                                 "title": None,
                                 "credits_used": None,
@@ -1927,6 +1963,7 @@ class LookupTests(unittest.TestCase):
                 ],
                 fresh=False,
                 root=self.root,
+                cache_validator=lookup.firecrawl_page_cacheable,
                 subject=None,
             ),
             mock.call(
@@ -1936,10 +1973,11 @@ class LookupTests(unittest.TestCase):
                 "https://api.brightdata.com/request",
                 curl_args=[
                     "--json",
-                    '{"zone":"bright_data_agent","url":"https://example.com/path?q=1","format":"raw"}',
+                    '{"zone":"bright_data_agent","url":"https://example.com/path?q=1","format":"raw","data_format":"markdown"}',
                 ],
                 fresh=False,
                 root=self.root,
+                cache_validator=lookup.bright_page_cacheable,
                 subject=None,
             ),
         ]
@@ -1968,6 +2006,7 @@ class LookupTests(unittest.TestCase):
                             cached=bright_cached,
                             name="bright.json",
                         )
+                        bright.envelope.pop("body")
                         with (
                             mock.patch.object(
                                 lookup,
