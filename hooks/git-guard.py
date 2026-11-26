@@ -241,6 +241,11 @@ STRICT_ALIAS_REASON = (
     "Git aliases are refused under the strict policy, because one can hide a push: "
     "run the command it stands for."
 )
+WORKTREE_REMOVE_REASON = (
+    "git worktree remove --force is refused while the worktree holds modified or "
+    "untracked files, because they exist nowhere else: list them with git -C {path} "
+    "status --porcelain -uall, then commit, move or keep them first."
+)
 ISSUE_REASON = "Use tools/workflow/issue.py open for our repositories, or issue.py upstream for one outside our boards; see README.md, Opening an issue from a file."
 DEADLINE = None
 MAX_COMMAND_BYTES = 64 * 1024
@@ -494,6 +499,49 @@ def push_problem(args, directory, lookup, agent):
     return None
 
 
+def worktree_remove_problem(args, directory, lookup):
+    """Refuse a forced git worktree remove of a worktree that holds files.
+
+    args are the words after remove, read the way git's option parser reads them.
+    """
+    force = 0
+    arguments = []
+    options = True
+    for arg in args:
+        if options and arg == "--":
+            options = False
+        elif options and len(arg) > 1 and arg.startswith("-"):
+            if arg.startswith("--"):
+                name = arg[2:]
+                if "force".startswith(name):
+                    force += 1
+                elif "no-force".startswith(name):
+                    force = 0
+                else:
+                    return None
+            elif set(arg[1:]) == {"f"}:
+                force += arg.count("f")
+            else:
+                return None
+        else:
+            arguments.append(arg)
+    if force <= 0 or len(arguments) != 1:
+        return None
+    argument = os.path.expanduser(arguments[0])
+    target = os.path.realpath(os.path.join(directory, argument))
+    listing = run_git(directory, *lookup, "worktree", "list", "--porcelain", "-z")
+    paths = [
+        field.removeprefix("worktree ")
+        for field in listing.split("\0")
+        if field.startswith("worktree ")
+    ]
+    for path in paths[1:]:
+        named = path.endswith("/" + argument) or os.path.realpath(path) == target
+        if named and run_git(path, "status", "--porcelain", "-uall"):
+            return WORKTREE_REMOVE_REASON.format(path=path)
+    return None
+
+
 def git_problem(args, cwd, agent):
     directory, args, lookup, unknown, config_override, config_options = directory_for(
         args, cwd
@@ -516,6 +564,10 @@ def git_problem(args, cwd, agent):
             not in run_git(directory, "--list-cmds=builtins,main,others").splitlines()
         ):
             return STRICT_ALIAS_REASON
+    if action == "worktree" and args[1:2] == ["remove"]:
+        problem = worktree_remove_problem(args[2:], directory, lookup)
+        if problem is not None:
+            return problem
     if action == "commit":
         top_level = run_git(directory, *lookup, "rev-parse", "--show-toplevel")
         vault = Path(

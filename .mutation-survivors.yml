@@ -214,16 +214,30 @@
   reason: Git config with one key argument reads it, as --get does.
 - mutant: hooks.git-guard.x_git_problem__mutmut_29
   reason: Git config section names are case-insensitive.
-- mutant: hooks.git-guard.x_git_problem__mutmut_81
+- mutant: hooks.git-guard.x_git_problem__mutmut_99
   reason: For a commit, none of the checks after the option loop apply, so returning None from inside the loop and leaving the loop give the same decision.
-- mutant: hooks.git-guard.x_git_problem__mutmut_178
+- mutant: hooks.git-guard.x_git_problem__mutmut_196
   reason: >-
     git rev-parse --abbrev-ref already uses symbolic full names. Removing
     --symbolic-full-name leaves the upstream name and every guard decision unchanged.
-- mutant: hooks.git-guard.x_git_problem__mutmut_187
+- mutant: hooks.git-guard.x_git_problem__mutmut_205
   reason: >-
     Git accepts @{UPSTREAM} and @{upstream} with the same meaning. The upstream
     lookup and every guard decision are unchanged.
+- mutant: hooks.git-guard.x_worktree_remove_problem__mutmut_9
+  reason: The options flag is read only as a truth value, and None and False are both false.
+- mutant: hooks.git-guard.x_worktree_remove_problem__mutmut_24
+  reason: >-
+    Only a force count above zero is checked, and setting it to 1 or adding 1 leaves
+    it above zero either way; a later --no-force still sets it back to 0.
+- mutant: hooks.git-guard.x_worktree_remove_problem__mutmut_26
+  reason: >-
+    Only a force count above zero is checked, and adding 2 or adding 1 leaves it
+    above zero either way.
+- mutant: hooks.git-guard.x_worktree_remove_problem__mutmut_37
+  reason: >-
+    A short bundle reaching this line holds at least one f, so setting the count to
+    its f count or adding that count leaves it above zero either way.
 - mutant: hooks.git-guard.x_has_attribution__mutmut_28
   reason: >-
     The pattern is case-insensitive, so [^a-za-z] and [^A-Za-z] exclude the same characters.
