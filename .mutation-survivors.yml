@@ -199,9 +199,7 @@
 - mutant: hooks.git-guard.x_git_problem__mutmut_29
   reason: Git config section names are case-insensitive.
 - mutant: hooks.git-guard.x_git_problem__mutmut_81
-  reason: >-
-    After the commit loop, return and leaving the loop both reach the same
-    subsequent checks; neither changes the guard decision for that commit.
+  reason: For a commit, none of the checks after the option loop apply, so returning None from inside the loop and leaving the loop give the same decision.
 - mutant: hooks.git-guard.x_git_problem__mutmut_178
   reason: >-
     git rev-parse --abbrev-ref already uses symbolic full names. Removing
