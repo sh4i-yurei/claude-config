@@ -650,3 +650,13 @@
   reason: A missing error count is below the five-error streak with a default of either 0 or 1, and the count appears only in the refusal it never reaches.
 - mutant: hooks.research-gate.x_main__mutmut_145
   reason: A missing daily count is below the 300-fetch limit with a default of either 0 or 1, and the refusal that would print it is never reached.
+- mutant: hooks.writing-style-gate.x_main__mutmut_14
+  reason: A missing file_path becomes the relative path XXXX, which has no .md suffix, so the gate returns 0 and prints nothing, exactly as for an empty path.
+- mutant: hooks.writing-style-gate.x_read_record__mutmut_25
+  reason: Python's codec names ignore case, so UTF-8 and utf-8 decode the record identically.
+- mutant: hooks.writing-style-gate.x_append_record__mutmut_6
+  reason: Python's codec names ignore case, so UTF-8 and utf-8 encode the line identically.
+- mutant: hooks.writing-style-gate.x_append_record__mutmut_14
+  reason: os.chmod sets the folder to 0700 right after os.makedirs creates it, so the mode makedirs was given never shows.
+- mutant: hooks.writing-style-gate.x_append_record__mutmut_15
+  reason: os.chmod sets the folder to 0700 right after os.makedirs creates it, so the mode makedirs was given never shows.
