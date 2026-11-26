@@ -529,15 +529,13 @@ def worktree_remove_problem(args, directory, lookup):
         return None
     argument = os.path.expanduser(arguments[0])
     target = os.path.realpath(os.path.join(directory, argument))
-    listing = run_git(directory, *lookup, "worktree", "list", "--porcelain")
+    listing = run_git(directory, *lookup, "worktree", "list", "--porcelain", "-z")
     paths = [
-        line.removeprefix("worktree ")
-        for line in listing.splitlines()
-        if line.startswith("worktree ")
+        field.removeprefix("worktree ")
+        for field in listing.split("\0")
+        if field.startswith("worktree ")
     ]
     for path in paths[1:]:
-        if path.startswith('"'):
-            continue
         named = path.endswith("/" + argument) or os.path.realpath(path) == target
         if named and run_git(path, "status", "--porcelain", "-uall"):
             return WORKTREE_REMOVE_REASON.format(path=path)

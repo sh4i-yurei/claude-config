@@ -754,15 +754,15 @@ class VaultGuardInProcessTests(VaultGuardTests):
         for name in untracked:
             (Path(root) / name / "u.txt").write_text("u\n")
         listing = subprocess.run(
-            ["git", "-C", str(repository), "worktree", "list", "--porcelain"],
+            ["git", "-C", str(repository), "worktree", "list", "--porcelain", "-z"],
             check=True,
             capture_output=True,
             text=True,
         ).stdout
         paths = [
-            line[len("worktree ") :]
-            for line in listing.splitlines()
-            if line.startswith("worktree ")
+            field[len("worktree ") :]
+            for field in listing.split("\0")
+            if field.startswith("worktree ")
         ]
         return {Path(path).name: path for path in paths}
 
@@ -869,6 +869,18 @@ class VaultGuardInProcessTests(VaultGuardTests):
                 self.WORKTREE_REFUSAL.format(path=paths["-"]),
             )
 
+    def test_forced_worktree_remove_refused_for_a_name_holding_a_newline(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.worktree_layout(
+                root, names=("w\nn", "wtclean"), untracked=("w\nn",)
+            )
+            self.assert_worktree_decisions(
+                root,
+                ("git -C repo worktree remove --force '../w\nn'",),
+                self.WORKTREE_REFUSAL.format(path=paths["w\nn"]),
+            )
+
     def test_worktree_commands_left_to_git_are_allowed(self):
         GUARD.GIT_CACHE.clear()
         with tempfile.TemporaryDirectory() as root:
@@ -883,6 +895,7 @@ class VaultGuardInProcessTests(VaultGuardTests):
                     "git -C repo worktree remove --force --no ../wt",
                     "git -C repo worktree remove --force wt/",
                     "git -C repo worktree remove --force -q ../wt",
+                    "git -C repo worktree remove --force --bogus ../wt",
                     "git -C repo worktree remove --force repo",
                     "git -C repo worktree remove --force ../missing",
                     "git -C repo worktree remove --force",
