@@ -58,7 +58,7 @@ def test_mutmut_cache_invalidation(tmp_path, changed_file, replacement, reruns):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(contents)
 
-    environment = {key: os.environ[key] for key in ("PATH", "HOME")}
+    environment = {key: os.environ[key] for key in ("PATH", "HOME", "PYTHONUSERBASE")}
     environment.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
 
     def run(command):
