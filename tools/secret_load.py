@@ -1,7 +1,8 @@
 #!/usr/bin/python3
-"""Load one staged secret into OpenBao without displaying its value."""
+"""Load one staged secret without displaying its value."""
 
 import argparse
+import copy
 import json
 import os
 from pathlib import Path
@@ -26,16 +27,122 @@ class BaoError(Exception):
     """OpenBao failed or answered unexpectedly."""
 
 
+class VaultTargetError(Exception):
+    """The selected Vaultwarden target cannot be used."""
+
+
+def _vault_target(item, field):
+    if field == "login.password":
+        login = item.get("login")
+        if not isinstance(login, dict):
+            raise VaultTargetError("the item is not a login")
+        return login.get("password"), "login", None
+    fields = item.get("fields") or []
+    matching = [
+        (index, entry)
+        for index, entry in enumerate(fields)
+        if entry.get("name") == field
+    ]
+    if len(matching) > 1:
+        raise VaultTargetError(f'{len(matching)} fields are named exactly "{field}"')
+    if not matching:
+        return None, "new", None
+    index, entry = matching[0]
+    if entry.get("type") not in (0, 1):
+        raise VaultTargetError("the field is not a text or hidden field")
+    return entry.get("value"), "field", index
+
+
+def _vaultwarden(item_name, field, destination, value, options):
+    try:
+        vault_item.sync()
+        item = vault_item.read_item(item_name)
+        current, kind, index = _vault_target(item, field)
+    except vault_item.VaultItemError as error:
+        print(f"secret-load: {error}", file=sys.stderr)
+        return 1
+    except VaultTargetError as error:
+        print(f"secret-load: {destination}: {error}", file=sys.stderr)
+        return 1
+    if current not in (None, "") and current != value and not options.replace:
+        print(
+            f"secret-load: {destination} holds a different value; use --replace to rotate it",
+            file=sys.stderr,
+        )
+        return 1
+    if options.dry_run:
+        action = (
+            "already holds this value"
+            if current == value
+            else "would replace a different value"
+            if current not in (None, "")
+            else "would add a hidden field"
+            if kind == "new"
+            else "would set the login password"
+            if kind == "login"
+            else "would set an empty field"
+        )
+        print(f"dry run: {destination}: {action}, length {len(value)}")
+        return 0
+    if current == value:
+        print(f"{destination}: already holds this value, length {len(value)}")
+        return 0
+    changed = copy.deepcopy(item)
+    if kind == "login":
+        changed["login"]["password"] = value
+    elif kind == "new":
+        changed["fields"] = (changed.get("fields") or []) + [
+            {"name": field, "value": value, "type": 1, "linkedId": None}
+        ]
+    else:
+        changed["fields"][index]["value"] = value
+    try:
+        status = vault_item.edit_item(item["id"], changed)
+    except vault_item.StaleItemError:
+        print(
+            f"secret-load: {destination} changed while loading; nothing written",
+            file=sys.stderr,
+        )
+        return 1
+    except vault_item.VaultItemError as error:
+        print(f"secret-load: {error}", file=sys.stderr)
+        return 1
+    if status != 0:
+        print(f"{destination}: write {status}")
+        return 1
+    try:
+        vault_item.sync()
+        read_back = vault_item.read_item(item_name)
+    except vault_item.VaultItemError as error:
+        print(f"{destination}: write 0")
+        print(f"secret-load: {error}", file=sys.stderr)
+        return 1
+    try:
+        read_value, _, _ = _vault_target(read_back, field)
+        matches = read_back.get("id") == item["id"] and read_value == value
+    except VaultTargetError:
+        matches = False
+    print(
+        f"{destination}: write 0, read back 0, matches {matches}, length {len(value)}"
+    )
+    return 0 if matches else 1
+
+
 def _parser():
     parser = argparse.ArgumentParser(prog="secret-load")
     parser.add_argument("--from", dest="source", required=True, metavar="FILE")
     parser.add_argument("--label", metavar="LABEL")
-    parser.add_argument("--to", required=True, metavar="openbao:PATH[#KEY]")
+    parser.add_argument(
+        "--to",
+        required=True,
+        metavar="DEST",
+        help="openbao:PATH[#KEY] or vaultwarden:ITEM#FIELD",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--replace",
         action="store_true",
-        help="Replace a different existing value. OpenBao keeps the old version; Vaultwarden keeps no history for a custom field, so its old value is lost.",
+        help="Replace a different existing value. OpenBao keeps the old version; Vaultwarden keeps a replaced login password or hidden field in the item's password history, but not a replaced text field.",
     )
     parser.add_argument(
         "--remove-source",
@@ -47,9 +154,13 @@ def _parser():
 
 def _destination(text):
     if text.startswith("vaultwarden:"):
-        raise SourceError("vaultwarden: destinations are not built yet")
+        item_field = text[len("vaultwarden:") :]
+        item, separator, field = item_field.rpartition("#")
+        if not separator or not item or not field:
+            raise SourceError("--to must be vaultwarden:ITEM#FIELD")
+        return item, field, text
     if not text.startswith("openbao:"):
-        raise SourceError("--to must be openbao:PATH[#KEY]")
+        raise SourceError("--to must be openbao:PATH[#KEY] or vaultwarden:ITEM#FIELD")
     path_key = text[len("openbao:") :]
     path, separator, key = path_key.rpartition("#")
     if not separator:
@@ -210,6 +321,26 @@ def main(argv=None):
     except SourceError as error:
         print(f"secret-load: {error}", file=sys.stderr)
         return 2
+    if options.to.startswith("vaultwarden:"):
+        result = _vaultwarden(path, key, destination, value, options)
+        if result == 0 and options.remove_source:
+            if options.dry_run:
+                action = (
+                    f"would remove line {line_number} of {options.source}"
+                    if line_number is not None
+                    else f"would delete {options.source}"
+                )
+                print(f"dry run: {action}")
+            else:
+                try:
+                    _remove_source(options.source, original, line_number)
+                except OSError as error:
+                    print(
+                        f"secret-load: cannot remove {options.source}: {error.strerror or error}",
+                        file=sys.stderr,
+                    )
+                    return 1
+        return result
     try:
         item = vault_item.read_item(LOGIN_ITEM)
     except vault_item.VaultItemError as error:

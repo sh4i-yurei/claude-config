@@ -3,6 +3,7 @@
 from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
+import copy
 import os
 from pathlib import Path
 import resource
@@ -39,7 +40,19 @@ SECRETS = [
     "dummy-old-login-pw-6666",
     "dummy-bao-token-7777",
     "dummy-session",
+    "dummy-vw-cloudflare-aaaa1111",
+    "dummy-vw-gh-bbbb2222",
+    "dummy-vw-note-text",
+    "dummy-vw-do-cccc3333",
+    "dummy-vw-old-gh-dddd4444",
+    "dummy-vw-mail-pw-eeee5555",
+    "dummy-vw-odd-ffff6666",
+    "dummy-vw-k1",
+    "dummy-vw-k2",
+    "dummy-vw-tampered-9999",
 ]
+VW = "vaultwarden:API tokens (keepbreath.ing)#NEW_TOKEN"
+FIXTURE = ROOT / "tests/fixtures/secret_load/vault_items.json"
 
 
 class SecretLoadTests(unittest.TestCase):
@@ -84,6 +97,546 @@ class SecretLoadTests(unittest.TestCase):
             if self.calls_path.exists()
             else []
         )
+
+    def use_store(self, server=None, local=None):
+        link = self.root / "bin/bw"
+        link.unlink()
+        link.symlink_to(ROOT / "tests/fixtures/secret_load/fake_bw_store.py")
+        self.calls_path.unlink(missing_ok=True)
+        (self.root / "edits.jsonl").unlink(missing_ok=True)
+        fixture = json.loads(FIXTURE.read_text())
+        (self.root / "server.json").write_text(
+            json.dumps(fixture if server is None else server)
+        )
+        (self.root / "local.json").write_text(
+            json.dumps(fixture if local is None else local)
+        )
+        self.environment.update(
+            FAKE_BW_SERVER=str(self.root / "server.json"),
+            FAKE_BW_LOCAL=str(self.root / "local.json"),
+            FAKE_BW_EDITS=str(self.root / "edits.jsonl"),
+        )
+
+    def vw_load(
+        self, dest=VW, *flags, source="cf.txt", label="iac-durable API", cwd=None
+    ):
+        args = ["--from", source]
+        if label is not None:
+            args += ["--label", label]
+        return self.run_tool(*args, "--to", dest, *flags, cwd=cwd)
+
+    def edits(self):
+        path = self.root / "edits.jsonl"
+        return (
+            [json.loads(line) for line in path.read_text().splitlines()]
+            if path.exists()
+            else []
+        )
+
+    def test_vaultwarden_add_preserves_item_and_call_order(self):
+        self.use_store()
+        original = json.loads(FIXTURE.read_text())[0]
+        self.assertEqual(
+            self.vw_load(),
+            (0, f"{VW}: write 0, read back 0, matches True, length 53\n", ""),
+        )
+        expected = copy.deepcopy(original)
+        expected["fields"].append(
+            {"name": "NEW_TOKEN", "value": VALUE, "type": 1, "linkedId": None}
+        )
+        self.assertEqual(self.edits(), [expected])
+        server = json.loads((self.root / "server.json").read_text())
+        self.assertEqual(
+            server[0]["fields"][-1],
+            {"name": "NEW_TOKEN", "value": VALUE, "type": 1, "linkedId": None},
+        )
+        self.assertEqual(
+            [call["args"] for call in self.calls()],
+            [
+                ["sync"],
+                ["list", "items", "--search", original["name"]],
+                ["edit", "item", original["id"]],
+                ["sync"],
+                ["list", "items", "--search", original["name"]],
+            ],
+        )
+        self.assertTrue(
+            all(
+                call["session"] == "dummy-session" and call["nointeraction"] == "true"
+                for call in self.calls()
+            )
+        )
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_existing_field_and_login(self):
+        fixture = json.loads(FIXTURE.read_text())
+        for destination, index, field_index in (
+            ("vaultwarden:API tokens (keepbreath.ing)#GH_TOKEN", 0, 1),
+            ("vaultwarden:API tokens (keepbreath.ing)#note", 0, 2),
+            ("vaultwarden:mail submission (587)#login.password", 2, None),
+            ("vaultwarden:empty login (test)#login.password", 3, None),
+            ("vaultwarden:empty login (test)#EMPTY", 3, 0),
+            ("vaultwarden:empty login (test)#NULLED", 3, 1),
+        ):
+            self.use_store()
+            flags = ("--replace",) if index in (0, 2) else ()
+            self.assertEqual(
+                self.vw_load(destination, *flags),
+                (
+                    0,
+                    f"{destination}: write 0, read back 0, matches True, length 53\n",
+                    "",
+                ),
+            )
+            expected = copy.deepcopy(fixture[index])
+            if field_index is None:
+                expected["login"]["password"] = VALUE
+            else:
+                expected["fields"][field_index]["value"] = VALUE
+            self.assertEqual(self.edits(), [expected])
+            self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_refusals_and_dry_run(self):
+        gh = "vaultwarden:API tokens (keepbreath.ing)#GH_TOKEN"
+        different = "holds a different value; use --replace to rotate it"
+        cases = (
+            (
+                "vaultwarden:API tokens (keepbreath.ing)#login.password",
+                (),
+                "the item is not a login",
+            ),
+            ("vaultwarden:field kinds (test)#K", (), '2 fields are named exactly "K"'),
+            (
+                "vaultwarden:field kinds (test)#FLAG",
+                ("--replace",),
+                "the field is not a text or hidden field",
+            ),
+            (
+                "vaultwarden:field kinds (test)#LINK",
+                ("--replace",),
+                "the field is not a text or hidden field",
+            ),
+            ("vaultwarden:field kinds (test)#NUM", (), different),
+            (gh, (), different),
+            (gh, ("--dry-run",), different),
+            ("vaultwarden:mail submission (587)#login.password", (), different),
+        )
+        for destination, flags, message in cases:
+            with self.subTest(destination=destination, flags=flags):
+                self.use_store()
+                separator = " " if message == different else ": "
+                self.assertEqual(
+                    self.vw_load(destination, *flags),
+                    (1, "", f"secret-load: {destination}{separator}{message}\n"),
+                )
+                self.assertEqual(self.edits(), [])
+                self.assertEqual(
+                    [call["args"][0] for call in self.calls()], ["sync", "list"]
+                )
+                self.assertEqual(self.bao.requests, [])
+        original = self.source.read_bytes()
+        self.use_store()
+        self.assertEqual(
+            self.vw_load(VW, "--dry-run"),
+            (0, f"dry run: {VW}: would add a hidden field, length 53\n", ""),
+        )
+        self.assertEqual([call["args"][0] for call in self.calls()], ["sync", "list"])
+        self.assertFalse((self.root / "edits.jsonl").exists())
+        self.assertEqual(self.source.read_bytes(), original)
+        self.assertEqual(self.bao.requests, [])
+        self.use_store()
+        self.assertEqual(
+            self.vw_load(VW, "--dry-run", "--remove-source"),
+            (
+                0,
+                f"dry run: {VW}: would add a hidden field, length 53\n"
+                "dry run: would remove line 2 of cf.txt\n",
+                "",
+            ),
+        )
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.source.read_bytes(), original)
+        self.assertEqual(self.bao.requests, [])
+
+    def fault(self, mode, expected):
+        self.use_store()
+        self.environment["FAKE_BW_MODE"] = mode
+        self.assertEqual(self.vw_load(), expected)
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_sync_fails(self):
+        self.fault("sync-fails", (1, "", "secret-load: bw sync failed\n"))
+        self.assertEqual([call["args"] for call in self.calls()], [["sync"]])
+
+    def test_vaultwarden_edit_fails(self):
+        self.fault("edit-fails", (1, f"{VW}: write 1\n", ""))
+        self.assertEqual(len(self.edits()), 1)
+        self.assertEqual(len(self.calls()), 3)
+
+    def test_vaultwarden_concurrent_edit(self):
+        self.fault(
+            "concurrent",
+            (1, "", f"secret-load: {VW} changed while loading; nothing written\n"),
+        )
+        self.assertEqual(len(self.edits()), 1)
+        self.assertFalse(
+            any(
+                field["name"] == "NEW_TOKEN"
+                for field in json.loads((self.root / "server.json").read_text())[0][
+                    "fields"
+                ]
+            )
+        )
+
+    def test_vaultwarden_readback_differs(self):
+        self.fault(
+            "readback-differs",
+            (1, f"{VW}: write 0, read back 0, matches False, length 53\n", ""),
+        )
+
+    def test_vaultwarden_readback_other_id(self):
+        self.fault(
+            "readback-other-id",
+            (1, f"{VW}: write 0, read back 0, matches False, length 53\n", ""),
+        )
+        self.assertEqual(
+            json.loads((self.root / "server.json").read_text())[0]["fields"][-1][
+                "value"
+            ],
+            VALUE,
+        )
+
+    def test_vaultwarden_readback_duplicate(self):
+        self.fault(
+            "readback-duplicate",
+            (1, f"{VW}: write 0, read back 0, matches False, length 53\n", ""),
+        )
+
+    def test_vaultwarden_edit_garbage(self):
+        self.fault("edit-garbage", (1, f"{VW}: write 1\n", ""))
+        self.assertEqual(len(self.edits()), 1)
+
+    def test_vaultwarden_late_sync_fails(self):
+        self.fault(
+            "late-sync-fails", (1, f"{VW}: write 0\n", "secret-load: bw sync failed\n")
+        )
+
+    def test_vaultwarden_null_fields_odd_name_and_whole_file(self):
+        fixture = json.loads(FIXTURE.read_text())
+        for destination, expected_item, flags in (
+            ("vaultwarden:mail submission (587)#NEW_TOKEN", 2, ()),
+            ("vaultwarden:odd # name [x]#API key (old)", 4, ("--replace",)),
+        ):
+            self.use_store()
+            code, out, err = self.vw_load(destination, *flags)
+            self.assertEqual((code, err), (0, ""))
+            self.assertEqual(
+                out, f"{destination}: write 0, read back 0, matches True, length 53\n"
+            )
+            expected = copy.deepcopy(fixture[expected_item])
+            if expected_item == 2:
+                expected["fields"] = [
+                    {"name": "NEW_TOKEN", "value": VALUE, "type": 1, "linkedId": None}
+                ]
+            else:
+                expected["fields"][0]["value"] = VALUE
+            self.assertEqual(self.edits(), [expected])
+            self.assertEqual(self.calls()[1]["args"][3], expected["name"])
+            self.assertEqual(self.bao.requests, [])
+        key = "-----BEGIN FAKE KEY-----\ndummy-key-line-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n-----END FAKE KEY-----"
+        (self.root / "key.pem").write_text(key + "\n")
+        self.use_store()
+        destination = "vaultwarden:API tokens (keepbreath.ing)#NEW_KEY"
+        self.assertEqual(
+            self.vw_load(destination, source="key.pem", label=None),
+            (0, f"{destination}: write 0, read back 0, matches True, length 95\n", ""),
+        )
+        self.assertEqual(self.edits()[0]["fields"][-1]["value"], key)
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_empty_login_variants_and_sync(self):
+        fixture = json.loads(FIXTURE.read_text())
+        destination = "vaultwarden:empty login (test)#login.password"
+        for variant in ("", "missing"):
+            altered = copy.deepcopy(fixture)
+            if variant == "missing":
+                altered[3]["login"].pop("password")
+            else:
+                altered[3]["login"]["password"] = ""
+            self.use_store(server=altered, local=altered)
+            self.assertEqual(
+                self.vw_load(destination),
+                (
+                    0,
+                    f"{destination}: write 0, read back 0, matches True, length 53\n",
+                    "",
+                ),
+            )
+            self.assertEqual(self.edits()[0]["login"]["password"], VALUE)
+            self.assertEqual(self.bao.requests, [])
+        destination = "vaultwarden:API tokens (keepbreath.ing)#GH_TOKEN"
+        server = copy.deepcopy(fixture)
+        server[0]["fields"][1]["value"] = VALUE
+        for local in (server, fixture):
+            self.use_store(server=server, local=local)
+            self.assertEqual(
+                self.vw_load(destination),
+                (0, f"{destination}: already holds this value, length 53\n", ""),
+            )
+            self.assertEqual(self.edits(), [])
+            self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_dry_run_actions(self):
+        fixture = json.loads(FIXTURE.read_text())
+        gh = "vaultwarden:API tokens (keepbreath.ing)#GH_TOKEN"
+        for destination, flags, action in (
+            (gh, ("--replace",), "would replace a different value"),
+            (
+                "vaultwarden:empty login (test)#login.password",
+                (),
+                "would set the login password",
+            ),
+            ("vaultwarden:empty login (test)#EMPTY", (), "would set an empty field"),
+            (
+                "vaultwarden:field kinds (test)#NUM",
+                ("--replace",),
+                "would replace a different value",
+            ),
+        ):
+            self.use_store()
+            self.assertEqual(
+                self.vw_load(destination, "--dry-run", *flags),
+                (0, f"dry run: {destination}: {action}, length 53\n", ""),
+            )
+            self.assertEqual(self.edits(), [])
+            self.assertEqual(self.bao.requests, [])
+        fixture[0]["fields"][1]["value"] = VALUE
+        self.use_store(server=fixture, local=fixture)
+        self.assertEqual(
+            self.vw_load(gh, "--dry-run"),
+            (0, f"dry run: {gh}: already holds this value, length 53\n", ""),
+        )
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_dry_run_whole_file_remove_source(self):
+        key = "-----BEGIN FAKE KEY-----\ndummy-key-line-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n-----END FAKE KEY-----"
+        (self.root / "key.pem").write_text(key + "\n")
+        self.use_store()
+        destination = "vaultwarden:API tokens (keepbreath.ing)#NEW_KEY"
+        self.assertEqual(
+            self.vw_load(
+                destination,
+                "--dry-run",
+                "--remove-source",
+                source="key.pem",
+                label=None,
+            ),
+            (
+                0,
+                f"dry run: {destination}: would add a hidden field, length 95\n"
+                "dry run: would delete key.pem\n",
+                "",
+            ),
+        )
+        self.assertTrue((self.root / "key.pem").exists())
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_remove_source_after_verified_write(self):
+        self.use_store()
+        self.assertEqual(
+            self.vw_load(VW, "--remove-source"),
+            (
+                0,
+                f"{VW}: write 0, read back 0, matches True, length 53\n"
+                "removed line 2 of cf.txt\n",
+                "",
+            ),
+        )
+        self.assertEqual(self.source.read_bytes(), LINES[0] + b"\n" + LINES[2] + b"\n")
+        self.assertEqual(self.source.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(len(self.edits()), 1)
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_remove_source_only_after_match(self):
+        original = self.source.read_bytes()
+        for mode in ("readback-differs", "edit-fails", "concurrent"):
+            self.use_store()
+            self.environment["FAKE_BW_MODE"] = mode
+            self.assertEqual(self.vw_load(VW, "--remove-source")[0], 1)
+            self.assertEqual(self.source.read_bytes(), original)
+            self.environment.pop("FAKE_BW_MODE")
+            self.assertEqual(self.bao.requests, [])
+        self.use_store()
+        gh = "vaultwarden:API tokens (keepbreath.ing)#GH_TOKEN"
+        self.assertEqual(
+            self.vw_load(gh, "--remove-source"),
+            (
+                1,
+                "",
+                f"secret-load: {gh} holds a different value; use --replace to rotate it\n",
+            ),
+        )
+        self.assertEqual(self.source.read_bytes(), original)
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.bao.requests, [])
+        fixture = json.loads(FIXTURE.read_text())
+        fixture[0]["fields"][1]["value"] = VALUE
+        self.use_store(server=fixture, local=fixture)
+        self.assertEqual(
+            self.vw_load(gh, "--remove-source"),
+            (
+                0,
+                f"{gh}: already holds this value, length 53\nremoved line 2 of cf.txt\n",
+                "",
+            ),
+        )
+        self.assertEqual(self.source.read_bytes(), LINES[0] + b"\n" + LINES[2] + b"\n")
+        self.assertEqual(self.source.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_source_replace_failure_is_reported(self):
+        self.use_store()
+        locked = self.root / "locked"
+        locked.mkdir()
+        source = locked / "cf.txt"
+        original = self.source.read_bytes()
+        source.write_bytes(original)
+        locked.chmod(0o500)
+        try:
+            self.assertEqual(
+                self.vw_load(VW, "--remove-source", source="locked/cf.txt"),
+                (
+                    1,
+                    f"{VW}: write 0, read back 0, matches True, length 53\n",
+                    "secret-load: cannot remove locked/cf.txt: Permission denied\n",
+                ),
+            )
+        finally:
+            locked.chmod(0o700)
+        self.assertEqual(source.read_bytes(), original)
+        self.assertEqual(list(locked.glob(".cf.txt.*")), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_usage_errors_before_calls(self):
+        for destination in (
+            "vaultwarden:",
+            "vaultwarden:API tokens (keepbreath.ing)",
+            "vaultwarden:#GH_TOKEN",
+            "vaultwarden:API tokens (keepbreath.ing)#",
+        ):
+            self.assertEqual(
+                self.vw_load(destination),
+                (2, "", "secret-load: --to must be vaultwarden:ITEM#FIELD\n"),
+            )
+            self.assertEqual(self.calls(), [])
+            self.assertEqual(self.bao.requests, [])
+        self.assertEqual(
+            self.vw_load("secret/x"),
+            (
+                2,
+                "",
+                "secret-load: --to must be openbao:PATH[#KEY] or vaultwarden:ITEM#FIELD\n",
+            ),
+        )
+
+    def test_vaultwarden_session_and_absolute_source(self):
+        self.use_store()
+        (self.root / "bw-session").unlink()
+        self.environment["BW_SESSION"] = "dummy-session"
+        other = self.root / "other"
+        other.mkdir()
+        self.assertEqual(self.vw_load(source=str(self.source), cwd=other)[0], 0)
+        self.assertTrue(
+            all(call["session"] == "dummy-session" for call in self.calls())
+        )
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_missing_session(self):
+        self.use_store()
+        (self.root / "bw-session").unlink()
+        self.assertEqual(
+            self.vw_load(),
+            (
+                1,
+                "",
+                'secret-load: nothing from the vault for "API tokens (keepbreath.ing)". Is it unlocked? Run vu.\n',
+            ),
+        )
+        self.assertEqual(
+            [call["args"] for call in self.calls()],
+            [["sync"], ["list", "items", "--search", "API tokens (keepbreath.ing)"]],
+        )
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_missing_container_marker(self):
+        self.use_store()
+        self.marker.unlink()
+        self.assertEqual(
+            self.vw_load(),
+            (
+                1,
+                "",
+                "secret-load: bw runs only inside the dev container (distrobox enter dev)\n",
+            ),
+        )
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_bw_absent_at_sync(self):
+        self.use_store()
+        (self.root / "bin/bw").unlink()
+        self.assertEqual(self.vw_load(), (1, "", "secret-load: bw sync failed\n"))
+        self.assertEqual(self.calls(), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_bw_vanishes_before_edit(self):
+        self.use_store()
+        self.environment["FAKE_BW_MODE"] = "vanish"
+        self.environment["FAKE_BW_VANISH"] = str(self.root / "bin/bw")
+        self.assertEqual(
+            self.vw_load(), (1, "", "secret-load: bw edit could not run\n")
+        )
+        self.assertEqual(
+            [call["args"][:1] for call in self.calls()], [["sync"], ["list"]]
+        )
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_container_unmarked_before_edit(self):
+        self.use_store()
+        self.environment["FAKE_BW_MODE"] = "unmark"
+        self.environment["FAKE_BW_UNMARK"] = str(self.marker)
+        self.assertEqual(
+            self.vw_load(),
+            (
+                1,
+                "",
+                "secret-load: bw runs only inside the dev container (distrobox enter dev)\n",
+            ),
+        )
+        self.assertEqual(
+            [call["args"][:1] for call in self.calls()], [["sync"], ["list"]]
+        )
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_only_decoy(self):
+        decoy = json.loads(FIXTURE.read_text())[1]
+        self.use_store(server=[decoy], local=[decoy])
+        self.assertEqual(
+            self.vw_load(),
+            (
+                1,
+                "",
+                'secret-load: no vault item is named exactly "API tokens (keepbreath.ing)"\n',
+            ),
+        )
+        self.assertEqual(
+            [call["args"][:1] for call in self.calls()], [["sync"], ["list"]]
+        )
+        self.assertEqual(self.bao.requests, [])
 
     def run_tool(self, *args, cwd=None):
         stdout, stderr = io.StringIO(), io.StringIO()
@@ -365,10 +918,6 @@ class SecretLoadTests(unittest.TestCase):
 
     def test_destinations_and_help(self):
         for destination, error in [
-            (
-                "vaultwarden:openbao keepbreath0 (hub)#login.password",
-                "vaultwarden: destinations are not built yet",
-            ),
             *[
                 (x, "--to must be openbao:PATH[#KEY]")
                 for x in (
@@ -382,9 +931,9 @@ class SecretLoadTests(unittest.TestCase):
                     "openbao:a#b/c",
                     "openbao:a?b",
                     "openbao:a\\b",
-                    "secret/x",
                 )
             ],
+            ("secret/x", "--to must be openbao:PATH[#KEY] or vaultwarden:ITEM#FIELD"),
         ]:
             with self.subTest(destination=destination):
                 self.assertEqual(
@@ -392,6 +941,16 @@ class SecretLoadTests(unittest.TestCase):
                     (2, "", f"secret-load: {error}\n"),
                 )
         self.assertEqual(self.calls(), [])
+        self.assertEqual(self.bao.requests, [])
+        self.assertEqual(
+            self.run_tool(
+                "--from",
+                "cf.txt",
+                "--to",
+                "vaultwarden:openbao keepbreath0 (hub)#login.password",
+            ),
+            (1, "", "secret-load: bw sync failed\n"),
+        )
         self.assertEqual(self.bao.requests, [])
         link = self.root / "secret-load"
         link.symlink_to(ROOT / "tools/secret_load.py")
@@ -404,7 +963,7 @@ class SecretLoadTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         help_text = " ".join(result.stdout.split())
         self.assertIn(
-            "Replace a different existing value. OpenBao keeps the old version; Vaultwarden keeps no history for a custom field, so its old value is lost.",
+            "Replace a different existing value. OpenBao keeps the old version; Vaultwarden keeps a replaced login password or hidden field in the item's password history, but not a replaced text field.",
             help_text,
         )
         self.assertIn(
@@ -416,11 +975,11 @@ class SecretLoadTests(unittest.TestCase):
         help_text = " ".join(out.split())
         self.assertEqual(
             help_text,
-            "usage: secret-load [-h] --from FILE [--label LABEL] --to openbao:PATH[#KEY] "
+            "usage: secret-load [-h] --from FILE [--label LABEL] --to DEST "
             "[--dry-run] [--replace] [--remove-source] options: -h, --help show this help "
-            "message and exit --from FILE --label LABEL --to openbao:PATH[#KEY] --dry-run "
+            "message and exit --from FILE --label LABEL --to DEST openbao:PATH[#KEY] or vaultwarden:ITEM#FIELD --dry-run "
             "--replace Replace a different existing value. OpenBao keeps the old version; "
-            "Vaultwarden keeps no history for a custom field, so its old value is lost. "
+            "Vaultwarden keeps a replaced login password or hidden field in the item's password history, but not a replaced text field. "
             "--remove-source After a verified match, remove the label's line, or the whole "
             "file. Removal does not scrub the old data from a btrfs disk.",
         )
