@@ -23,6 +23,44 @@
   reason: remote_text already marks an HTTP 300 reply as an error, and the page-text check changes only a found or not-found attempt, so admitting 300 changes nothing.
 - mutant: skills.research.scripts.lookup.x_page_lookup__mutmut_343
   reason: remote_text already marks an HTTP 300 reply as an error, and the page-text check changes only a found or not-found attempt, so admitting 300 changes nothing.
+- mutant: tools.secret_load.x__source__mutmut_7
+  reason: UTF-8 and utf-8 are aliases for the same Python codec; decoding and every command result agree.
+- mutant: tools.secret_load.x__source__mutmut_28
+  reason: UTF-8 and utf-8 are aliases for the same Python codec; decoding and every command result agree.
+- mutant: tools.secret_load.x__parser__mutmut_21
+  reason: argparse's default metavar for --label is LABEL, so omitting the explicit metavar leaves help and usage unchanged.
+- mutant: tools.secret_load.x__parser__mutmut_23
+  reason: argparse's default metavar for --label is LABEL, so setting the metavar to None leaves help and usage unchanged.
+- mutant: tools.secret_load.x__request__mutmut_8
+  reason: HTTP field names are case insensitive, and urllib stores this spelling as Content-type before sending it.
+- mutant: tools.secret_load.x__request__mutmut_9
+  reason: HTTP field names are case insensitive, and urllib stores this spelling as Content-type before sending it.
+- mutant: tools.secret_load.x__request__mutmut_15
+  reason: HTTP field names are case insensitive, and urllib stores this spelling as X-vault-token before sending it.
+- mutant: tools.secret_load.x__request__mutmut_16
+  reason: HTTP field names are case insensitive, and urllib stores this spelling as X-vault-token before sending it.
+- mutant: tools.secret_load.x__request__mutmut_32
+  reason: A 31-second timeout still expires before the fake closes at 40 seconds, so it produces the same timed out message as the 30-second timeout.
+- mutant: tools.secret_load.x__read__mutmut_2
+  reason: urllib infers GET from a Request with no body when method is None, so the sent request and result agree.
+- mutant: tools.secret_load.x_main__mutmut_37
+  reason: urllib infers POST from a Request with a body when method is None, so sign-in sends the same request.
+- mutant: tools.secret_load.x_main__mutmut_129
+  reason: urllib infers POST from a Request with a body when method is None, so the write sends the same request.
+- mutant: tools.secret_load.x_main__mutmut_87
+  reason: Each path segment has already been separated from slashes; urllib.quote's default safe slash cannot change it.
+- mutant: tools.secret_load.x_main__mutmut_88
+  reason: X is unreserved and already preserved by urllib.quote, so safe='XXXX' changes no encoded path.
+- mutant: tools.secret_load.x__remove_source__mutmut_29
+  reason: The temporary file's prefix cannot affect the source bytes, mode, or message after it is renamed over the source.
+- mutant: tools.secret_load.x__remove_source__mutmut_28
+  reason: A different temporary folder changes behavior only across filesystems; arranging that in a portable test would require patching tempfile rather than observing the command.
+- mutant: tools.secret_load.x__remove_source__mutmut_30
+  reason: tempfile treats delete=None and delete=False as false; both leave the temporary file available for rename.
+- mutant: tools.secret_load.x__remove_source__mutmut_31
+  reason: A different temporary folder changes behavior only across filesystems; arranging that in a portable test would require patching tempfile rather than observing the command.
+- mutant: tools.secret_load.x__remove_source__mutmut_32
+  reason: The temporary file's prefix cannot affect the source bytes, mode, or message after it is renamed over the source.
 - mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_40
   reason: json.loads accepts bytes as well as text, so changing text=True leaves the status result unchanged.
 - mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_41

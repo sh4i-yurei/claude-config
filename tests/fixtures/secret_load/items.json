@@ -1,0 +1,4 @@
+[
+  {"name": "openbao keepbreath0 (hub)", "login": {"username": "keepbreath0", "password": "dummy-login-pw-5555"}},
+  {"name": "openbao keepbreath0 (hub) old", "login": {"username": "keepbreath0", "password": "dummy-old-login-pw-6666"}}
+]
