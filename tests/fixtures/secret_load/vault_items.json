@@ -1,0 +1,161 @@
+[
+  {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "revisionDate": "2026-11-20T00:00:00.000Z",
+    "type": 2,
+    "name": "API tokens (keepbreath.ing)",
+    "login": null,
+    "secureNote": {
+      "type": 0
+    },
+    "notes": null,
+    "fields": [
+      {
+        "name": "CLOUDFLARE_API_TOKEN",
+        "value": "dummy-vw-cloudflare-aaaa1111",
+        "type": 1,
+        "linkedId": null
+      },
+      {
+        "name": "GH_TOKEN",
+        "value": "dummy-vw-gh-bbbb2222",
+        "type": 1,
+        "linkedId": null
+      },
+      {
+        "name": "note",
+        "value": "dummy-vw-note-text",
+        "type": 0,
+        "linkedId": null
+      },
+      {
+        "name": "DIGITALOCEAN_API_TOKEN",
+        "value": "dummy-vw-do-cccc3333",
+        "type": 1,
+        "linkedId": null
+      }
+    ]
+  },
+  {
+    "id": "11111111-1111-4111-8111-111111111112",
+    "revisionDate": "2026-11-20T00:00:00.000Z",
+    "type": 2,
+    "name": "API tokens (keepbreath.ing) old",
+    "login": null,
+    "secureNote": {
+      "type": 0
+    },
+    "notes": null,
+    "fields": [
+      {
+        "name": "GH_TOKEN",
+        "value": "dummy-vw-old-gh-dddd4444",
+        "type": 1,
+        "linkedId": null
+      }
+    ]
+  },
+  {
+    "id": "11111111-1111-4111-8111-111111111113",
+    "revisionDate": "2026-11-20T00:00:00.000Z",
+    "type": 1,
+    "name": "mail submission (587)",
+    "login": {
+      "username": "dummy-user",
+      "password": "dummy-vw-mail-pw-eeee5555",
+      "uris": []
+    },
+    "secureNote": null,
+    "notes": null,
+    "fields": null
+  },
+  {
+    "id": "11111111-1111-4111-8111-111111111114",
+    "revisionDate": "2026-11-20T00:00:00.000Z",
+    "type": 1,
+    "name": "empty login (test)",
+    "login": {
+      "username": "dummy-user",
+      "password": null,
+      "uris": []
+    },
+    "secureNote": null,
+    "notes": null,
+    "fields": [
+      {
+        "name": "EMPTY",
+        "value": "",
+        "type": 1,
+        "linkedId": null
+      },
+      {
+        "name": "NULLED",
+        "value": null,
+        "type": 0,
+        "linkedId": null
+      }
+    ]
+  },
+  {
+    "id": "11111111-1111-4111-8111-111111111115",
+    "revisionDate": "2026-11-20T00:00:00.000Z",
+    "type": 2,
+    "name": "odd # name [x]",
+    "login": null,
+    "secureNote": {
+      "type": 0
+    },
+    "notes": null,
+    "fields": [
+      {
+        "name": "API key (old)",
+        "value": "dummy-vw-odd-ffff6666",
+        "type": 1,
+        "linkedId": null
+      }
+    ]
+  },
+  {
+    "id": "11111111-1111-4111-8111-111111111116",
+    "revisionDate": "2026-11-20T00:00:00.000Z",
+    "type": 2,
+    "name": "field kinds (test)",
+    "login": null,
+    "secureNote": {
+      "type": 0
+    },
+    "notes": null,
+    "fields": [
+      {
+        "name": "K",
+        "value": "dummy-vw-k1",
+        "type": 1,
+        "linkedId": null
+      },
+      {
+        "name": "K",
+        "value": "dummy-vw-k2",
+        "type": 1,
+        "linkedId": null
+      },
+      {
+        "name": "FLAG",
+        "value": "true",
+        "type": 2,
+        "linkedId": null
+      },
+      {
+        "name": "LINK",
+        "value": null,
+        "type": 3,
+        "linkedId": 100
+      },
+      {
+        "name": "NUM",
+        "value": 0,
+        "type": 1,
+        "linkedId": null
+      }
+    ]
+  }
+]
