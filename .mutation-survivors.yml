@@ -589,11 +589,11 @@
 - mutant: skills.research.scripts.gw.x_request__mutmut_474
   reason: finished is a current epoch time, so 0 and 1 are both earlier.
 - mutant: skills.research.scripts.gw.x_request__mutmut_653
-  reason: the comparison runs only when the provider names an error header, so its default is never read, and with no header named no response header name equals the empty string.
+  reason: the comparison runs only when the provider names its own error header, so this default is never read.
 - mutant: skills.research.scripts.gw.x_request__mutmut_655
-  reason: the comparison runs only when the provider names an error header, so its default is never read, and with no header named no response header name equals the empty string.
+  reason: the comparison runs only when the provider names its own error header, so this default is never read.
 - mutant: skills.research.scripts.gw.x_request__mutmut_658
-  reason: the comparison runs only when the provider names an error header, so its default is never read, and with no header named no response header name equals the empty string.
+  reason: the comparison runs only when the provider names its own error header, so this default is never read.
 - mutant: skills.research.scripts.gw.x_request__mutmut_784
   reason: write_envelope falls back to the same configured max_body_bytes.
 - mutant: skills.research.scripts.gw.x_request__mutmut_796
