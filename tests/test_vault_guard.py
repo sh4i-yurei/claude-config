@@ -707,6 +707,203 @@ class VaultGuardInProcessTests(VaultGuardTests):
                         in_process_decision(command, "strict", root), refusal
                     )
 
+    WORKTREE_REFUSAL = (
+        "git worktree remove --force is refused while the worktree holds modified or "
+        "untracked files, because they exist nowhere else: list them with git -C {path} "
+        "status --porcelain -uall, then commit, move or keep them first."
+    )
+
+    def worktree_layout(self, root, names=("wt", "wtclean"), untracked=("wt",)):
+        """Make repo with one commit and worktrees beside it; return their paths."""
+        repository = Path(root) / "repo"
+        subprocess.run(["git", "init", "-q", "-b", "main", str(repository)], check=True)
+        (repository / "t.txt").write_text("t\n")
+        subprocess.run(["git", "-C", str(repository), "add", "t.txt"], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repository),
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "-m",
+                "t",
+            ],
+            check=True,
+        )
+        for number, name in enumerate(names):
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "worktree",
+                    "add",
+                    "-q",
+                    "-b",
+                    f"branch{number}",
+                    "../" + name,
+                ],
+                check=True,
+                capture_output=True,
+            )
+        for name in untracked:
+            (Path(root) / name / "u.txt").write_text("u\n")
+        listing = subprocess.run(
+            ["git", "-C", str(repository), "worktree", "list", "--porcelain"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+        paths = [
+            line[len("worktree ") :]
+            for line in listing.splitlines()
+            if line.startswith("worktree ")
+        ]
+        return {Path(path).name: path for path in paths}
+
+    def assert_worktree_decisions(self, root, commands, expected):
+        for agent in ("claude", "strict"):
+            for command in commands:
+                with self.subTest(agent=agent, command=command):
+                    self.assertEqual(
+                        in_process_decision(command, agent, root), expected
+                    )
+
+    def test_forced_worktree_remove_refused_for_every_force_spelling(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.worktree_layout(root)
+            self.assert_worktree_decisions(
+                root,
+                (
+                    "git -C repo worktree remove --force ../wt",
+                    "git -C repo worktree remove -f ../wt",
+                    "git -C repo worktree remove -ff ../wt",
+                    "git -C repo worktree remove --forc ../wt",
+                    "git -C repo worktree remove --f ../wt",
+                    "git -C repo worktree remove ../wt --force",
+                    "git -C repo worktree remove --force -- ../wt",
+                    "git -C repo worktree remove --no-force --force ../wt",
+                ),
+                self.WORKTREE_REFUSAL.format(path=paths["wt"]),
+            )
+
+    def test_forced_worktree_remove_refused_by_suffix_and_home(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.worktree_layout(root)
+            with patch.dict(os.environ, {"HOME": root}):
+                self.assert_worktree_decisions(
+                    root,
+                    (
+                        "git -C repo worktree remove --force wt",
+                        "git -C repo worktree remove --force ~/wt",
+                    ),
+                    self.WORKTREE_REFUSAL.format(path=paths["wt"]),
+                )
+
+    def test_forced_worktree_remove_refused_when_git_dir_names_the_repository(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.worktree_layout(root)
+            self.assert_worktree_decisions(
+                root,
+                ("git --git-dir=repo/.git worktree remove --force wt",),
+                self.WORKTREE_REFUSAL.format(path=paths["wt"]),
+            )
+
+    def test_forced_worktree_remove_refused_for_modified_tracked_file(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.worktree_layout(root, untracked=())
+            (Path(root) / "wt" / "t.txt").write_text("changed\n")
+            self.assert_worktree_decisions(
+                root,
+                ("git -C repo worktree remove --force ../wt",),
+                self.WORKTREE_REFUSAL.format(path=paths["wt"]),
+            )
+
+    def test_forced_worktree_remove_refused_after_cd(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.worktree_layout(root)
+            self.assert_worktree_decisions(
+                root,
+                ("cd repo && git worktree remove --force ../wt",),
+                self.WORKTREE_REFUSAL.format(path=paths["wt"]),
+            )
+
+    def test_forced_worktree_remove_refused_when_config_hides_untracked_files(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.worktree_layout(root)
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(Path(root) / "repo"),
+                    "config",
+                    "status.showUntrackedFiles",
+                    "no",
+                ],
+                check=True,
+            )
+            self.assert_worktree_decisions(
+                root,
+                ("git -C repo worktree remove --force ../wt",),
+                self.WORKTREE_REFUSAL.format(path=paths["wt"]),
+            )
+
+    def test_forced_worktree_remove_refused_for_a_worktree_named_dash(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            paths = self.worktree_layout(root, names=("-", "wtclean"), untracked=("-",))
+            self.assert_worktree_decisions(
+                root,
+                ("git -C repo worktree remove --force -",),
+                self.WORKTREE_REFUSAL.format(path=paths["-"]),
+            )
+
+    def test_worktree_commands_left_to_git_are_allowed(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            self.worktree_layout(root)
+            self.assert_worktree_decisions(
+                root,
+                (
+                    "git -C repo worktree remove --force ../wtclean",
+                    "git -C repo worktree remove --force wtclean",
+                    "git -C repo worktree remove ../wt",
+                    "git -C repo worktree remove --force --no-force ../wt",
+                    "git -C repo worktree remove --force --no ../wt",
+                    "git -C repo worktree remove --force wt/",
+                    "git -C repo worktree remove --force -q ../wt",
+                    "git -C repo worktree remove --force repo",
+                    "git -C repo worktree remove --force ../missing",
+                    "git -C repo worktree remove --force",
+                    "git -C repo worktree remove -- --force",
+                    "git -C repo worktree remove --force -- ../wt -f",
+                    "git -C repo worktree add -f ../wt",
+                    "git -C repo worktree list",
+                    "git -C repo worktree prune",
+                ),
+                None,
+            )
+
+    def test_forced_remove_of_a_deleted_worktree_is_allowed(self):
+        GUARD.GIT_CACHE.clear()
+        with tempfile.TemporaryDirectory() as root:
+            self.worktree_layout(root, names=("wt", "wtclean", "gone"))
+            shutil.rmtree(Path(root) / "gone")
+            self.assert_worktree_decisions(
+                root, ("git -C repo worktree remove --force ../gone",), None
+            )
+
     def test_global_options_select_the_judged_repository(self):
         protected = (
             "Pushing to main or an unknown branch is refused in this repository."
