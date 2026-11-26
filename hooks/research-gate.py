@@ -42,6 +42,18 @@ KNOWN_APIS = STATE / "skills" / "research" / "known-apis.md"
 
 FETCH_TOOLS = {"WebFetch"}
 FETCH_TOOL_SUFFIXES = ("firecrawl_scrape",)
+GATE_SEARCH_TOOL_SUFFIXES = (
+    "firecrawl_search",
+    "firecrawl_developer_search",
+    "firecrawl_gov_search",
+    "firecrawl_research_search_papers",
+    "firecrawl_agent",
+)
+SUBAGENT_REASON = (
+    "Subagents must not fetch the web. Parallel agents each searching is "
+    "the pattern that got this address flagged. Do the research in the "
+    "main session, one fetch at a time."
+)
 
 GAP_MULTIPLIER = 10
 GAP_FLOOR_S = 1.0
@@ -117,9 +129,8 @@ def is_subagent(payload: dict) -> bool:
     session. Parallel subagents each searching is the single worst pattern in the
     recorded history, and it has no legitimate use for web research.
 
-    The payload field carrying this is not documented, so several plausible names
-    are checked and the default is to allow. Verify against research-fetches.log,
-    which records the keys actually received.
+    Claude Code documents agent_id as present only when the hook fires inside a
+    subagent. The other names are still checked, and the default is to allow.
     """
     for key in ("is_subagent", "subagent", "agent_id", "parent_session_id"):
         v = payload.get(key)
@@ -137,6 +148,11 @@ def main() -> int:
         return allow()
 
     tool_name = payload.get("tool_name") or ""
+    if tool_name.endswith(GATE_SEARCH_TOOL_SUFFIXES):
+        if is_subagent(payload):
+            return deny(SUBAGENT_REASON)
+        return allow()
+
     if not (tool_name in FETCH_TOOLS or tool_name.endswith(FETCH_TOOL_SUFFIXES)):
         return allow()
 
@@ -146,11 +162,7 @@ def main() -> int:
         return allow()
 
     if is_subagent(payload):
-        return deny(
-            "Subagents must not fetch the web. Parallel agents each searching is "
-            "the pattern that got this address flagged. Do the research in the "
-            "main session, one fetch at a time."
-        )
+        return deny(SUBAGENT_REASON)
 
     now = time.time()
     state = load_state()

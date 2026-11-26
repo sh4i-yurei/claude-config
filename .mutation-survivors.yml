@@ -540,3 +540,11 @@
 - mutant: hooks.git-guard.x_rtk_executable_commands__mutmut_85
   reason: >-
     When rtk test's words are exactly ( and ), stripping them leaves no command and keeping them leaves the program (, which the guard doesn't judge, so both give the same decision.
+- mutant: hooks.research-gate.x_main__mutmut_8
+  reason: A missing or empty tool name falls through to allow, and XXXX is neither a fetch tool nor a gated search tool, so it is allowed the same way.
+- mutant: hooks.research-gate.x_main__mutmut_25
+  reason: urlparse gives XXXX no hostname, so a missing or empty URL still has no domain and is allowed without touching state.
+- mutant: hooks.research-gate.x_main__mutmut_70
+  reason: A missing error count is below the five-error streak with a default of either 0 or 1, and the count appears only in the refusal it never reaches.
+- mutant: hooks.research-gate.x_main__mutmut_145
+  reason: A missing daily count is below the 300-fetch limit with a default of either 0 or 1, and the refusal that would print it is never reached.
