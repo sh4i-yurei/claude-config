@@ -145,6 +145,11 @@ class SecretLoadTests(unittest.TestCase):
             {"name": "NEW_TOKEN", "value": VALUE, "type": 1, "linkedId": None}
         )
         self.assertEqual(self.edits(), [expected])
+        server = json.loads((self.root / "server.json").read_text())
+        self.assertEqual(
+            server[0]["fields"][-1],
+            {"name": "NEW_TOKEN", "value": VALUE, "type": 1, "linkedId": None},
+        )
         self.assertEqual(
             [call["args"] for call in self.calls()],
             [
@@ -192,35 +197,53 @@ class SecretLoadTests(unittest.TestCase):
             self.assertEqual(self.bao.requests, [])
 
     def test_vaultwarden_refusals_and_dry_run(self):
+        gh = "vaultwarden:API tokens (keepbreath.ing)#GH_TOKEN"
+        different = "holds a different value; use --replace to rotate it"
         cases = (
             (
                 "vaultwarden:API tokens (keepbreath.ing)#login.password",
+                (),
                 "the item is not a login",
             ),
-            ("vaultwarden:field kinds (test)#K", '2 fields are named exactly "K"'),
+            ("vaultwarden:field kinds (test)#K", (), '2 fields are named exactly "K"'),
             (
                 "vaultwarden:field kinds (test)#FLAG",
+                ("--replace",),
                 "the field is not a text or hidden field",
             ),
             (
                 "vaultwarden:field kinds (test)#LINK",
+                ("--replace",),
                 "the field is not a text or hidden field",
             ),
-            (
-                "vaultwarden:field kinds (test)#NUM",
-                "holds a different value; use --replace to rotate it",
-            ),
+            ("vaultwarden:field kinds (test)#NUM", (), different),
+            (gh, (), different),
+            (gh, ("--dry-run",), different),
+            ("vaultwarden:mail submission (587)#login.password", (), different),
         )
-        for destination, message in cases:
-            self.use_store()
-            flags = ("--replace",) if "not a text" in message else ()
-            separator = " " if message.startswith("holds") else ": "
-            self.assertEqual(
-                self.vw_load(destination, *flags),
-                (1, "", f"secret-load: {destination}{separator}{message}\n"),
-            )
-            self.assertEqual(self.edits(), [])
-            self.assertEqual(self.bao.requests, [])
+        for destination, flags, message in cases:
+            with self.subTest(destination=destination, flags=flags):
+                self.use_store()
+                separator = " " if message == different else ": "
+                self.assertEqual(
+                    self.vw_load(destination, *flags),
+                    (1, "", f"secret-load: {destination}{separator}{message}\n"),
+                )
+                self.assertEqual(self.edits(), [])
+                self.assertEqual(
+                    [call["args"][0] for call in self.calls()], ["sync", "list"]
+                )
+                self.assertEqual(self.bao.requests, [])
+        original = self.source.read_bytes()
+        self.use_store()
+        self.assertEqual(
+            self.vw_load(VW, "--dry-run"),
+            (0, f"dry run: {VW}: would add a hidden field, length 53\n", ""),
+        )
+        self.assertEqual([call["args"][0] for call in self.calls()], ["sync", "list"])
+        self.assertFalse((self.root / "edits.jsonl").exists())
+        self.assertEqual(self.source.read_bytes(), original)
+        self.assertEqual(self.bao.requests, [])
         self.use_store()
         self.assertEqual(
             self.vw_load(VW, "--dry-run", "--remove-source"),
@@ -232,6 +255,8 @@ class SecretLoadTests(unittest.TestCase):
             ),
         )
         self.assertEqual(self.edits(), [])
+        self.assertEqual(self.source.read_bytes(), original)
+        self.assertEqual(self.bao.requests, [])
 
     def fault(self, mode, expected):
         self.use_store()
@@ -392,6 +417,47 @@ class SecretLoadTests(unittest.TestCase):
             (0, f"dry run: {gh}: already holds this value, length 53\n", ""),
         )
         self.assertEqual(self.edits(), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_dry_run_whole_file_remove_source(self):
+        key = "-----BEGIN FAKE KEY-----\ndummy-key-line-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n-----END FAKE KEY-----"
+        (self.root / "key.pem").write_text(key + "\n")
+        self.use_store()
+        destination = "vaultwarden:API tokens (keepbreath.ing)#NEW_KEY"
+        self.assertEqual(
+            self.vw_load(
+                destination,
+                "--dry-run",
+                "--remove-source",
+                source="key.pem",
+                label=None,
+            ),
+            (
+                0,
+                f"dry run: {destination}: would add a hidden field, length 95\n"
+                "dry run: would delete key.pem\n",
+                "",
+            ),
+        )
+        self.assertTrue((self.root / "key.pem").exists())
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.bao.requests, [])
+
+    def test_vaultwarden_remove_source_after_verified_write(self):
+        self.use_store()
+        self.assertEqual(
+            self.vw_load(VW, "--remove-source"),
+            (
+                0,
+                f"{VW}: write 0, read back 0, matches True, length 53\n"
+                "removed line 2 of cf.txt\n",
+                "",
+            ),
+        )
+        self.assertEqual(self.source.read_bytes(), LINES[0] + b"\n" + LINES[2] + b"\n")
+        self.assertEqual(self.source.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(len(self.edits()), 1)
+        self.assertEqual(self.bao.requests, [])
 
     def test_vaultwarden_remove_source_only_after_match(self):
         original = self.source.read_bytes()
@@ -404,8 +470,17 @@ class SecretLoadTests(unittest.TestCase):
             self.assertEqual(self.bao.requests, [])
         self.use_store()
         gh = "vaultwarden:API tokens (keepbreath.ing)#GH_TOKEN"
-        self.assertEqual(self.vw_load(gh, "--remove-source")[0], 1)
+        self.assertEqual(
+            self.vw_load(gh, "--remove-source"),
+            (
+                1,
+                "",
+                f"secret-load: {gh} holds a different value; use --replace to rotate it\n",
+            ),
+        )
         self.assertEqual(self.source.read_bytes(), original)
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.bao.requests, [])
         fixture = json.loads(FIXTURE.read_text())
         fixture[0]["fields"][1]["value"] = VALUE
         self.use_store(server=fixture, local=fixture)
@@ -419,6 +494,8 @@ class SecretLoadTests(unittest.TestCase):
         )
         self.assertEqual(self.source.read_bytes(), LINES[0] + b"\n" + LINES[2] + b"\n")
         self.assertEqual(self.source.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.edits(), [])
+        self.assertEqual(self.bao.requests, [])
 
     def test_vaultwarden_source_replace_failure_is_reported(self):
         self.use_store()
@@ -874,6 +951,7 @@ class SecretLoadTests(unittest.TestCase):
             ),
             (1, "", "secret-load: bw sync failed\n"),
         )
+        self.assertEqual(self.bao.requests, [])
         link = self.root / "secret-load"
         link.symlink_to(ROOT / "tools/secret_load.py")
         result = subprocess.run(

@@ -19,13 +19,13 @@
   reason: A 31-second timeout still expires before the fake closes at 40 seconds, so it produces the same timed out message as the 30-second timeout.
 - mutant: tools.secret_load.x__read__mutmut_2
   reason: urllib infers GET from a Request with no body when method is None, so the sent request and result agree.
-- mutant: tools.secret_load.x_main__mutmut_37
+- mutant: tools.secret_load.x_main__mutmut_71
   reason: urllib infers POST from a Request with a body when method is None, so sign-in sends the same request.
-- mutant: tools.secret_load.x_main__mutmut_129
+- mutant: tools.secret_load.x_main__mutmut_163
   reason: urllib infers POST from a Request with a body when method is None, so the write sends the same request.
-- mutant: tools.secret_load.x_main__mutmut_87
+- mutant: tools.secret_load.x_main__mutmut_121
   reason: Each path segment has already been separated from slashes; urllib.quote's default safe slash cannot change it.
-- mutant: tools.secret_load.x_main__mutmut_88
+- mutant: tools.secret_load.x_main__mutmut_122
   reason: X is unreserved and already preserved by urllib.quote, so safe='XXXX' changes no encoded path.
 - mutant: tools.secret_load.x__remove_source__mutmut_29
   reason: The temporary file's prefix cannot affect the source bytes, mode, or message after it is renamed over the source.
@@ -37,6 +37,22 @@
   reason: A different temporary folder changes behavior only across filesystems; arranging that in a portable test would require patching tempfile rather than observing the command.
 - mutant: tools.secret_load.x__remove_source__mutmut_32
   reason: The temporary file's prefix cannot affect the source bytes, mode, or message after it is renamed over the source.
+- mutant: tools.secret_load.x__vault_target__mutmut_48
+  reason: Callers compare the target kind only with "new" and "login", so a different tag for an existing field takes the same path and gives the same edit request and output.
+- mutant: tools.secret_load.x__vault_target__mutmut_49
+  reason: Callers compare the target kind only with "new" and "login", so a different tag for an existing field takes the same path and gives the same edit request and output.
+- mutant: tools.secret_load.x__vaultwarden__mutmut_64
+  reason: A shallow copy also changes the original item's nested login or field, but after the edit only the original's top-level id is read, so the edit request and output are the same.
+- mutant: tools.vault_item.x_edit_item__mutmut_30
+  reason: bytes.decode defaults to UTF-8, so dropping the codec name decodes standard error the same way.
+- mutant: tools.vault_item.x_edit_item__mutmut_33
+  reason: UTF-8 and utf-8 are aliases for the same Python codec; decoding standard error and every command result agree.
+- mutant: tools.vault_item.x_edit_item__mutmut_39
+  reason: secret-load catches StaleItemError and prints its own fixed message, never the exception's text, and it is the only caller, so the message cannot reach any output.
+- mutant: tools.vault_item.x_edit_item__mutmut_40
+  reason: secret-load catches StaleItemError and prints its own fixed message, never the exception's text, and it is the only caller, so the message cannot reach any output.
+- mutant: tools.vault_item.x_edit_item__mutmut_41
+  reason: secret-load catches StaleItemError and prints its own fixed message, never the exception's text, and it is the only caller, so the message cannot reach any output.
 - mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_40
   reason: json.loads accepts bytes as well as text, so changing text=True leaves the status result unchanged.
 - mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_41
