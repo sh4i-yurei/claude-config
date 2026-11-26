@@ -414,11 +414,11 @@ class GatewayTests(unittest.TestCase):
         index = len(self.calls)
         status = self.statuses[min(index, len(self.statuses) - 1)]
         returncode = self.returncodes[min(index, len(self.returncodes) - 1)]
-        if returncode in (7, 35) or (
-            returncode == 28
-            and self.connect_times[min(index, len(self.connect_times) - 1)] == 0
-        ):
+        connect_time = self.connect_times[min(index, len(self.connect_times) - 1)]
+        if returncode in (7, 35) or (returncode == 28 and connect_time == 0):
             status = 0
+        if returncode in (7, 35):
+            connect_time = 0
         Path(command[command.index("--output") + 1]).write_bytes(self.body_bytes)
         headers = f"HTTP/2 {status}\r\nContent-Type: application/json\r\n"
         if self.rate_headers:
@@ -444,7 +444,7 @@ class GatewayTests(unittest.TestCase):
         write_out = (
             self.write_outs[min(len(self.calls) - 1, len(self.write_outs) - 1)]
             if self.write_outs is not None
-            else f"{status:03d} 0.2 {size} {self.connect_times[min(index, len(self.connect_times) - 1)]}"
+            else f"{status:03d} 0.2 {size} {connect_time}"
         )
         return type(
             "Result",
@@ -521,6 +521,26 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 1)
 
+    def test_target_cooldown_without_saved_end_at_exact_boundary(self):
+        config = gw.load_config()
+        instant = float(config["gateway"]["error_cooldown_s"])
+        self.state.write_text(
+            json.dumps(
+                {
+                    "api.brightdata.com": {
+                        "targets": {
+                            "www.reddit.com": {
+                                "errors": config["gateway"]["error_streak"]
+                            }
+                        }
+                    }
+                }
+            )
+        )
+        with patch.object(gw.time, "time", return_value=instant):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
+        self.assertEqual(len(self.calls), 1)
+
     def test_target_without_error_count_is_sent_at_streak_threshold_one(self):
         config = gw.load_config()
         config["gateway"]["error_streak"] = 1
@@ -594,6 +614,18 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(
             self.request_site("https://example.org/x", host="api.firecrawl.dev"), 0
         )
+        self.assertNotIn("targets", self.gateway_entry("api.firecrawl.dev"))
+
+    def test_firecrawl_empty_header_name_does_not_record_target_error(self):
+        self.statuses = [502, 200]
+        site = "https://example.org/x"
+        self.assertEqual(self.request_site(site, host="api.firecrawl.dev"), 0)
+        self.assertEqual(
+            self.gateway_entry("api.firecrawl.dev")["targets"]["example.org"]["errors"],
+            1,
+        )
+        self.extra_headers = ": x\r\n"
+        self.assertEqual(self.request_site(site, host="api.firecrawl.dev"), 0)
         self.assertNotIn("targets", self.gateway_entry("api.firecrawl.dev"))
 
     def test_brightdata_error_header_is_billed_and_site_scoped(self):
@@ -758,12 +790,22 @@ class GatewayTests(unittest.TestCase):
         self.statuses = [0]
         self.returncodes = [28]
         self.connect_times = [0.05]
-        for index in range(6):
-            self.assertEqual(self.request_site(f"https://site{index}.example.org/x"), 1)
+        instant = 2_000_000_000.0
+        with patch.object(gw.time, "time", return_value=instant):
+            for index in range(6):
+                self.assertEqual(
+                    self.request_site(f"https://site{index}.example.org/x"), 1
+                )
         entry = self.gateway_entry()
         self.assertEqual(entry["errors"], 0)
         self.assertEqual(entry["window_used"], 0)
-        self.assertEqual(len(entry["targets"]), 6)
+        self.assertEqual(
+            entry["targets"],
+            {
+                f"site{index}.example.org": {"errors": 1, "end": instant}
+                for index in range(6)
+            },
+        )
 
     def test_missing_connect_field_counts_as_connected(self):
         self.statuses = [0]
@@ -822,7 +864,13 @@ class GatewayTests(unittest.TestCase):
         self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 4)
         self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 0)
         self.assertEqual(self.gateway_entry()["targets"]["www.reddit.com"]["errors"], 5)
-        self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 3)
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            self.assertEqual(self.request_site("https://www.reddit.com/r/x"), 3)
+        self.assertEqual(
+            stderr.getvalue().strip(),
+            "[gw] REFUSED api.brightdata.com: error cooldown for www.reddit.com",
+        )
 
     def test_target_error_clears_host_streak(self):
         self.statuses = [401] * 4 + [502, 401]
