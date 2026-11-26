@@ -156,6 +156,15 @@ class OncePerNotePerSession(GateTest):
         self.assert_prints(edit(self.note), ALLOW_FULL)
         self.assert_prints(edit(self.vault / "10_Projects" / "b.md"), ALLOW_FULL)
 
+    def test_first_note_stays_remembered_after_a_second_note(self):
+        other = self.vault / "10_Projects" / "b.md"
+        self.assert_prints(edit(self.note), ALLOW_FULL)
+        self.assert_prints(edit(other), ALLOW_FULL)
+        self.assert_prints(edit(self.note), ALLOW_ONLY)
+        self.assertEqual(
+            self.record().read_text(encoding="utf-8"), f"{self.note}\n{other}\n"
+        )
+
     def test_another_session_editing_the_same_note_gets_the_full_reminder(self):
         self.assert_prints(edit(self.note, session="s1"), ALLOW_FULL)
         self.assert_prints(edit(self.note, session="s2"), ALLOW_FULL)
