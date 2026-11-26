@@ -107,6 +107,15 @@
 - mutant: hooks.git-guard.x_commit_options__mutmut_35
   reason: >-
     A timeout of 3 seconds instead of 2 differs only when the parser runs for between 2 and 3 seconds, which no portable test can arrange.
+- mutant: hooks.git-guard.x_directory_for__mutmut_4
+  reason: >-
+    The unknown option is read only as a condition, where None and an empty string are both false.
+- mutant: hooks.git-guard.x_directory_for__mutmut_5
+  reason: >-
+    The config override is read only as a condition, where False and None are both false.
+- mutant: hooks.git-guard.x_directory_for__mutmut_76
+  reason: >-
+    A bare -C is taken by the separate-value branch first, so every flag this branch sees is longer than two characters.
 - mutant: hooks.git-guard.x_push_problem__mutmut_8
   reason: The short-flag pattern below already matches -f.
 - mutant: hooks.git-guard.x_push_problem__mutmut_9
@@ -123,19 +132,19 @@
   reason: The last element of a split doesn't depend on maxsplit.
 - mutant: hooks.git-guard.x_push_problem__mutmut_94
   reason: The last element of a split doesn't depend on maxsplit.
-- mutant: hooks.git-guard.x_git_problem__mutmut_22
+- mutant: hooks.git-guard.x_git_problem__mutmut_21
   reason: Git config with one key argument reads it, as --get does.
-- mutant: hooks.git-guard.x_git_problem__mutmut_31
+- mutant: hooks.git-guard.x_git_problem__mutmut_29
   reason: Git config section names are case-insensitive.
-- mutant: hooks.git-guard.x_git_problem__mutmut_83
+- mutant: hooks.git-guard.x_git_problem__mutmut_81
   reason: >-
     After the commit loop, return and leaving the loop both reach the same
     subsequent checks; neither changes the guard decision for that commit.
-- mutant: hooks.git-guard.x_git_problem__mutmut_180
+- mutant: hooks.git-guard.x_git_problem__mutmut_178
   reason: >-
     git rev-parse --abbrev-ref already uses symbolic full names. Removing
     --symbolic-full-name leaves the upstream name and every guard decision unchanged.
-- mutant: hooks.git-guard.x_git_problem__mutmut_189
+- mutant: hooks.git-guard.x_git_problem__mutmut_187
   reason: >-
     Git accepts @{UPSTREAM} and @{upstream} with the same meaning. The upstream
     lookup and every guard decision are unchanged.

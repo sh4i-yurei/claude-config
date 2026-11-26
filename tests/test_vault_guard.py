@@ -707,6 +707,200 @@ class VaultGuardInProcessTests(VaultGuardTests):
                         in_process_decision(command, "strict", root), refusal
                     )
 
+    def test_global_options_select_the_judged_repository(self):
+        protected = (
+            "Pushing to main or an unknown branch is refused in this repository."
+        )
+        with tempfile.TemporaryDirectory() as root:
+            paths = {name: Path(root) / name for name in ("feature", "main", "f=x")}
+            for name, path in paths.items():
+                branch = "main" if name == "main" else "feature/x"
+                subprocess.run(
+                    ["git", "init", "-q", f"--initial-branch={branch}", str(path)],
+                    check=True,
+                )
+                subprocess.run(
+                    [
+                        "git",
+                        "-C",
+                        str(path),
+                        "remote",
+                        "add",
+                        "origin",
+                        "https://example.com/r.git",
+                    ],
+                    check=True,
+                )
+            feature, main = str(paths["feature"]), str(paths["main"])
+            cases = (
+                ("git --git-dir ../feature/.git push origin", main, None),
+                ("git --git-dir=../f=x/.git push origin", main, None),
+                ("git --no-pager --git-dir=../feature/.git push origin", main, None),
+                ("git -Cfeature push origin", root, None),
+                ("git --no-pager -Cfeature push origin", root, None),
+                ("git -C. push origin", feature, None),
+                ("git -C../main push origin", feature, protected),
+                ("git -C ../main push origin", feature, protected),
+            )
+            for command, cwd, expected in cases:
+                with self.subTest(command=command, cwd=cwd):
+                    self.assertEqual(
+                        in_process_decision(command, "claude", cwd), expected
+                    )
+            self.assertEqual(
+                in_process_decision(
+                    "git -Cfeature push origin feature/x", "strict", root
+                ),
+                "Only Claude pushes: commit on the named branch and stop.",
+            )
+
+    def test_known_global_options_are_not_unknown_for_push(self):
+        with tempfile.TemporaryDirectory() as root:
+            repository = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "--initial-branch=feature/x", str(repository)],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-C",
+                    str(repository),
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://example.com/r.git",
+                ],
+                check=True,
+            )
+            for option in (
+                "-p",
+                "--paginate",
+                "-P",
+                "--bare",
+                "--no-replace-objects",
+                "--no-lazy-fetch",
+                "--no-advice",
+                "--html-path",
+                "--man-path",
+                "--info-path",
+                "--exec-path",
+                "-h",
+                "--help",
+                "-v",
+                "--version",
+                "-ccore.pager=cat",
+                "--namespace=n",
+                "--exec-path=/x",
+                "--no-pager --namespace=n",
+            ):
+                command = f"git {option} push origin"
+                with self.subTest(command=command):
+                    self.assertIsNone(
+                        in_process_decision(command, "claude", str(repository))
+                    )
+            self.assertEqual(
+                in_process_decision(
+                    "git --no-pager --frobnicate push origin", "claude", str(repository)
+                ),
+                "Unknown git global option for push: --frobnicate",
+            )
+
+    def test_work_tree_option_selects_the_vault_for_commits(self):
+        with tempfile.TemporaryDirectory() as root:
+            vault = Path(root) / "vault=x"
+            other = Path(root) / "other"
+            subprocess.run(
+                ["git", "init", "-q", "--initial-branch=main", str(vault)], check=True
+            )
+            subprocess.run(
+                ["git", "init", "-q", "--initial-branch=feature/x", str(other)],
+                check=True,
+            )
+            with patch.dict(os.environ, {"SECOND_BRAIN": str(vault)}):
+                for command, expected in (
+                    ("git --work-tree ../vault=x commit -m x", self.COMMIT_REASON),
+                    ("git --work-tree=../vault=x commit -m x", self.COMMIT_REASON),
+                    ("git commit -m x", None),
+                ):
+                    for agent in ("strict", "claude"):
+                        with self.subTest(command=command, agent=agent):
+                            self.assertEqual(
+                                in_process_decision(command, agent, str(other)),
+                                expected,
+                            )
+
+    def test_attached_config_option_refuses_main_fast_forward(self):
+        refused = (
+            "git merge and git pull are refused on main, master, or an unknown "
+            "branch, except a fast-forward to the branch's own upstream with --ff-only."
+        )
+        environment = {key: os.environ[key] for key in ("PATH", "HOME")}
+        environment.update(GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
+        with tempfile.TemporaryDirectory() as root:
+            tracked = Path(root) / "tracked"
+
+            def git(*args):
+                subprocess.run(
+                    ["git", *args],
+                    check=True,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                )
+
+            git("init", "-q", "--initial-branch=main", str(tracked))
+            git(
+                "-C",
+                str(tracked),
+                "remote",
+                "add",
+                "origin",
+                "https://example.com/r.git",
+            )
+            git(
+                "-C",
+                str(tracked),
+                "-c",
+                "user.name=test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "-q",
+                "--allow-empty",
+                "-m",
+                "base",
+            )
+            git("-C", str(tracked), "update-ref", "refs/remotes/origin/main", "HEAD")
+            git("-C", str(tracked), "branch", "-q", "--set-upstream-to=origin/main")
+            for command, expected in (
+                ("git pull --ff-only", None),
+                ("git -ccore.pager=cat pull --ff-only", refused),
+                ("git -ccore.pager=cat merge --ff-only", refused),
+            ):
+                with self.subTest(command=command):
+                    self.assertEqual(
+                        in_process_decision(command, "claude", str(tracked)), expected
+                    )
+
+    def test_missing_global_option_value_is_a_guard_error(self):
+        with tempfile.TemporaryDirectory() as root:
+            event = {
+                "tool_name": "Bash",
+                "tool_input": {"command": "git -C"},
+                "cwd": root,
+            }
+            output = io.StringIO()
+            with patch("sys.stdin", io.StringIO(json.dumps(event))):
+                with patch.object(sys, "argv", ["git-guard.py"]):
+                    with contextlib.redirect_stdout(output):
+                        self.assertEqual(GUARD.main(), 0)
+            decision = json.loads(output.getvalue())["hookSpecificOutput"]
+            self.assertEqual(
+                decision["permissionDecisionReason"],
+                "Guard error: ValueError: missing git global option value",
+            )
+
     def test_claude_push_option_values_are_not_refspecs(self):
         with tempfile.TemporaryDirectory() as root:
             repository = Path(root) / "feature"
