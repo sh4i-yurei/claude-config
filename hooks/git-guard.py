@@ -377,6 +377,7 @@ def directory_for(args, cwd):
     work_tree = None
     unknown = None
     config_override = False
+    config_options = []
     index = 0
     while index < len(args) and args[index].startswith("-"):
         flag = args[index]
@@ -399,6 +400,7 @@ def directory_for(args, cwd):
                 work_tree = args[index + 1]
             elif flag in ("-c", "--config-env"):
                 config_override = True
+                config_options.extend((flag, args[index + 1]))
             index += 2
         elif flag.startswith("-C") and len(flag) > 2:
             directory = os.path.abspath(
@@ -434,6 +436,8 @@ def directory_for(args, cwd):
         elif flag.startswith(("-c", "--namespace=", "--config-env=", "--exec-path=")):
             if flag.startswith(("-c", "--config-env=")):
                 config_override = True
+            if flag.startswith("--config-env="):
+                config_options.append(flag)
             index += 1
         else:
             unknown = flag
@@ -443,26 +447,7 @@ def directory_for(args, cwd):
         lookup.append("--git-dir=" + git_dir)
     if work_tree is not None:
         lookup.append("--work-tree=" + work_tree)
-    return directory, args[index:], lookup, unknown, config_override
-
-
-def git_config_options(args):
-    """Keep command-local config options in their original order for a Git lookup."""
-    options = []
-    index = 0
-    while index < len(args) and args[index].startswith("-"):
-        flag = args[index]
-        if flag in ("-c", "--config-env"):
-            options.extend((flag, args[index + 1]))
-            index += 2
-        elif flag.startswith("--config-env="):
-            options.append(flag)
-            index += 1
-        elif flag == "-C":
-            index += 2
-        else:
-            index += 1
-    return options
+    return directory, args[index:], lookup, unknown, config_override, config_options
 
 
 def repository_name(directory, lookup):
@@ -510,8 +495,9 @@ def push_problem(args, directory, lookup, agent):
 
 
 def git_problem(args, cwd, agent):
-    original_args = args
-    directory, args, lookup, unknown, config_override = directory_for(args, cwd)
+    directory, args, lookup, unknown, config_override, config_options = directory_for(
+        args, cwd
+    )
     if not args:
         return None
     action = args[0]
@@ -519,7 +505,7 @@ def git_problem(args, cwd, agent):
         alias = run_git(
             directory,
             *lookup,
-            *git_config_options(original_args),
+            *config_options,
             "config",
             "--get",
             "alias." + action,

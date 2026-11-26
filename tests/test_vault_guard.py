@@ -684,6 +684,29 @@ class VaultGuardInProcessTests(VaultGuardTests):
                             expected,
                         )
 
+    def test_strict_alias_lookup_after_separate_value_global_options(self):
+        refusal = (
+            "Git aliases are refused under the strict policy, because one can hide a push: "
+            "run the command it stands for."
+        )
+        with tempfile.TemporaryDirectory() as root:
+            repository = Path(root) / "feature"
+            subprocess.run(
+                ["git", "init", "-q", "--initial-branch=feature/x", str(repository)],
+                check=True,
+            )
+            for command in (
+                "git --git-dir feature/.git -c alias.p=push p origin feature/x",
+                "git --work-tree feature -c alias.p=push p origin feature/x",
+                "git --namespace n -c alias.p=push p origin feature/x",
+                "git --no-pager -c alias.p=push p origin feature/x",
+                "git --config-env=core.pager=HOME -c alias.p=push p origin feature/x",
+            ):
+                with self.subTest(command=command):
+                    self.assertEqual(
+                        in_process_decision(command, "strict", root), refusal
+                    )
+
     def test_claude_push_option_values_are_not_refspecs(self):
         with tempfile.TemporaryDirectory() as root:
             repository = Path(root) / "feature"
