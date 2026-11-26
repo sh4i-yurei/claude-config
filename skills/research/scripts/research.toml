@@ -193,6 +193,7 @@ minimum_gap_s = 0
 gap_source = "known-apis.md: no limit documented"
 
 [providers."api.firecrawl.dev"]
+streak_by_target = true
 minimum_gap_s = 6
 gap_source = "firecrawl-docs rate-limits.mdx, read 2026-09-26: free plan, 10 requests per minute on /scrape, /map and /search"
 key_item = "Firecrawl API key"
@@ -205,6 +206,10 @@ window_initial_end = "2026-10-19T00:00:00Z"
 window_source = "firecrawl-docs billing.mdx and GET /v2/team/credit-usage, 2026-09-26: free plan, 1,000 credits a month; cycle starts on the 19th; 141 used at 21:10:04Z plus 70 credits in archived gateway responses through 2026-09-27T03:57:50Z"
 
 [providers."api.brightdata.com"]
+bills_only_success = true
+billing_source = "Bright Data Web Unlocker documentation in the vendor's skill bundle 1.9.0, read 2026-11-24: standard mode is billed per 1,000 successful requests only"
+streak_by_target = true
+error_header = "x-brd-error"
 minimum_gap_s = 0
 gap_source = "Research tooling note: no request gap documented"
 key_item = "Bright Data API key"

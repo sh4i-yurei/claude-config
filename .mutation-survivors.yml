@@ -1,4 +1,66 @@
 # Equivalent mutants confirmed by scoped local mutmut runs.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_3
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_4
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_6
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_12
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_13
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_14
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_15
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_16
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_firecrawl_page_cacheable__mutmut_17
+  reason: firecrawl_page_cacheable reads only the attempt's status, and remote_json sets that status from the envelope alone; the source name, URL and cached flag only label the attempt, which this function discards.
+- mutant: skills.research.scripts.lookup.x_page_lookup__mutmut_84
+  reason: normalize_url has already refused a URL without a hostname, so the empty-string fallback is never reached.
+- mutant: skills.research.scripts.lookup.x_page_lookup__mutmut_342
+  reason: remote_text already marks an HTTP 300 reply as an error, and the page-text check changes only a found or not-found attempt, so admitting 300 changes nothing.
+- mutant: skills.research.scripts.lookup.x_page_lookup__mutmut_343
+  reason: remote_text already marks an HTTP 300 reply as an error, and the page-text check changes only a found or not-found attempt, so admitting 300 changes nothing.
+- mutant: tools.secret_load.x__source__mutmut_7
+  reason: UTF-8 and utf-8 are aliases for the same Python codec; decoding and every command result agree.
+- mutant: tools.secret_load.x__source__mutmut_28
+  reason: UTF-8 and utf-8 are aliases for the same Python codec; decoding and every command result agree.
+- mutant: tools.secret_load.x__parser__mutmut_21
+  reason: argparse's default metavar for --label is LABEL, so omitting the explicit metavar leaves help and usage unchanged.
+- mutant: tools.secret_load.x__parser__mutmut_23
+  reason: argparse's default metavar for --label is LABEL, so setting the metavar to None leaves help and usage unchanged.
+- mutant: tools.secret_load.x__request__mutmut_8
+  reason: HTTP field names are case insensitive, and urllib stores this spelling as Content-type before sending it.
+- mutant: tools.secret_load.x__request__mutmut_9
+  reason: HTTP field names are case insensitive, and urllib stores this spelling as Content-type before sending it.
+- mutant: tools.secret_load.x__request__mutmut_15
+  reason: HTTP field names are case insensitive, and urllib stores this spelling as X-vault-token before sending it.
+- mutant: tools.secret_load.x__request__mutmut_16
+  reason: HTTP field names are case insensitive, and urllib stores this spelling as X-vault-token before sending it.
+- mutant: tools.secret_load.x__request__mutmut_32
+  reason: A 31-second timeout still expires before the fake closes at 40 seconds, so it produces the same timed out message as the 30-second timeout.
+- mutant: tools.secret_load.x__read__mutmut_2
+  reason: urllib infers GET from a Request with no body when method is None, so the sent request and result agree.
+- mutant: tools.secret_load.x_main__mutmut_37
+  reason: urllib infers POST from a Request with a body when method is None, so sign-in sends the same request.
+- mutant: tools.secret_load.x_main__mutmut_129
+  reason: urllib infers POST from a Request with a body when method is None, so the write sends the same request.
+- mutant: tools.secret_load.x_main__mutmut_87
+  reason: Each path segment has already been separated from slashes; urllib.quote's default safe slash cannot change it.
+- mutant: tools.secret_load.x_main__mutmut_88
+  reason: X is unreserved and already preserved by urllib.quote, so safe='XXXX' changes no encoded path.
+- mutant: tools.secret_load.x__remove_source__mutmut_29
+  reason: The temporary file's prefix cannot affect the source bytes, mode, or message after it is renamed over the source.
+- mutant: tools.secret_load.x__remove_source__mutmut_28
+  reason: A different temporary folder changes behavior only across filesystems; arranging that in a portable test would require patching tempfile rather than observing the command.
+- mutant: tools.secret_load.x__remove_source__mutmut_30
+  reason: tempfile treats delete=None and delete=False as false; both leave the temporary file available for rename.
+- mutant: tools.secret_load.x__remove_source__mutmut_31
+  reason: A different temporary folder changes behavior only across filesystems; arranging that in a portable test would require patching tempfile rather than observing the command.
+- mutant: tools.secret_load.x__remove_source__mutmut_32
+  reason: The temporary file's prefix cannot affect the source bytes, mode, or message after it is renamed over the source.
 - mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_40
   reason: json.loads accepts bytes as well as text, so changing text=True leaves the status result unchanged.
 - mutant: skills.research.scripts.lookup.x_credential_statuses__mutmut_41
@@ -508,3 +570,69 @@
 - mutant: hooks.git-guard.x_rtk_executable_commands__mutmut_85
   reason: >-
     When rtk test's words are exactly ( and ), stripping them leaves no command and keeping them leaves the program (, which the guard doesn't judge, so both give the same decision.
+- mutant: skills.research.scripts.gw.x_target_site__mutmut_47
+  reason: urlsplit lowercases the hostname, so it never ends in X, and stripping X and dot strips only the dots the code strips.
+- mutant: skills.research.scripts.gw.x_request__mutmut_85
+  reason: with no target, the lookup is of a key the gateway never writes, because it records per-target streaks only for a truthy target, so it returns the same empty entry.
+- mutant: skills.research.scripts.gw.x_request__mutmut_139
+  reason: the gateway writes count whenever it writes today's day, so the default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_141
+  reason: the gateway writes count whenever it writes today's day, so the default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_144
+  reason: the gateway writes count whenever it writes today's day, so the default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_240
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_241
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_242
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_243
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_244
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_245
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_246
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_249
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_250
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_251
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_276
+  reason: the attempt loop runs at least once and overwrites these before they are read, and it breaks when attempts equals max_attempts.
+- mutant: skills.research.scripts.gw.x_request__mutmut_10
+  reason: normalize_url refuses a URL without a hostname before host is computed, so the empty-string fallback is never reached.
+- mutant: skills.research.scripts.gw.x_request__mutmut_256
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_257
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_261
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_262
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_371
+  reason: private names and a flag read only for truth; only a test pinning them could tell them apart.
+- mutant: skills.research.scripts.gw.x_request__mutmut_458
+  reason: write_envelope reads body_size only when body_omitted is set.
+- mutant: skills.research.scripts.gw.x_request__mutmut_474
+  reason: finished is a current epoch time, so 0 and 1 are both earlier.
+- mutant: skills.research.scripts.gw.x_request__mutmut_653
+  reason: the comparison runs only when the provider names its own error header, so this default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_655
+  reason: the comparison runs only when the provider names its own error header, so this default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_658
+  reason: the comparison runs only when the provider names its own error header, so this default is never read.
+- mutant: skills.research.scripts.gw.x_request__mutmut_784
+  reason: write_envelope falls back to the same configured max_body_bytes.
+- mutant: skills.research.scripts.gw.x_request__mutmut_796
+  reason: write_envelope falls back to the same configured max_body_bytes.
+- mutant: hooks.research-gate.x_main__mutmut_8
+  reason: A missing or empty tool name falls through to allow, and XXXX is neither a fetch tool nor a gated search tool, so it is allowed the same way.
+- mutant: hooks.research-gate.x_main__mutmut_25
+  reason: urlparse gives XXXX no hostname, so a missing or empty URL still has no domain and is allowed without touching state.
+- mutant: hooks.research-gate.x_main__mutmut_70
+  reason: A missing error count is below the five-error streak with a default of either 0 or 1, and the count appears only in the refusal it never reaches.
+- mutant: hooks.research-gate.x_main__mutmut_145
+  reason: A missing daily count is below the 300-fetch limit with a default of either 0 or 1, and the refusal that would print it is never reached.

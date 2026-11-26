@@ -422,6 +422,29 @@ def request_cost(host: str, body: bytes) -> int:
     return credits if isinstance(credits, int) and credits > 0 else 1
 
 
+def target_site(args: list[str]) -> str | None:
+    """Read the target hostname from a curl JSON body, when present."""
+    for index, arg in enumerate(args):
+        if arg == "--json" and index + 1 < len(args):
+            body = args[index + 1]
+        elif arg.startswith("--json="):
+            body = arg.split("=", 1)[1]
+        else:
+            continue
+        try:
+            payload = json.loads(body)
+            target_url = payload.get("url") if isinstance(payload, dict) else None
+            if not isinstance(target_url, str):
+                return None
+            parts = urlsplit(target_url)
+            if parts.scheme not in ("http", "https") or not parts.hostname:
+                return None
+            return parts.hostname.rstrip(".").lower() or None
+        except (json.JSONDecodeError, ValueError):
+            return None
+    return None
+
+
 def window_end(at: float, provider: dict) -> float:
     if isinstance(provider.get("window_cycle_day"), int):
         date = datetime.fromtimestamp(at, timezone.utc)
@@ -513,6 +536,7 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
         print(f"[gw] REFUSED: {error}", file=sys.stderr)
         return 2
     provider = config["providers"].get(host, {})
+    target = target_site(args) if provider.get("streak_by_target") else None
     with gateway_lock(LOCK):
         state = json.loads(STATE.read_text()) if STATE.exists() else {}
         entry = state.get(host, {})
@@ -523,6 +547,17 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
             and at - entry.get("end", 0) < settings["error_cooldown_s"]
         ):
             print(f"[gw] REFUSED {host}: error cooldown", file=sys.stderr)
+            return 3
+        target_entry = entry.get("targets", {}).get(target, {}) if target else {}
+        if (
+            target
+            and target_entry.get("errors", 0) >= settings["error_streak"]
+            and at - target_entry.get("end", 0) < settings["error_cooldown_s"]
+        ):
+            print(
+                f"[gw] REFUSED {host}: error cooldown for {target}",
+                file=sys.stderr,
+            )
             return 3
         today = time.strftime("%Y-%m-%d", time.localtime(at))
         if (
@@ -610,7 +645,7 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
                     "--dump-header",
                     str(header_path),
                     "--write-out",
-                    "%{http_code} %{time_total} %{size_download}",
+                    "%{http_code} %{time_total} %{size_download} %{time_connect}",
                     "--config",
                     "-",
                     *args,
@@ -624,11 +659,13 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
                 )
                 fields = result.stdout.split()
                 try:
-                    status = int(fields[0]) if fields else 0
+                    curl_code = int(fields[0]) if fields else 0
                     duration = float(fields[1]) if len(fields) > 1 else 0.0
                     downloaded = int(float(fields[2])) if len(fields) > 2 else 0
+                    connected = float(fields[3]) != 0 if len(fields) > 3 else True
                 except ValueError:
-                    status, duration, downloaded = 0, 0.0, 0
+                    curl_code, duration, downloaded, connected = 0, 0.0, 0, True
+                status = curl_code
                 if result.returncode != 0:
                     status = 0
                 total_duration += duration
@@ -656,9 +693,10 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
                 if entry.get("window_end", 0) <= finished:
                     entry["window_end"] = window_end(finished, provider)
                     entry["window_used"] = 0
-                entry["window_used"] = entry.get("window_used", 0) + request_cost(
-                    host, body
-                )
+                if not provider.get("bills_only_success") or 200 <= curl_code < 300:
+                    entry["window_used"] = entry.get("window_used", 0) + request_cost(
+                        host, body
+                    )
                 entry["count"] += 1
                 append_log(
                     {
@@ -706,14 +744,46 @@ def request(out: Path, url: str, args: list[str], method: str) -> int:
                 )
                 time.sleep(backoff)
             error = status == 0 or (400 <= status <= 599 and status not in (404, 429))
+            if target:
+                service_error = status in (401, 402, 403) or (
+                    result.returncode in (7, 35)
+                    or (result.returncode == 28 and not connected)
+                )
+                header_error = (
+                    any(
+                        name.lower() == provider.get("error_header", "").lower()
+                        for name in final_headers
+                    )
+                    if provider.get("error_header")
+                    else False
+                )
+                target_error = not service_error and (
+                    result.returncode != 0
+                    or error
+                    or (200 <= status < 300 and header_error)
+                )
             if not 200 <= status < 300:
                 last_duration = max(last_duration, entry.get("dur", 0.0))
             entry.update(
                 end=time.time(),
                 dur=last_duration,
                 code=status,
-                errors=entry.get("errors", 0) + 1 if error else 0,
+                errors=(entry.get("errors", 0) + 1 if service_error else 0)
+                if target
+                else (entry.get("errors", 0) + 1 if error else 0),
             )
+            if target:
+                if target_error:
+                    targets = entry.setdefault("targets", {})
+                    previous = targets.get(target, {})
+                    targets[target] = {
+                        "errors": previous.get("errors", 0) + 1,
+                        "end": entry["end"],
+                    }
+                elif not service_error:
+                    entry.get("targets", {}).pop(target, None)
+                    if not entry.get("targets"):
+                        entry.pop("targets", None)
             state[host] = entry
             save_state(state)
             write_envelope(
