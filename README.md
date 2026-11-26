@@ -129,6 +129,7 @@ for one outside our boards, as described in [Opening an issue from a file](#open
 Issue reads, issue comments, edits and closes, and writes to other API endpoints remain
 available under each agent's other guard rules.
 For every agent, the guard also refuses `git commit` in the shared vault checkout, found at `SECOND_BRAIN` or `~/Documents/Second_Brain`, and names `vault-commit`, because every session shares that checkout's index; worktrees and clones of the vault have their own index and stay allowed.
+Under the strict policy the guard refuses every push, including git send-pack and git http-push, and any git alias, because only Claude pushes and an alias can hide a push.
 The guard refuses AI attribution in a commit message it can read.
 The guard refuses a new queue task without a project tag and an item tag.
 For an `rtk` command, the guard judges every command RTK could run.
