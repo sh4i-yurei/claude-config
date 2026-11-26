@@ -99,7 +99,9 @@ vault-run --stdin "keepbreath0 sudo (hub)" -- ssh hub "sudo -S -p '' true"
 The runner reads the existing vault session itself. It does not pass the session key to the
 command or print secret values.
 
-vault-run, vault-env, git-credential-bw and the research gateway all read an item through tools/vault_item.py, which finds the one item whose name is exactly the name asked for. When no item or several items have that name, they say so instead of reading the wrong one. vault-env and git-credential-bw are linked as ~/.local/bin/vault-env and ~/.local/bin/git-credential-bw, from tools/vault_env.py and tools/git_credential_bw.py.
+vault-run, vault-env, git-credential-bw, secret-load and the research gateway all read an item through tools/vault_item.py, which finds the one item whose name is exactly the name asked for. When no item or several items have that name, they say so instead of reading the wrong one. vault-env and git-credential-bw are linked as ~/.local/bin/vault-env and ~/.local/bin/git-credential-bw, from tools/vault_env.py and tools/git_credential_bw.py.
+
+`secret-load` moves one staged value into OpenBao's `secret/` KV store without printing it. Use `secret-load --from FILE --label LABEL --to openbao:PATH[#KEY] --dry-run` to check a labelled line first; omit `--label` to load a whole file. A matching value stays as it is. Use `--replace` to rotate a different value and `--remove-source` to remove the source only after verification and token revocation. Source removal does not scrub old blocks on btrfs. Vaultwarden destinations are reserved for a later item.
 
 ## Committing to the vault
 
