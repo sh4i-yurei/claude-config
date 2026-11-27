@@ -189,6 +189,18 @@ can read that cites the fact's id. The check refuses an id that doesn't exist or
 and a fact proven in one project can be cited from any other. There are no fact ids until then,
 so entries carry their own evidence, as below.
 
+**Design facts and acceptance tests.** Every run on a design's verification list is one of two
+kinds, and records which (Workflow engine decision 42, as amended 2026-11-27). A design fact is how
+something that already exists behaves, such as a tool, a service or a machine, when the build
+depends on it. It passes on its target machine with saved output before the design is settled, and
+only design facts count toward settled. An acceptance test is how a component this design builds
+behaves, which can't run until that component exists. It becomes one of that build item's WHEN/THEN
+cases and passes at the build, and it names its stand-in proof: the earlier spike, throwaway run or
+existing proof that covers what the design rests on before the build. The stand-in proof is itself
+a design fact in Facts, run on its target machine with saved output, so nothing the design depends
+on goes unproven. A run with parts of both kinds is split, so its design-fact part still gates
+approval.
+
 Write each fact as one bullet: its type in parentheses, the claim, then `Evidence:` and the
 proof. For example, `- (behaviour) Claim. Evidence: run <command> on <machine>, <commit>,
 <date>; output saved at <path>; it would be false if the output showed X.` or `- (other)
@@ -257,7 +269,8 @@ the issue, while the note keeps the decisions and facts.
 
 **A design is settled when the record shows it, not when someone says so.** Every decision is
 decided. Every fact is typed, and each behaviour fact has a run that still gives the same
-result. The critique, where the size calls for one, ran after the last decision changed. No
+result. Every acceptance test is named in its build item with the design fact that stands in for
+it. The critique, where the size calls for one, ran after the last decision changed. No
 item points at an open question, and every deliberate skip is recorded with its reason and who
 approved it. Mark then approves the design through Operator. The engine's checker will compute
 this as the build loop's first gate (Workflow engine decision 42). Until it exists, the owner
