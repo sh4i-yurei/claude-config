@@ -106,7 +106,9 @@ projects, say so and agree an order.
 Sometimes a quick experiment is the cheapest way to learn what he wants or whether something works.
 The riskiest assumption in a design gets one first. Run it as a disposable test in a scratch folder,
 on the machine the build will run on, and record it as a behaviour Fact in the project note: the
-command, the machine, the saved output, and the result that would have proved it false. An
+command, the machine, the saved output, and the result that would have proved it false. When the
+experiment stands in for an acceptance test of a component the build will make, the Fact names
+that test and its build item (Workflow engine decision 42). An
 experiment is never the start of the build. Anything worth keeping goes through the build loop.
 
 ## Where the design lands
